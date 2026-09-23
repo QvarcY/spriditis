@@ -1,9 +1,21 @@
-# Sprīdītis
+<p align="center">
+  <img src="assets/spriditis-banner.png" alt="Sprīdītis — configurable market-research crawler and AI-assisted research engine" width="100%">
+</p>
 
-**A configurable market-research crawler and AI-assisted research engine.**  
-**Pielāgojams tirgus izpētes crawleris un MI atbalstīts pētniecības dzinējs.**
+<h1 align="center">Sprīdītis</h1>
 
-[English](#english) · [Latviski](#latviski)
+<p align="center">
+  <strong>Configurable market-research crawler and AI-assisted research engine.</strong><br>
+  <strong>Pielāgojams tirgus izpētes crawleris un MI atbalstīts pētniecības dzinējs.</strong>
+</p>
+
+<p align="center">
+  <a href="https://buymeacoffee.com/craftin">☕ Support the project</a>
+  &nbsp;•&nbsp;
+  <a href="#english">English</a>
+  &nbsp;•&nbsp;
+  <a href="#latviski">Latviski</a>
+</p>
 
 ---
 
