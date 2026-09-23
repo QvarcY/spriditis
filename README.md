@@ -71,7 +71,10 @@ Sprīdītis is not tied to one industry. The same core is intended to support ve
 - generic `MarketEntity` model
 - single-domain crawling
 - controlled multi-domain discovery mode
-- URL prioritization and crawl budgets
+- persistent Domain Registry with `candidate`, `active`, `blocked`, `rejected` and `failed` states
+- external-domain discovery audit trail with activation reasons
+- sitemap discovery from `robots.txt` and `/sitemap.xml`
+- URL prioritization and per-domain crawl budgets
 - `robots.txt` checks
 - crawler safety filters
 - JSON-LD `Product` extraction
@@ -81,7 +84,8 @@ Sprīdītis is not tied to one industry. The same core is intended to support ve
 - local fallback classifier
 - batched AI analysis
 - retry/backoff for Gemini `429` and `503`
-- SQLite projects, runs, entities and observations
+- SQLite projects, runs, entities, observations, domains and discovery history
+- version-neutral `data/spriditis.db` with migration foundation
 - HTML reports
 - CLI
 - service boundary prepared for future UI/API clients
@@ -92,11 +96,8 @@ The public alpha deliberately does not pretend unfinished features are complete.
 
 Planned directions include:
 
-- richer Domain Registry
-- stronger Discovery Engine
-- sitemap discovery
 - active SearchProvider integrations
-- full Expedition mode
+- true Expedition mode that can discover new seed domains without existing links
 - competitor-research extractors
 - service-market extractors
 - longitudinal price/trend analysis
@@ -158,6 +159,35 @@ Run with Gemini:
 ```powershell
 python main.py run --project projects\my_market.json --max-pages 10 --no-email
 ```
+
+Inspect the Domain Registry:
+
+```powershell
+python main.py domains --project projects\my_market.json
+python main.py domains --project projects\my_market.json --status candidate
+python main.py domains --project projects\my_market.json --details
+```
+
+Inspect discovery decisions:
+
+```powershell
+python main.py discoveries --project projects\my_market.json
+python main.py discoveries --project projects\my_market.json --action activated
+```
+
+Sprīdītis now uses a version-neutral SQLite database:
+
+```text
+data/spriditis.db
+```
+
+To migrate an older database safely:
+
+```powershell
+python main.py migrate-db --from-db ..\older_build\data\spriditis_v31.db
+```
+
+The migration uses SQLite's backup API and applies the current schema migration automatically.
 
 ### Example research project
 
@@ -243,7 +273,11 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ### Project status
 
-Current public baseline: **Sprīdītis 3.1.0-alpha.3**.
+Current public baseline: **Sprīdītis 3.2.0-alpha.3**.
+
+This checkpoint validates the Discovery Engine foundation: a relevant external domain can be observed, activated, added to the crawl frontier and crawled within configured safety and domain budgets. Domains that exceed the budget remain candidates, while blocked domains stay blocked even when their textual relevance is high.
+
+The next major development direction is **3.3 — SearchProvider + true Expedition mode**, where Sprīdītis will be able to discover new seed domains proactively instead of depending only on links found during crawling.
 
 This is alpha software. Expect breaking changes before a stable release.
 
@@ -326,7 +360,10 @@ Sprīdītis nav piesaistīts vienai nozarei. Ideja ir vienu un to pašu kodolu p
 - universāls `MarketEntity`
 - viena domēna pārmeklēšana
 - kontrolēts vairāku domēnu discovery režīms
-- URL prioritizācija un crawl budžeti
+- persistējošs Domain Registry ar `candidate`, `active`, `blocked`, `rejected` un `failed` statusiem
+- ārējo domēnu discovery audita vēsture ar aktivizācijas iemesliem
+- sitemap atklāšana no `robots.txt` un `/sitemap.xml`
+- URL prioritizācija un crawl budžeti katram domēnam
 - `robots.txt` pārbaude
 - drošības filtri crawlerim
 - JSON-LD `Product` datu ieguve
@@ -336,7 +373,8 @@ Sprīdītis nav piesaistīts vienai nozarei. Ideja ir vienu un to pašu kodolu p
 - lokāls fallback klasifikators
 - MI batch analīze
 - retry/backoff Gemini `429` un `503` gadījumiem
-- SQLite projekti, skrējieni, objekti un novērojumi
+- SQLite projekti, skrējieni, objekti, novērojumi, domēni un discovery vēsture
+- versiju neitrāla `data/spriditis.db` ar migrāciju pamatu
 - HTML atskaites
 - CLI
 - servisa slānis nākotnes UI/API
@@ -345,11 +383,8 @@ Sprīdītis nav piesaistīts vienai nozarei. Ideja ir vienu un to pašu kodolu p
 
 Plānotie attīstības virzieni:
 
-- pilnvērtīgs Domain Registry
-- jaudīgāks Discovery Engine
-- sitemap atklāšana
 - SearchProvider integrācijas
-- pilnvērtīgs Expedition režīms
+- īsts Expedition režīms, kas pats atrod jaunus seed domēnus arī bez saitēm no jau zināmiem avotiem
 - konkurentu izpētes ekstraktori
 - pakalpojumu tirgus ekstraktori
 - cenu un tendenču analīze laikā
@@ -410,6 +445,35 @@ Palaid ar Gemini:
 python main.py run --project projects\mans_tirgus.json --max-pages 10 --no-email
 ```
 
+Apskati Domain Registry:
+
+```powershell
+python main.py domains --project projects\mans_tirgus.json
+python main.py domains --project projects\mans_tirgus.json --status candidate
+python main.py domains --project projects\mans_tirgus.json --details
+```
+
+Apskati discovery lēmumu auditu:
+
+```powershell
+python main.py discoveries --project projects\mans_tirgus.json
+python main.py discoveries --project projects\mans_tirgus.json --action activated
+```
+
+Sprīdītis tagad izmanto versiju neitrālu SQLite datubāzi:
+
+```text
+data/spriditis.db
+```
+
+Vecāku datubāzi var droši pārnest ar:
+
+```powershell
+python main.py migrate-db --from-db ..\vecaka_versija\data\spriditis_v31.db
+```
+
+Migrācija izmanto SQLite backup mehānismu un pēc kopēšanas piemēro aktuālo shēmas migrāciju.
+
 ### Vienkāršs piemērs
 
 Pieņemsim, ka gribi izpētīt ergonomisko darba krēslu tirgu.
@@ -468,7 +532,11 @@ Sprīdīti nevajadzētu izmantot autentifikācijas, piekļuves kontroles, paywal
 
 ### Projekta statuss
 
-Pašreizējais publiskais atskaites punkts: **Sprīdītis 3.1.0-alpha.3**.
+Pašreizējais publiskais atskaites punkts: **Sprīdītis 3.2.0-alpha.3**.
+
+Šajā pieturas punktā ir pārbaudīts Discovery Engine pamats: relevants ārējais domēns var tikt pamanīts, aktivizēts, ielikts crawl rindā un reāli pārmeklēts, ievērojot drošības un domēnu limitus. Domēni, kas pārsniedz budžetu, paliek `candidate`, bet bloķētie domēni netiek aktivizēti pat pie augstas teksta relevances.
+
+Nākamais lielais attīstības virziens ir **3.3 — SearchProvider + īsts Expedition režīms**, kur Sprīdītis spēs pats atrast jaunus seed domēnus, nepaļaujoties tikai uz saitēm jau zināmajās lapās.
 
 Šis ir alpha projekts, tāpēc līdz stabilai versijai iespējamas arī nesavietojamas izmaiņas.
 
