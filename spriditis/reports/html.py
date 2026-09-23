@@ -92,10 +92,25 @@ def generate_html_report(
         for name, count in stats["category_counts"].most_common()
     ) or '<tr><td colspan="2">Nav datu</td></tr>'
 
-    domains = "".join(
-        f"<li>{escape(domain)}</li>"
-        for domain in sorted(result.discovered_domains)
-    ) or "<li>Nav</li>"
+    domain_rows = "".join(
+        f"""
+        <tr>
+          <td>{escape(record.domain)}</td>
+          <td>{escape(record.status)}</td>
+          <td>{record.relevance_score:.2f}</td>
+          <td>{record.pages_seen}</td>
+          <td>{record.entities_found}</td>
+          <td>{escape(record.robots_status)}</td>
+          <td>{escape(record.sitemap_status)}</td>
+          <td>{record.sitemap_urls_found}</td>
+          <td>{escape(record.reason or '—')}</td>
+        </tr>
+        """
+        for record in sorted(
+            result.domains.values(),
+            key=lambda item: (-item.relevance_score, item.domain),
+        )
+    ) or '<tr><td colspan="9">Nav</td></tr>'
 
     return f"""<!doctype html>
 <html lang="lv">
@@ -149,7 +164,7 @@ td,th {{ padding:10px;border-bottom:1px solid var(--line);text-align:left }}
 <body>
 <div class="wrap">
 <header class="hero">
-  <h1>Sprīdītis 3.1</h1>
+  <h1>Sprīdītis 3.2</h1>
   <h2>{escape(project.name)}</h2>
   <p>{escape(project.description)}</p>
   <p class="muted">
@@ -163,7 +178,7 @@ td,th {{ padding:10px;border-bottom:1px solid var(--line);text-align:left }}
   <div class="stat"><b>{stats["sellers"]}</b><span>unikāli pārdevēji</span></div>
   <div class="stat"><b>{_money(stats["median_price"])}</b><span>mediānas cena</span></div>
   <div class="stat"><b>{result.visited_pages}</b><span>apmeklētas lapas</span></div>
-  <div class="stat"><b>{len(result.discovered_domains)}</b><span>domēni</span></div>
+  <div class="stat"><b>{len(result.domains)}</b><span>novēroti domēni</span></div>
 </div>
 
 <section class="cols">
@@ -172,8 +187,18 @@ td,th {{ padding:10px;border-bottom:1px solid var(--line);text-align:left }}
     <table><tbody>{category_rows}</tbody></table>
   </div>
   <div class="panel">
-    <h2>Avotu domēni</h2>
-    <ul>{domains}</ul>
+    <h2>Domain Registry</h2>
+    <div style="overflow:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Domain</th><th>Status</th><th>Score</th>
+            <th>Pages</th><th>Entities</th><th>Robots</th><th>Sitemap</th><th>URLs</th><th>Reason</th>
+          </tr>
+        </thead>
+        <tbody>{domain_rows}</tbody>
+      </table>
+    </div>
   </div>
 </section>
 

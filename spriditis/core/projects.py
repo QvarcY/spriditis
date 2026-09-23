@@ -28,6 +28,8 @@ class CrawlConfig(BaseModel):
     delay_seconds: float = Field(default=2.0, ge=0.0, le=60.0)
     respect_robots: bool = True
     external_link_threshold: int = Field(default=45, ge=0, le=100)
+    discover_sitemaps: bool = True
+    max_sitemap_urls_per_domain: int = Field(default=100, ge=0, le=5000)
 
 
 class AnalysisConfig(BaseModel):

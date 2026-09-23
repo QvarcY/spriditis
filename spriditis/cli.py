@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 
 from spriditis.api.service import run_project
@@ -15,9 +14,18 @@ from spriditis.core.projects import (
 )
 
 
+DOMAIN_STATUSES = [
+    "candidate",
+    "active",
+    "blocked",
+    "rejected",
+    "failed",
+]
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Sprīdītis 3.1 — universāls tirgus izpētes dzinējs"
+        description="Sprīdītis 3.2 — universāls tirgus izpētes dzinējs"
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -39,7 +47,66 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--email", action="store_true")
     run.add_argument("--no-email", action="store_true")
 
+    domains = sub.add_parser("domains", help="Parādīt projekta Domain Registry")
+    domains.add_argument("--project", required=True)
+    domains.add_argument("--status", choices=DOMAIN_STATUSES)
+    domains.add_argument(
+        "--details",
+        action="store_true",
+        help="Parādīt arī pirmavotu un laika metadatus",
+    )
+
+    discoveries = sub.add_parser(
+        "discoveries",
+        help="Parādīt ārējo domēnu atklāšanas audita ierakstus",
+    )
+    discoveries.add_argument("--project", required=True)
+    discoveries.add_argument(
+        "--action",
+        choices=["recorded", "activated", "blocked", "known"],
+    )
+    discoveries.add_argument("--limit", type=int, default=50)
+
+    migrate = sub.add_parser(
+        "migrate-db",
+        help="Droši pārnest veco SQLite DB uz versiju-neitrālo DB",
+    )
+    migrate.add_argument("--from-db", required=True)
+    migrate.add_argument("--to-db")
+    migrate.add_argument("--force", action="store_true")
+
     return parser
+
+
+def _print_domain_table(rows: list[dict], *, details: bool):
+    print(
+        f"{'DOMAIN':<30} {'STATUS':<10} {'SCORE':>6} "
+        f"{'PAGES':>5} {'ENT':>4} {'ROBOTS':<8} "
+        f"{'SITEMAP':<9} {'URLS':>4} {'REASON':<22}"
+    )
+    print("-" * 112)
+
+    for row in rows:
+        print(
+            f"{row['domain'][:30]:<30} "
+            f"{row['status']:<10} "
+            f"{row['relevance_score']:>6.2f} "
+            f"{row['pages_seen']:>5} "
+            f"{row['entities_found']:>4} "
+            f"{row['robots_status']:<8} "
+            f"{row['sitemap_status']:<9} "
+            f"{row['sitemap_urls_found']:>4} "
+            f"{(row['reason'] or '-')[:22]:<22}"
+        )
+
+        if details:
+            source = row["discovered_from_url"] or "-"
+            print(f"    via={row['discovered_via']} source={source}")
+            print(
+                f"    first={row['first_seen']} "
+                f"last={row['last_seen']} "
+                f"crawled={row['last_crawled'] or '-'}"
+            )
 
 
 def main() -> int:
@@ -68,6 +135,136 @@ def main() -> int:
         project = load_project(Path(args.project))
         print("✅ Projekts ir derīgs.")
         print(project.to_json())
+        return 0
+
+
+    if args.command == "discoveries":
+        from spriditis.storage.database import Database
+
+        settings = load_settings()
+        project = load_project(Path(args.project))
+        db = Database(
+            settings.db_path,
+            legacy_path=settings.legacy_db_path,
+        )
+
+        try:
+            rows = db.list_domain_discoveries(
+                project.id,
+                action=args.action,
+                limit=args.limit,
+            )
+            counts = db.discovery_action_counts(project.id)
+        finally:
+            db.close()
+
+        if not rows:
+            if args.action:
+                print(
+                    f"Nav discovery ierakstu ar darbību: "
+                    f"{args.action}"
+                )
+            else:
+                print("Discovery audit vēl nav ierakstu.")
+            return 0
+
+        print(
+            f"{'RUN':>4} {'ACTION':<10} {'SCORE':>6} "
+            f"{'SOURCE':<27} {'TARGET':<27} {'REASON':<22}"
+        )
+        print("-" * 108)
+
+        for row in rows:
+            print(
+                f"{row['run_id']:>4} "
+                f"{row['action']:<10} "
+                f"{row['relevance_score']:>6.2f} "
+                f"{(row['source_domain'] or '-')[:27]:<27} "
+                f"{row['target_domain'][:27]:<27} "
+                f"{(row['reason'] or '-')[:22]:<22}"
+            )
+            print(f"     {row['target_url']}")
+
+        print("")
+        print(
+            "Darbības: "
+            + " · ".join(
+                f"{action}={counts.get(action, 0)}"
+                for action in ["activated", "recorded", "blocked", "known"]
+            )
+        )
+        return 0
+
+    if args.command == "migrate-db":
+        from spriditis.storage.database import Database, sqlite_backup
+
+        settings = load_settings()
+        source = Path(args.from_db)
+        target = Path(args.to_db) if args.to_db else settings.db_path
+
+        sqlite_backup(
+            source,
+            target,
+            overwrite=args.force,
+        )
+
+        # Opening the copied DB applies all current schema migrations.
+        db = Database(target)
+        try:
+            version = db.schema_version()
+        finally:
+            db.close()
+
+        print("✅ Datubāze pārnesta.")
+        print(f"   Avots: {source.resolve()}")
+        print(f"   Mērķis: {target.resolve()}")
+        print(f"   Schema version: {version}")
+        return 0
+
+    if args.command == "domains":
+        from spriditis.storage.database import Database
+
+        settings = load_settings()
+        project = load_project(Path(args.project))
+        db = Database(
+            settings.db_path,
+            legacy_path=settings.legacy_db_path,
+        )
+
+        try:
+            rows = db.list_domains(
+                project.id,
+                status=args.status,
+            )
+            counts = db.domain_status_counts(project.id)
+        finally:
+            db.close()
+
+        if not rows:
+            if args.status:
+                print(f"Nav domēnu ar statusu: {args.status}")
+            else:
+                print("Domain Registry vēl nav ierakstu.")
+            return 0
+
+        _print_domain_table(rows, details=args.details)
+
+        print("")
+        observed = sum(counts.values())
+        crawled = sum(1 for row in rows if row["pages_seen"] > 0) if not args.status else None
+
+        if args.status:
+            print(f"Parādīti: {len(rows)} ({args.status})")
+        else:
+            print(f"Novēroti domēni: {observed}")
+            print(
+                "Statusi: "
+                + " · ".join(
+                    f"{status}={counts.get(status, 0)}"
+                    for status in DOMAIN_STATUSES
+                )
+            )
+
         return 0
 
     if args.command == "run":
@@ -100,7 +297,7 @@ def main() -> int:
             else f"{project.analysis.ai_provider}/{settings.gemini_model}"
         )
 
-        print("🚀 Sprīdītis 3.1 sāk pētījumu")
+        print("🚀 Sprīdītis 3.2.0-alpha.3 sāk pētījumu")
         print(f"   Projekts: {project.name}")
         print(f"   ID: {project.id}")
         print(f"   Tips: {project.research_type}")
@@ -117,12 +314,27 @@ def main() -> int:
             send_email=send_email,
         )
 
+        if artifacts.database_migrated_from:
+            print(
+                f"🗃️ Vecā DB droši pārnesta no: "
+                f"{artifacts.database_migrated_from}"
+            )
+
         print("")
         print("✅ Pētījums pabeigts.")
         print(f"   Run ID: {artifacts.run_id}")
         print(f"   Apmeklētas lapas: {artifacts.visited_pages}")
         print(f"   Atrasti objekti: {artifacts.entity_count}")
-        print(f"   Domēni: {artifacts.domain_count}")
+        print(
+            f"   Domēni: {artifacts.observed_domain_count} novēroti / "
+            f"{artifacts.activated_domain_count} aktivizēti / "
+            f"{artifacts.crawled_domain_count} crawlēti"
+        )
+        for status in DOMAIN_STATUSES:
+            print(
+                f"      {status}: "
+                f"{artifacts.domain_status_counts.get(status, 0)}"
+            )
         print(f"   Atskaite: {artifacts.report_path.resolve()}")
         return 0
 

@@ -84,14 +84,19 @@ def same_site(a: str, b: str) -> bool:
     return host_key(a) == host_key(b)
 
 
-def is_safe_public_url(url: str) -> bool:
+def url_safety_reason(url: str) -> tuple[bool, str]:
     parsed = urlparse(url)
+
     if parsed.scheme not in {"http", "https"}:
-        return False
+        return False, "unsupported_scheme"
 
     host = (parsed.hostname or "").lower()
-    if not host or host == "localhost" or host.endswith(".local"):
-        return False
+
+    if not host:
+        return False, "missing_host"
+
+    if host == "localhost" or host.endswith(".local"):
+        return False, "local_host"
 
     try:
         ip = ipaddress.ip_address(host)
@@ -103,20 +108,30 @@ def is_safe_public_url(url: str) -> bool:
             or ip.is_multicast
             or ip.is_unspecified
         ):
-            return False
+            return False, "non_public_ip"
     except ValueError:
         pass
 
-    if any(host == blocked or host.endswith("." + blocked) for blocked in BLOCKED_HOST_SUFFIXES):
-        return False
+    if any(
+        host == blocked or host.endswith("." + blocked)
+        for blocked in BLOCKED_HOST_SUFFIXES
+    ):
+        return False, "blocked_host"
 
     path = (parsed.path or "").lower()
-    if any(part in path for part in SKIP_PATH_PARTS):
-        return False
-    if BINARY_EXTENSIONS.search(path):
-        return False
 
-    return True
+    if any(part in path for part in SKIP_PATH_PARTS):
+        return False, "blocked_path"
+
+    if BINARY_EXTENSIONS.search(path):
+        return False, "binary_or_static_file"
+
+    return True, "ok"
+
+
+def is_safe_public_url(url: str) -> bool:
+    safe, _ = url_safety_reason(url)
+    return safe
 
 
 def text_relevance_score(

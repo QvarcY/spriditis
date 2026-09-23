@@ -7,6 +7,12 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 
+LEGACY_DEFAULT_DB_PATHS = {
+    "data/spriditis_v31.db",
+    r"data\spriditis_v31.db",
+}
+
+
 def _bool(name: str, default: bool) -> bool:
     raw = os.getenv(name)
     if raw is None:
@@ -30,6 +36,29 @@ def _float(name: str, default: float) -> float:
         return default
 
 
+def _database_paths() -> tuple[Path, Path | None]:
+    """
+    Sprīdītis 3.2 moves to a version-neutral database name.
+
+    A copied 3.1/3.2-alpha1 .env can still contain:
+        DB_PATH=data/spriditis_v31.db
+
+    That legacy default is treated as a migration source while the active
+    target becomes data/spriditis.db. Custom DB_PATH values remain untouched.
+    """
+    raw = os.getenv("DB_PATH", "").strip()
+
+    if not raw:
+        return Path("data/spriditis.db"), Path("data/spriditis_v31.db")
+
+    normalized = raw.replace("\\", "/")
+
+    if normalized == "data/spriditis_v31.db":
+        return Path("data/spriditis.db"), Path(raw)
+
+    return Path(raw), None
+
+
 @dataclass(frozen=True)
 class AppSettings:
     gemini_api_key: str
@@ -40,6 +69,7 @@ class AppSettings:
     gemini_retry_base_seconds: float
 
     db_path: Path
+    legacy_db_path: Path | None
     report_dir: Path
 
     smtp_host: str
@@ -55,6 +85,7 @@ class AppSettings:
 
 def load_settings() -> AppSettings:
     load_dotenv()
+    db_path, legacy_db_path = _database_paths()
 
     return AppSettings(
         gemini_api_key=os.getenv("GEMINI_API_KEY", "").strip(),
@@ -67,7 +98,8 @@ def load_settings() -> AppSettings:
         gemini_retry_base_seconds=max(
             0.5, _float("GEMINI_RETRY_BASE_SECONDS", 5.0)
         ),
-        db_path=Path(os.getenv("DB_PATH", "data/spriditis_v31.db")),
+        db_path=db_path,
+        legacy_db_path=legacy_db_path,
         report_dir=Path(os.getenv("REPORT_DIR", "reports")),
         smtp_host=os.getenv("SMTP_HOST", "smtp.gmail.com").strip(),
         smtp_port=_int("SMTP_PORT", 465),
@@ -77,7 +109,7 @@ def load_settings() -> AppSettings:
         send_email=_bool("SEND_EMAIL", False),
         user_agent=os.getenv(
             "USER_AGENT",
-            "SpriditisResearchBot/3.1 (+market research)",
+            "SpriditisResearchBot/3.2 (+market research)",
         ).strip(),
         request_timeout_seconds=_int("REQUEST_TIMEOUT_SECONDS", 15),
     )
