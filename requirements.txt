@@ -1,0 +1,5 @@
+beautifulsoup4>=4.12
+google-genai
+pydantic>=2
+python-dotenv
+requests>=2.31

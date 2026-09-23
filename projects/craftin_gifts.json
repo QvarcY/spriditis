@@ -1,0 +1,66 @@
+{
+  "id": "craftin_gifts",
+  "name": "Latvijas personalizēto dāvanu tirgus",
+  "description": "CraftIN testa profils personalizētu koka un gravētu izstrādājumu tirgus izpētei.",
+  "research_type": "product_market",
+  "entity_type": "product",
+  "languages": [
+    "lv"
+  ],
+  "countries": [
+    "LV"
+  ],
+  "keywords": [
+    "personalizēts",
+    "personalizēta",
+    "gravējums",
+    "gravēšana",
+    "koka",
+    "koks",
+    "saplāksnis",
+    "dekors",
+    "dekorācija",
+    "kārbiņa",
+    "kastīte",
+    "piekariņš",
+    "dāvana",
+    "balva",
+    "medaļa",
+    "uzraksts",
+    "plāksne"
+  ],
+  "negative_keywords": [
+    "ziņas",
+    "vakance",
+    "bezdarbs"
+  ],
+  "seed_urls": [
+    "https://www.meistardarbs.lv/katalogs/koka-izstradajumi"
+  ],
+  "crawl": {
+    "mode": "domain",
+    "max_pages_total": 60,
+    "max_pages_per_domain": 60,
+    "max_domains": 1,
+    "max_depth": 5,
+    "delay_seconds": 2.0,
+    "respect_robots": true,
+    "external_link_threshold": 45
+  },
+  "analysis": {
+    "ai_enabled": true,
+    "ai_provider": "gemini",
+    "min_relevance_score": 0.35,
+    "categories": [
+      "karbinas_dekori",
+      "piekarini_davanas",
+      "cits"
+    ],
+    "desired_attributes": [
+      "materials",
+      "personalization",
+      "engraving_likelihood",
+      "audience"
+    ]
+  }
+}

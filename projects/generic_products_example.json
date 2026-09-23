@@ -1,0 +1,55 @@
+{
+  "id": "wifi_extenders_lv",
+  "name": "Wi-Fi range extender tirgus Latvijā",
+  "description": "Piemērs, kas demonstrē, ka Sprīdītis nav piesiets CraftIN tēmai.",
+  "research_type": "product_market",
+  "entity_type": "product",
+  "languages": [
+    "lv"
+  ],
+  "countries": [
+    "LV"
+  ],
+  "keywords": [
+    "wifi extender",
+    "range extender",
+    "repeater",
+    "mesh",
+    "5 ghz"
+  ],
+  "negative_keywords": [
+    "firmware",
+    "driver",
+    "manual"
+  ],
+  "seed_urls": [
+    "https://example.com"
+  ],
+  "crawl": {
+    "mode": "domain",
+    "max_pages_total": 30,
+    "max_pages_per_domain": 30,
+    "max_domains": 1,
+    "max_depth": 4,
+    "delay_seconds": 2.0,
+    "respect_robots": true,
+    "external_link_threshold": 50
+  },
+  "analysis": {
+    "ai_enabled": true,
+    "ai_provider": "gemini",
+    "min_relevance_score": 0.35,
+    "categories": [
+      "wifi_extender",
+      "mesh_node",
+      "router",
+      "cits"
+    ],
+    "desired_attributes": [
+      "brand",
+      "model",
+      "wifi_standard",
+      "frequency_bands"
+    ]
+  }
+}

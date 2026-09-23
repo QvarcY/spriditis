@@ -1,0 +1,48 @@
+from __future__ import annotations
+
+import heapq
+import itertools
+from dataclasses import dataclass, field
+
+
+@dataclass(order=True)
+class FrontierItem:
+    sort_key: tuple[int, int] = field(init=False, repr=False)
+    priority: int
+    order: int
+    url: str = field(compare=False)
+    depth: int = field(compare=False)
+    source_url: str = field(compare=False, default="")
+
+    def __post_init__(self):
+        self.sort_key = (-self.priority, self.order)
+
+
+class URLFrontier:
+    def __init__(self):
+        self._queue: list[tuple[int, int, FrontierItem]] = []
+        self._counter = itertools.count()
+        self._queued: set[str] = set()
+
+    def add(self, url: str, *, priority: int, depth: int, source_url: str = "") -> bool:
+        if url in self._queued:
+            return False
+        order = next(self._counter)
+        item = FrontierItem(
+            priority=priority,
+            order=order,
+            url=url,
+            depth=depth,
+            source_url=source_url,
+        )
+        heapq.heappush(self._queue, (-priority, order, item))
+        self._queued.add(url)
+        return True
+
+    def pop(self) -> FrontierItem:
+        _, _, item = heapq.heappop(self._queue)
+        self._queued.discard(item.url)
+        return item
+
+    def __bool__(self):
+        return bool(self._queue)
