@@ -117,7 +117,7 @@ Alpha4 **krāj un izskaidro** pieredzi. Tā vēl neveic automātisku source/quer
 
 Jaunajām metrikām jābūt izskaidrojamām; viens “mistisks score” nedrīkst aizstāt atsevišķos signālus.
 
-## 🚧 3.3.0-alpha.5 — Adaptive Expedition
+## 🧪 3.3.0-alpha.5 — Adaptive Expedition
 
 Mērķis: izvēlēties labākos pētījuma ceļus bez obligāta maksas MI.
 
@@ -131,7 +131,10 @@ Mērķis: izvēlēties labākos pētījuma ceļus bez obligāta maksas MI.
 - kontrolēts multi-hop discovery;
 - `max_discovery_depth`;
 - per-depth budgets;
-- soft entity diversity limits, lai viens milzu avots neaizēnotu pārējos.
+- soft entity diversity limits, lai viens milzu avots neaizēnotu pārējos;
+- persistēts Adaptive Decision Trace ar query priority, search-result priority, source-diversity, discovery-depth un stop lēmumiem;
+- DB schema v7 ar `adaptive_decisions` audita tabulu;
+- alpha5 funkcionalitāte ir feature-complete un atrodas pilna regression gate validācijā.
 
 ## 🧭 3.3.0-alpha.6 — Entity Resolution
 
@@ -334,7 +337,7 @@ Alpha4 **records and explains** experience. It does not yet perform automatic so
 
 Metrics stay explainable; one opaque “magic score” must not replace the underlying signals.
 
-## 🚧 3.3.0-alpha.5 — Adaptive Expedition
+## 🧪 3.3.0-alpha.5 — Adaptive Expedition
 
 Goal: choose better research paths without requiring paid AI.
 
@@ -348,7 +351,10 @@ Goal: choose better research paths without requiring paid AI.
 - controlled multi-hop discovery;
 - `max_discovery_depth`;
 - per-depth budgets;
-- soft entity-diversity limits so one giant source does not dominate coverage.
+- soft entity-diversity limits so one giant source does not dominate coverage;
+- persisted Adaptive Decision Trace for query priority, search-result priority, source-diversity, discovery-depth and stop decisions;
+- database schema v7 with an `adaptive_decisions` audit table;
+- alpha5 functionality is feature-complete and undergoing the full regression gate.
 
 ## 🧭 3.3.0-alpha.6 — Entity Resolution
 
