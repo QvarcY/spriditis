@@ -79,9 +79,14 @@ class DomainRegistry:
             discovered_from_url="",
             relevance_score=1.0,
         )
-        # A configured seed is an explicit reactivation signal for a
-        # previously rejected/failed domain. Safety policy is checked before
-        # add_seed() is called, so unsafe blocked hosts still never reach here.
+        # A configured seed explicitly reactivates rejected/failed domains,
+        # but a persisted blocked state remains sticky until a future explicit
+        # unblock/reset operation exists.
+        if record.status == "blocked":
+            record.last_seen = utc_now()
+            self._touch(domain)
+            return record
+
         record.status = "active"
         record.reason = "seed"
         record.last_seen = utc_now()
