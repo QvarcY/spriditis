@@ -25,9 +25,9 @@
 
 | | Status |
 |---|---|
-| **Publiskā versija / Public baseline** | ✅ `v3.3.0-alpha.2` — SearchProvider hardening + dedupe |
-| **Šobrīd / Current work** | 🚧 `3.3.0-alpha.3` — Feed Discovery & Incremental Monitoring |
-| **Nākamais / Next** | 🧭 `3.3.0-alpha.4` — Research Memory |
+| **Publiskā versija / Public baseline** | ✅ `v3.3.0-alpha.3` — Feed Discovery + incremental monitoring |
+| **Šobrīd / Current work** | 🚧 `3.3.0-alpha.4` — Research Memory |
+| **Nākamais / Next** | 🧭 `3.3.0-alpha.5` — Adaptive Expedition |
 | **Galvenais virziens / North star** | 🧠 **Research Memory + Adaptive Discovery** |
 | **Pamatprincips / Core principle** | 🔎 **source-backed facts > AI guesses** |
 | **Izmaksu princips / Cost direction** | 🌱 Priekšroka lokāliem, atvērtiem, pašhostējamiem un bezmaksas risinājumiem / Prefer local, open, self-hostable and zero-cost building blocks |
@@ -50,7 +50,7 @@
 | ✅ | **3.2** | Domain Registry + Discovery Engine | persistent domain memory, sitemap discovery, controlled multi-domain crawling, DB migrations |
 | ✅ | **3.3.0-alpha.1** | SearchProvider + zero-seed Expedition | provider abstraction, query generation, search provenance, search → activation → crawl |
 | ✅ | **3.3.0-alpha.2** | SearchProvider hardening | retry/backoff, `Retry-After`, structured provider errors, result dedupe, `search-check`, schema v4 |
-| 🚧 | **3.3.0-alpha.3** | Feed Discovery & Incremental Monitoring | RSS 2.0, Atom, JSON Feed, autodiscovery, ETag / Last-Modified, feed provenance |
+| ✅ | **3.3.0-alpha.3** | Feed Discovery & Incremental Monitoring | RSS 2.0, Atom, JSON Feed, autodiscovery, ETag / Last-Modified, feed provenance, repeat-run domain persistence |
 | 🧭 | **3.3.0-alpha.4** | Research Memory | query/source yield, source profiles, provenance, `explain` + `trace`, freshness/staleness |
 | 🧭 | **3.3.0-alpha.5** | Adaptive Expedition | BM25, query prioritization, coverage saturation, per-depth budgets, multi-hop, source diversity |
 | 🧭 | **3.3.0-alpha.6** | Entity Resolution | cross-source matching, duplicate clustering, one entity with many source observations |
@@ -224,6 +224,11 @@ Sprīdītis nav piesaistīts vienai nozarei. Ideja ir vienu un to pašu kodolu p
 - ārējo domēnu un search rezultātu audita vēsture ar providera/vaicājuma izcelsmi
 - search vaicājumu, rezultātu, aktivizāciju un kļūdu skaitītāji
 - sitemap atklāšana no `robots.txt` un `/sitemap.xml`
+- RSS 2.0, Atom un JSON Feed discovery no HTML `rel="alternate"`
+- kontekstuāla feed prioritizācija, lai sekcijas feeds būtu priekšā generic/comment feediem
+- persistējošs feed state ar `ETag`, `Last-Modified`, `304 Not Modified`, `last_entry_id` un `last_published`
+- `feeds` CLI komanda feed stāvokļa pārbaudei
+- Domain Registry stāvokļa hidratācija pirms atkārtota run; `blocked`/`rejected` dzīves cikla stāvokļi paliek sticky
 - URL prioritizācija un crawl budžeti katram domēnam
 - `robots.txt` pārbaude
 - drošības filtri crawlerim
@@ -396,13 +401,13 @@ Sprīdīti nevajadzētu izmantot autentifikācijas, piekļuves kontroles, paywal
 
 ### Projekta statuss
 
-Pašreizējais publiskais atskaites punkts: **Sprīdītis 3.3.0-alpha.2**.
+Pašreizējais publiskais atskaites punkts: **Sprīdītis 3.3.0-alpha.3**.
 
-Šajā pieturas punktā Sprīdītim pirmo reizi ir īsts Expedition starts: projekts var sākties bez neviena seed URL, ģenerēt deterministiskus meklēšanas vaicājumus, saņemt rezultātus caur provider-neatkarīgu SearchProvider, piemērot esošos drošības, relevances un domēnu budžeta noteikumus, aktivizēt derīgu domēnu un to pārmeklēt.
+3.3.0-alpha.3 papildina SearchProvider/HTML/sitemap discovery ar **RSS 2.0, Atom un JSON Feed**. Feed resursi tiek atrasti no HTML `rel="alternate"`, prioritizēti pēc lapas konteksta un apstrādāti caur to pašu safety, relevance, Domain Registry un frontier plūsmu.
 
-Pašlaik ir pieejams offline fake provideris deterministiskiem testiem un SearXNG JSON API provideris reālai meklēšanas integrācijai. Providera un vaicājuma izcelsme tiek saglabāta auditam un neapiet Domain Registry.
+Feed state tiek glabāts SQLite atsevišķā 1:N modelī. Atkārtotos pētījumos Sprīdītis izmanto `ETag` un `Last-Modified`; reālā publiskā feed testā tika validēts arī `304 Not Modified`, neielādējot un nepārparsējot nemainītu feed saturu.
 
-**3.3.0-alpha.2** nostiprina SearchProvider slāni ar retry/backoff, `Retry-After`, strukturētām providera kļūdām, search rezultātu deduplikāciju, raw/unique/duplicate skaitītājiem, nederīgu non-HTTP(S) rezultātu agrīnu atmešanu, `search-check` komandu un DB shēmu v4. Nākamais aktīvais pieturas punkts ir **3.3.0-alpha.3 — Feed Discovery & Incremental Monitoring**.
+Šis posms nostiprina arī atkārtotu run Domain Registry semantiku: vēsturiskie `blocked` un `rejected` stāvokļi tiek hidratēti pirms discovery lēmumiem, `active` domēni tiek atpazīti kā zināmi, bet vēsturiskie lapu/entity skaitītāji netiek atkārtoti pieskaitīti. Nākamais aktīvais pieturas punkts ir **3.3.0-alpha.4 — Research Memory**.
 
 Šis ir alpha projekts, tāpēc līdz stabilai versijai iespējamas arī nesavietojamas izmaiņas.
 
@@ -493,6 +498,11 @@ Sprīdītis is not tied to one industry. The same core is intended to support ve
 - external-domain and search-result discovery audit trail with provider/query provenance
 - search query/result/activation/error run counters
 - sitemap discovery from `robots.txt` and `/sitemap.xml`
+- RSS 2.0, Atom and JSON Feed discovery from HTML `rel="alternate"`
+- context-aware feed ordering so section feeds outrank generic/comment feeds
+- persistent feed state with `ETag`, `Last-Modified`, `304 Not Modified`, `last_entry_id` and `last_published`
+- `feeds` CLI inspection
+- Domain Registry hydration before repeated runs, preserving sticky `blocked`/`rejected` lifecycle states
 - URL prioritization and per-domain crawl budgets
 - `robots.txt` checks
 - crawler safety filters
@@ -696,13 +706,13 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ### Project status
 
-Current public baseline: **Sprīdītis 3.3.0-alpha.2**.
+Current public baseline: **Sprīdītis 3.3.0-alpha.3**.
 
-This checkpoint adds the first true Expedition bootstrap. A project can start with zero seed URLs, generate deterministic search queries, receive results through a provider-neutral SearchProvider, apply the existing safety/relevance/domain-budget rules, activate an eligible domain and crawl it.
+3.3.0-alpha.3 extends SearchProvider/HTML/sitemap discovery with **RSS 2.0, Atom and JSON Feed**. Feed resources are discovered from HTML `rel="alternate"`, prioritized by page context, and routed through the same safety, relevance, Domain Registry and frontier controls.
 
-The current implementation includes an offline fake provider for deterministic validation and a SearXNG JSON API provider for real search integration. Search-provider and query provenance are kept auditable instead of bypassing the Domain Registry.
+Feed state is stored in a dedicated SQLite 1:N model. Repeated research uses `ETag` and `Last-Modified`; a real public-feed validation also confirmed `304 Not Modified`, avoiding unnecessary feed download/parsing when content has not changed.
 
-**3.3.0-alpha.2** hardens the SearchProvider layer with retry/backoff, `Retry-After`, structured provider errors, result deduplication, raw/unique/duplicate counters, early rejection of invalid non-HTTP(S) results, the `search-check` command, and database schema v4. The next active milestone is **3.3.0-alpha.3 — Feed Discovery & Incremental Monitoring**.
+This milestone also hardens repeated-run Domain Registry semantics: historical `blocked` and `rejected` lifecycle states are hydrated before discovery decisions, known active domains are recognized, and historical page/entity counters are not replayed into the new run. The next active milestone is **3.3.0-alpha.4 — Research Memory**.
 
 This is alpha software. Expect breaking changes before a stable release.
 
