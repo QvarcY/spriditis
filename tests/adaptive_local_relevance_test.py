@@ -114,19 +114,28 @@ exact_hit = SearchHit(
     title="Ergonomic chair with lumbar support",
     snippet="Ergonomic office chair with adjustable lumbar support",
 )
+negative_hit = SearchHit(
+    url=(
+        "https://negative.example/product/ergonomic-chair/"
+        "lumbar-support/vacancy"
+    ),
+    title="Ergonomic chair lumbar support vacancy",
+    snippet="Ergonomic chair with lumbar support vacancy",
+)
 
 signals = local_relevance_signals(
     project,
     query,
-    [weak_hit, exact_hit],
+    [weak_hit, exact_hit, negative_hit],
 )
 
-assert len(signals) == 2
+assert len(signals) == 3
 assert signals[1].bm25 > signals[0].bm25
 assert signals[1].title_matches > signals[0].title_matches
 assert signals[1].path_matches > signals[0].path_matches
 assert signals[0].negative_matches == 0
 assert signals[1].negative_matches == 0
+assert signals[2].negative_matches == 1
 
 settings = AppSettings(
     gemini_api_key="",
@@ -150,6 +159,7 @@ settings = AppSettings(
 
 provider = FakeSearchProvider({
     query: [
+        negative_hit,
         weak_hit,
         exact_hit,
     ],
@@ -166,12 +176,13 @@ crawler.session = FakeSession({
 })
 
 ranked = crawler._rank_search_hits(
-    [weak_hit, exact_hit],
+    [negative_hit, weak_hit, exact_hit],
     query,
 )
 assert [item.hit.url for item in ranked] == [
     exact_url,
     weak_url,
+    negative_hit.url,
 ]
 
 result = crawler.crawl()
@@ -185,6 +196,7 @@ search_events = [
 assert [item.target_domain for item in search_events] == [
     "exact.example",
     "weak.example",
+    "negative.example",
 ]
 assert search_events[0].action == "activated"
 assert result.domains["exact.example"].status == "active"
