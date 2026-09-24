@@ -1302,6 +1302,8 @@ def main() -> int:
                     f"source_changed={counts['SOURCE_CHANGED']}",
                     f"domain_failed={counts['DOMAIN_FAILED']}",
                     f"domain_recovered={counts['DOMAIN_RECOVERED']}",
+                    f"feed_appeared={counts['FEED_APPEARED']}",
+                    f"feed_disappeared={counts['FEED_DISAPPEARED']}",
                     f"feed_new={counts['FEED_NEW_ENTRIES']}",
                     f"feed_failed={counts['FEED_FAILED']}",
                     f"feed_recovered={counts['FEED_RECOVERED']}",
@@ -1356,6 +1358,15 @@ def main() -> int:
                     f"      domain={event['source_domain']} "
                     f"{event['before']['state']} → "
                     f"{event['after']['state']}"
+                )
+            elif event["change_type"] in (
+                "FEED_APPEARED",
+                "FEED_DISAPPEARED",
+            ):
+                print(
+                    f"      feed={event['source_url']} "
+                    f"observed={event['before']['observed']} → "
+                    f"{event['after']['observed']}"
                 )
             elif event["change_type"] == "FEED_NEW_ENTRIES":
                 print(
