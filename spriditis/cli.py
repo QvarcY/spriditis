@@ -27,6 +27,45 @@ DOMAIN_STATUSES = [
 ]
 
 
+def _group_trace_discoveries(events: list[dict]) -> list[dict]:
+    """Compact repeated discovery evidence without changing the raw audit."""
+    groups: dict[tuple, dict] = {}
+
+    for event in events:
+        key = (
+            event.get("action") or "",
+            event.get("discovered_via") or "",
+            event.get("target_domain") or "",
+            event.get("reason") or "",
+            event.get("provider") or "",
+            event.get("query_text") or "",
+        )
+        group = groups.get(key)
+        if group is None:
+            group = dict(event)
+            group["count"] = 0
+            group["max_relevance_score"] = float(
+                event.get("relevance_score") or 0.0
+            )
+            groups[key] = group
+
+        group["count"] += 1
+        group["max_relevance_score"] = max(
+            group["max_relevance_score"],
+            float(event.get("relevance_score") or 0.0),
+        )
+
+    return sorted(
+        groups.values(),
+        key=lambda row: (
+            -int(row["count"]),
+            row.get("target_domain") or "",
+            row.get("action") or "",
+            row.get("discovered_via") or "",
+        ),
+    )
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Sprīdītis 3.3 — universāls tirgus izpētes dzinējs"
@@ -114,6 +153,11 @@ def _parser() -> argparse.ArgumentParser:
     )
     trace.add_argument("--project", required=True)
     trace.add_argument("--run", required=True, type=int)
+    trace.add_argument(
+        "--full",
+        action="store_true",
+        help="Parādīt visus raw discovery eventus bez grupēšanas",
+    )
 
     migrate = sub.add_parser(
         "migrate-db",
@@ -567,19 +611,42 @@ def main() -> int:
                 print(f"      from={visit['source_url']}")
 
         print("")
-        print(f"DISCOVERY EVENTS ({len(trace['discoveries'])})")
-        for event in trace["discoveries"]:
-            print(
-                f"   {event['action']:<10} "
-                f"via={event['discovered_via']:<15} "
-                f"{event['target_domain']} "
-                f"score={event['relevance_score']:.2f}"
-            )
-            if event["query_text"]:
+        if args.full:
+            print(f"DISCOVERY EVENTS ({len(trace['discoveries'])} raw)")
+            for event in trace["discoveries"]:
                 print(
-                    f"      provider={event['provider'] or '-'} "
-                    f"query={event['query_text']}"
+                    f"   {event['action']:<10} "
+                    f"via={event['discovered_via']:<15} "
+                    f"{event['target_domain']} "
+                    f"score={event['relevance_score']:.2f}"
                 )
+                if event["query_text"]:
+                    print(
+                        f"      provider={event['provider'] or '-'} "
+                        f"query={event['query_text']}"
+                    )
+        else:
+            grouped = _group_trace_discoveries(trace["discoveries"])
+            print(
+                f"DISCOVERY EVENTS "
+                f"({len(trace['discoveries'])} raw / "
+                f"{len(grouped)} grouped)"
+            )
+            for event in grouped:
+                print(
+                    f"   x{event['count']:<4} "
+                    f"{event['action']:<10} "
+                    f"via={event['discovered_via']:<15} "
+                    f"{event['target_domain']} "
+                    f"max_score={event['max_relevance_score']:.2f}"
+                )
+                if event["query_text"]:
+                    print(
+                        f"      provider={event['provider'] or '-'} "
+                        f"query={event['query_text']}"
+                    )
+                if event["reason"]:
+                    print(f"      reason={event['reason']}")
 
         print("")
         print(f"OBSERVATIONS ({len(trace['observations'])})")
