@@ -166,9 +166,9 @@ Dizaina robežas:
 
 Pilnais regression gate ir izpildīts: **38/38 deterministiskie testi iziet**.
 
-## 🧪 3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence
+## ✅ 3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence
 
-**Statuss:** feature-complete un pilnībā validēts publicēšanas kandidāts.
+**Statuss:** publicēts un pilnībā validēts.
 
 Ieviests:
 
@@ -196,9 +196,9 @@ Dizaina robežas:
 - DOM heuristikas ir konservatīvs pēdējais deterministiskais slānis, nevis strukturēto avotu aizvietotājs;
 - labāk palaist garām robežgadījumu nekā radīt viltus produktu no parastas lapas teksta.
 
-Pilnais alpha7 regression gate ir izpildīts: **43/43 deterministiskie testi iziet**. Nākamais solis ir PR → merge → tag.
+Pilnais alpha7 regression gate ir izpildīts: **43/43 deterministiskie testi iziet**.
 
-## 🧭 3.3.0-alpha.8 — Change Detection
+## 🚧 3.3.0-alpha.8 — Change Detection
 
 Mērķis: pārvērst observations jēgpilnos notikumos.
 
@@ -275,7 +275,7 @@ Tas ir **Research Memory + Adaptive Discovery + Evidence Confidence + Incrementa
 
 # English
 
-## ✅ Current public baseline — 3.3.0-alpha.6
+## ✅ Current public baseline — 3.3.0-alpha.7
 
 Implemented and public:
 
@@ -415,9 +415,9 @@ Design boundaries:
 
 The complete regression gate passed: **38/38 deterministic tests**.
 
-## 🧪 3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence
+## ✅ 3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence
 
-**Status:** feature-complete and fully validated for publication.
+**Status:** released and fully validated.
 
 Implemented:
 
@@ -445,7 +445,7 @@ Design boundaries:
 - DOM heuristics are a conservative final deterministic layer, not a replacement for structured sources;
 - missing a borderline product is preferable to manufacturing a false product from ordinary page text.
 
-The complete alpha7 regression gate passed: **43/43 deterministic tests**. Next step: PR → merge → tag.
+The complete alpha7 regression gate passed: **43/43 deterministic tests**.
 
 ## 🧭 3.3.0-alpha.8 — Change Detection
 
