@@ -293,6 +293,8 @@ class ResearchCrawler:
                 )
             )
 
+            active_domains_before = set(registry.run_active_domains)
+
             # Sitemap discovery only once per active domain.
             if (
                 self.project.crawl.discover_sitemaps
@@ -524,7 +526,36 @@ class ResearchCrawler:
                     source_type="html_link",
                 )
 
+            new_active_domains = len(
+                set(registry.run_active_domains) - active_domains_before
+            )
+            if self._update_adaptive_stop(
+                result,
+                new_entities=new_entities,
+                new_active_domains=new_active_domains,
+            ):
+                print(
+                    f"⏹️ STOP_REASON={result.stop_reason} "
+                    f"diminishing_streak={result.diminishing_returns_streak} "
+                    f"saturation_streak={result.saturation_streak}"
+                )
+                break
+
             self._sleep()
+
+        if not result.stop_reason:
+            if result.visited_pages >= self.project.crawl.max_pages_total:
+                result.stop_reason = "max_pages"
+            elif (
+                registry.active_count >= self.project.crawl.max_domains
+                and any(
+                    item.reason == "domain_budget_reached"
+                    for item in registry.discoveries
+                )
+            ):
+                result.stop_reason = "max_domains"
+            else:
+                result.stop_reason = "budget_exhausted"
 
         self._enrich_entities(result)
 
@@ -532,6 +563,41 @@ class ResearchCrawler:
         result.domain_discoveries = registry.discoveries
         result.finished_at = datetime.now(timezone.utc).isoformat()
         return result
+
+    def _update_adaptive_stop(
+        self,
+        result: ResearchRunResult,
+        *,
+        new_entities: int,
+        new_active_domains: int,
+    ) -> bool:
+        if new_entities > 0:
+            result.diminishing_returns_streak = 0
+            result.saturation_streak = 0
+        else:
+            result.diminishing_returns_streak += 1
+            if new_active_domains > 0:
+                result.saturation_streak = 0
+            else:
+                result.saturation_streak += 1
+
+        saturation_window = self.project.crawl.saturation_window
+        if (
+            saturation_window > 0
+            and result.saturation_streak >= saturation_window
+        ):
+            result.stop_reason = "saturation_reached"
+            return True
+
+        diminishing_window = self.project.crawl.diminishing_returns_window
+        if (
+            diminishing_window > 0
+            and result.diminishing_returns_streak >= diminishing_window
+        ):
+            result.stop_reason = "diminishing_returns"
+            return True
+
+        return False
 
     def _source_memory_state(self, domain: str) -> str:
         profile = self.source_profiles.get(domain)
