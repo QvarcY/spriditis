@@ -11,9 +11,10 @@ from spriditis.core.entities import MarketEntity
 from spriditis.core.feeds import FeedState
 from spriditis.core.projects import ResearchProject
 from spriditis.core.run import ResearchRunResult
+from spriditis.resolution.identity import resolve_entities
 
 
-CURRENT_SCHEMA_VERSION = 7
+CURRENT_SCHEMA_VERSION = 8
 DEFAULT_STALE_AFTER_DAYS = 30.0
 
 
@@ -229,6 +230,35 @@ CREATE TABLE IF NOT EXISTS adaptive_decisions (
 CREATE INDEX IF NOT EXISTS idx_adaptive_decisions_run
 ON adaptive_decisions(project_id, run_id, sequence);
 
+CREATE TABLE IF NOT EXISTS entity_clusters (
+    project_id TEXT NOT NULL,
+    cluster_key TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    canonical_title TEXT NOT NULL,
+    first_seen TEXT NOT NULL,
+    last_seen TEXT NOT NULL,
+    PRIMARY KEY(project_id, cluster_key),
+    FOREIGN KEY(project_id) REFERENCES projects(project_id)
+);
+
+CREATE TABLE IF NOT EXISTS entity_cluster_members (
+    project_id TEXT NOT NULL,
+    entity_key TEXT NOT NULL,
+    cluster_key TEXT NOT NULL,
+    match_reason TEXT NOT NULL,
+    matched_signals_json TEXT NOT NULL DEFAULT '[]',
+    supporting_signals_json TEXT NOT NULL DEFAULT '[]',
+    linked_at TEXT NOT NULL,
+    PRIMARY KEY(project_id, entity_key),
+    FOREIGN KEY(project_id, cluster_key)
+        REFERENCES entity_clusters(project_id, cluster_key),
+    FOREIGN KEY(project_id, entity_key)
+        REFERENCES entities(project_id, entity_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_entity_cluster_members_cluster
+ON entity_cluster_members(project_id, cluster_key, linked_at);
+
 CREATE TABLE IF NOT EXISTS schema_meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -431,6 +461,33 @@ class Database:
             """
         )
 
+        # Alpha6 canonical clustering is layered on top of the existing
+        # source-specific entities/observations model. Existing entities are
+        # bootstrapped into one-member clusters so migration never merges
+        # historical evidence implicitly.
+        self.conn.execute(
+            """
+            INSERT OR IGNORE INTO entity_clusters(
+                project_id, cluster_key, entity_type, canonical_title,
+                first_seen, last_seen
+            )
+            SELECT project_id, entity_key, entity_type, title,
+                   first_seen, last_seen
+            FROM entities
+            """
+        )
+        self.conn.execute(
+            """
+            INSERT OR IGNORE INTO entity_cluster_members(
+                project_id, entity_key, cluster_key, match_reason,
+                matched_signals_json, supporting_signals_json, linked_at
+            )
+            SELECT project_id, entity_key, entity_key, 'legacy_seed',
+                   '[]', '[]', first_seen
+            FROM entities
+            """
+        )
+
         self.conn.execute(
             """
             INSERT INTO schema_meta(key, value)
@@ -579,7 +636,225 @@ class Database:
                 entity.as_json(),
             ),
         )
+
+        self._resolve_entity_cluster(
+            project.id,
+            key,
+            entity,
+            now,
+        )
         self.conn.commit()
+
+    def _entity_from_storage_row(self, row) -> MarketEntity:
+        return MarketEntity(
+            title=row[2],
+            entity_type=row[1],
+            source_url=row[3],
+            source_domain=row[4] or "",
+            description=row[5] or "",
+            price=row[6],
+            currency=row[7] or "EUR",
+            seller=row[8] or "",
+            image_url=row[9] or "",
+            category=row[10] or "uncategorized",
+            is_relevant=bool(row[11]),
+            confidence=float(row[12] or 0.0),
+            relevance_score=float(row[13] or 0.0),
+            tags=json.loads(row[14] or "[]"),
+            attributes=json.loads(row[15] or "{}"),
+            opportunity_notes=row[16] or "",
+            extraction_method=row[17] or "",
+            evidence=row[18] or "",
+        )
+
+    def _resolve_entity_cluster(
+        self,
+        project_id: str,
+        entity_key: str,
+        entity: MarketEntity,
+        linked_at: str,
+    ) -> str:
+        existing = self.conn.execute(
+            """
+            SELECT cluster_key
+            FROM entity_cluster_members
+            WHERE project_id=? AND entity_key=?
+            """,
+            (project_id, entity_key),
+        ).fetchone()
+
+        if existing:
+            cluster_key = existing[0]
+            self.conn.execute(
+                """
+                UPDATE entity_clusters
+                SET last_seen=?
+                WHERE project_id=? AND cluster_key=?
+                """,
+                (linked_at, project_id, cluster_key),
+            )
+            return cluster_key
+
+        rows = self.conn.execute(
+            """
+            SELECT e.entity_key, e.entity_type, e.title, e.source_url,
+                   e.source_domain, e.description, e.last_price,
+                   e.currency, e.seller, e.image_url, e.category,
+                   e.is_relevant, e.confidence, e.relevance_score,
+                   e.tags_json, e.attributes_json, e.opportunity_notes,
+                   e.extraction_method, e.evidence, m.cluster_key
+            FROM entities e
+            JOIN entity_cluster_members m
+              ON m.project_id=e.project_id
+             AND m.entity_key=e.entity_key
+            WHERE e.project_id=?
+              AND e.entity_key<>?
+              AND e.entity_type=?
+            ORDER BY e.first_seen, e.entity_key
+            """,
+            (project_id, entity_key, entity.entity_type),
+        ).fetchall()
+
+        matches_by_cluster: dict[str, list] = {}
+        for row in rows:
+            candidate = self._entity_from_storage_row(row)
+            decision = resolve_entities(entity, candidate)
+            if decision.outcome != "match":
+                continue
+            matches_by_cluster.setdefault(row[19], []).append(decision)
+
+        cluster_key = entity_key
+        match_reason = "new_cluster"
+        matched_signals: tuple[str, ...] = ()
+        supporting_signals: tuple[str, ...] = ()
+
+        if len(matches_by_cluster) == 1:
+            cluster_key, decisions = next(iter(matches_by_cluster.items()))
+            selected = decisions[0]
+            match_reason = selected.reason
+            matched_signals = selected.matched_signals
+            supporting_signals = selected.supporting_signals
+        elif len(matches_by_cluster) > 1:
+            match_reason = "ambiguous_multiple_clusters"
+
+        self.conn.execute(
+            """
+            INSERT OR IGNORE INTO entity_clusters(
+                project_id, cluster_key, entity_type, canonical_title,
+                first_seen, last_seen
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                project_id,
+                cluster_key,
+                entity.entity_type,
+                entity.title,
+                linked_at,
+                linked_at,
+            ),
+        )
+        self.conn.execute(
+            """
+            INSERT INTO entity_cluster_members(
+                project_id, entity_key, cluster_key, match_reason,
+                matched_signals_json, supporting_signals_json, linked_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                project_id,
+                entity_key,
+                cluster_key,
+                match_reason,
+                json.dumps(matched_signals, ensure_ascii=False),
+                json.dumps(supporting_signals, ensure_ascii=False),
+                linked_at,
+            ),
+        )
+        self.conn.execute(
+            """
+            UPDATE entity_clusters
+            SET last_seen=MAX(last_seen, ?)
+            WHERE project_id=? AND cluster_key=?
+            """,
+            (linked_at, project_id, cluster_key),
+        )
+        return cluster_key
+
+    def entity_clusters(
+        self,
+        project_id: str,
+    ) -> list[dict]:
+        clusters = self.conn.execute(
+            """
+            SELECT c.cluster_key, c.entity_type, c.canonical_title,
+                   c.first_seen, c.last_seen,
+                   COUNT(m.entity_key) AS member_count,
+                   COUNT(DISTINCT e.source_domain) AS source_count
+            FROM entity_clusters c
+            LEFT JOIN entity_cluster_members m
+              ON m.project_id=c.project_id
+             AND m.cluster_key=c.cluster_key
+            LEFT JOIN entities e
+              ON e.project_id=m.project_id
+             AND e.entity_key=m.entity_key
+            WHERE c.project_id=?
+            GROUP BY c.cluster_key, c.entity_type, c.canonical_title,
+                     c.first_seen, c.last_seen
+            ORDER BY c.first_seen, c.cluster_key
+            """,
+            (project_id,),
+        ).fetchall()
+
+        result: list[dict] = []
+        for row in clusters:
+            members = self.conn.execute(
+                """
+                SELECT m.entity_key, e.title, e.source_url, e.source_domain,
+                       e.last_price, e.currency, m.match_reason,
+                       m.matched_signals_json,
+                       m.supporting_signals_json, m.linked_at
+                FROM entity_cluster_members m
+                JOIN entities e
+                  ON e.project_id=m.project_id
+                 AND e.entity_key=m.entity_key
+                WHERE m.project_id=? AND m.cluster_key=?
+                ORDER BY m.linked_at, m.entity_key
+                """,
+                (project_id, row[0]),
+            ).fetchall()
+            result.append(
+                {
+                    "cluster_key": row[0],
+                    "entity_type": row[1],
+                    "canonical_title": row[2],
+                    "first_seen": row[3],
+                    "last_seen": row[4],
+                    "member_count": int(row[5] or 0),
+                    "source_count": int(row[6] or 0),
+                    "members": [
+                        {
+                            "entity_key": member[0],
+                            "title": member[1],
+                            "source_url": member[2],
+                            "source_domain": member[3] or "",
+                            "price": member[4],
+                            "currency": member[5] or "",
+                            "match_reason": member[6],
+                            "matched_signals": json.loads(
+                                member[7] or "[]"
+                            ),
+                            "supporting_signals": json.loads(
+                                member[8] or "[]"
+                            ),
+                            "linked_at": member[9],
+                        }
+                        for member in members
+                    ],
+                }
+            )
+        return result
 
     def save_domain_registry(
         self,
@@ -1366,11 +1641,15 @@ class Database:
             """
             SELECT o.entity_key, e.title, e.entity_type, e.source_url,
                    e.source_domain, o.observed_at, o.price, o.currency,
-                   e.extraction_method, e.relevance_score
+                   e.extraction_method, e.relevance_score,
+                   m.cluster_key, m.match_reason
             FROM observations o
             LEFT JOIN entities e
               ON e.project_id=o.project_id
              AND e.entity_key=o.entity_key
+            LEFT JOIN entity_cluster_members m
+              ON m.project_id=o.project_id
+             AND m.entity_key=o.entity_key
             WHERE o.project_id=? AND o.run_id=?
             ORDER BY o.id
             """,
@@ -1456,6 +1735,8 @@ class Database:
                     "currency": row[7] or "",
                     "extraction_method": row[8] or "",
                     "relevance_score": float(row[9] or 0.0),
+                    "cluster_key": row[10] or "",
+                    "cluster_match_reason": row[11] or "",
                 }
                 for row in observation_rows
             ],
