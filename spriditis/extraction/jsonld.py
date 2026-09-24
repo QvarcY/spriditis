@@ -7,9 +7,25 @@ from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup
 
-from spriditis.core.entities import MarketEntity
+from spriditis.core.entities import ExtractionEvidence, MarketEntity
 
 from .common import absolute_image, clean_text, parse_price
+
+
+def _fact(
+    value: Any,
+    *,
+    page_url: str,
+    confidence: float,
+    evidence: str,
+) -> ExtractionEvidence:
+    return ExtractionEvidence(
+        value=value,
+        source_url=page_url,
+        extraction_method="json-ld",
+        confidence=confidence,
+        evidence=evidence,
+    )
 
 
 def _iter_nodes(obj: Any):
@@ -138,6 +154,69 @@ def extract_jsonld_products(
             )
             description = clean_text(node.get("description"), 2500)
 
+            seller = _seller_name(node)
+            image_url = absolute_image(node.get("image"), page_url)
+            attributes = _identity_attributes(node)
+
+            field_evidence: dict[str, ExtractionEvidence] = {
+                "title": _fact(
+                    title,
+                    page_url=page_url,
+                    confidence=0.98,
+                    evidence="jsonld:name",
+                ),
+                "source_url": _fact(
+                    source_url,
+                    page_url=page_url,
+                    confidence=0.98,
+                    evidence="jsonld:url|offers.url|page_url",
+                ),
+            }
+
+            if description:
+                field_evidence["description"] = _fact(
+                    description,
+                    page_url=page_url,
+                    confidence=0.98,
+                    evidence="jsonld:description",
+                )
+            if price is not None:
+                field_evidence["price"] = _fact(
+                    price,
+                    page_url=page_url,
+                    confidence=0.98,
+                    evidence="jsonld:offers.price|offers.lowPrice|price",
+                )
+            if currency:
+                field_evidence["currency"] = _fact(
+                    currency or "EUR",
+                    page_url=page_url,
+                    confidence=0.94,
+                    evidence="jsonld:offers.priceCurrency|priceCurrency|default",
+                )
+            if seller:
+                field_evidence["seller"] = _fact(
+                    seller,
+                    page_url=page_url,
+                    confidence=0.94,
+                    evidence="jsonld:seller|brand|manufacturer",
+                )
+            if image_url:
+                field_evidence["image_url"] = _fact(
+                    image_url,
+                    page_url=page_url,
+                    confidence=0.98,
+                    evidence="jsonld:image",
+                )
+
+            for key, value in attributes.items():
+                field_evidence[f"attributes.{key}"] = _fact(
+                    value,
+                    page_url=page_url,
+                    confidence=0.98,
+                    evidence=f"jsonld:{key}",
+                )
+
             entities.append(
                 MarketEntity(
                     title=title,
@@ -147,11 +226,12 @@ def extract_jsonld_products(
                     description=description,
                     price=price,
                     currency=currency or "EUR",
-                    seller=_seller_name(node),
-                    image_url=absolute_image(node.get("image"), page_url),
-                    attributes=_identity_attributes(node),
+                    seller=seller,
+                    image_url=image_url,
+                    attributes=attributes,
                     extraction_method="json-ld",
                     evidence=clean_text(f"{title}. {description}", 800),
+                    field_evidence=field_evidence,
                 )
             )
 
