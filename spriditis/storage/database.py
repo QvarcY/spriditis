@@ -385,10 +385,12 @@ class Database:
         self.conn.execute(
             """
             UPDATE domains
-            SET status='candidate',
+            SET status=CASE
+                    WHEN status='blocked' THEN 'candidate'
+                    ELSE status
+                END,
                 reason=''
-            WHERE status='blocked'
-              AND reason IN ('blocked_path', 'binary_or_static_file')
+            WHERE reason IN ('blocked_path', 'binary_or_static_file')
             """
         )
 
