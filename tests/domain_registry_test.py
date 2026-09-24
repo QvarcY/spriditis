@@ -42,6 +42,17 @@ def main():
     registry = DomainRegistry(project())
     registry.add_seed("https://seed.example/products")
 
+    known_seed, discovery = registry.observe_link(
+        source_url="https://seed.example/products",
+        target_url="https://seed.example/other",
+        anchor_text="another seed page",
+        raw_score=90,
+    )
+    assert discovery.action == "known"
+    assert known_seed.status == "active"
+    assert known_seed.discovered_via == "seed"
+    assert known_seed.reason == "seed"
+
     high, discovery = registry.observe_link(
         source_url="https://seed.example/products",
         target_url="https://chairs.example/office-chair",
