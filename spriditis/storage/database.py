@@ -379,6 +379,18 @@ class Database:
             "TEXT DEFAULT ''",
         )
 
+        # Alpha4 development builds briefly persisted URL-scoped safety
+        # failures as sticky domain blocks. Heal those rows idempotently:
+        # blocked_path/static-file failures apply to a URL, not its host.
+        self.conn.execute(
+            """
+            UPDATE domains
+            SET status='candidate'
+            WHERE status='blocked'
+              AND reason IN ('blocked_path', 'binary_or_static_file')
+            """
+        )
+
         self.conn.execute(
             """
             INSERT INTO schema_meta(key, value)
