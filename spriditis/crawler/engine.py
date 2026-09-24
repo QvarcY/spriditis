@@ -585,13 +585,17 @@ class ResearchCrawler:
                 )
 
             band = band_order[state]
+            has_productive_history = state in {
+                "productive_fresh",
+                "productive_stale",
+            }
             ranked.append(
                 (
                     (
                         band,
-                        -productive_rate if "productive" in state else 0.0,
-                        -entity_yield if "productive" in state else 0.0,
-                        -success_rate if "productive" in state else 0.0,
+                        -productive_rate if has_productive_history else 0.0,
+                        -entity_yield if has_productive_history else 0.0,
+                        -success_rate if has_productive_history else 0.0,
                         index,
                     ),
                     hit,
