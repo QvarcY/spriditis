@@ -160,6 +160,32 @@ def _parser() -> argparse.ArgumentParser:
         help="Stale slieksnis dienās Research Memory freshness signālam",
     )
 
+    clusters = sub.add_parser(
+        "clusters",
+        help="Parādīt projekta canonical entity clusterus",
+    )
+    clusters.add_argument("--project", required=True)
+    clusters.add_argument(
+        "--details",
+        action="store_true",
+        help="Parādīt pilnus cluster/member identifikatorus",
+    )
+
+    merge_clusters = sub.add_parser(
+        "merge-clusters",
+        help="Explicit un auditējami sapludināt divus entity clusterus",
+    )
+    merge_clusters.add_argument("--project", required=True)
+    merge_clusters.add_argument("--source", required=True)
+    merge_clusters.add_argument("--target", required=True)
+
+    cluster_merges = sub.add_parser(
+        "cluster-merges",
+        help="Parādīt explicit cluster merge audita ierakstus",
+    )
+    cluster_merges.add_argument("--project", required=True)
+    cluster_merges.add_argument("--limit", type=int, default=50)
+
     trace = sub.add_parser(
         "trace",
         help="Parādīt viena research run provenance pēdas",
@@ -647,6 +673,134 @@ def main() -> int:
                     f"seen={feed['entries_seen']} new={feed['new_entries']}"
                 )
                 print(f"      {feed['feed_url']}")
+        return 0
+
+    if args.command == "clusters":
+        from spriditis.storage.database import Database
+
+        settings = load_settings()
+        project = load_project(Path(args.project))
+        db = Database(
+            settings.db_path,
+            legacy_path=settings.legacy_db_path,
+        )
+        try:
+            rows = db.entity_clusters(project.id)
+        finally:
+            db.close()
+
+        if not rows:
+            print("Projektam vēl nav canonical entity clusteru.")
+            return 0
+
+        print(
+            f"{'CLUSTER':<20} {'TYPE':<10} {'MEM':>4} "
+            f"{'SRC':>3} TITLE"
+        )
+        print("-" * 100)
+        for row in rows:
+            short_key = row["cluster_key"][:18] + "..."
+            print(
+                f"{short_key:<20} "
+                f"{row['entity_type']:<10} "
+                f"{row['member_count']:>4} "
+                f"{row['source_count']:>3} "
+                f"{row['canonical_title'][:55]}"
+            )
+            if args.details:
+                print(f"   cluster_key={row['cluster_key']}")
+                for member in row["members"]:
+                    print(
+                        f"      {member['source_domain'] or '-'} "
+                        f"{member['title'][:55]}"
+                    )
+                    print(
+                        f"         entity_key={member['entity_key']} "
+                        f"reason={member['match_reason']}"
+                    )
+        return 0
+
+    if args.command == "merge-clusters":
+        from spriditis.storage.database import Database
+
+        settings = load_settings()
+        project = load_project(Path(args.project))
+        db = Database(
+            settings.db_path,
+            legacy_path=settings.legacy_db_path,
+        )
+        try:
+            event = db.merge_entity_clusters(
+                project.id,
+                args.source,
+                args.target,
+            )
+        finally:
+            db.close()
+
+        print(
+            f"Cluster merge: {event['decision']} "
+            f"reason={event['reason']}"
+        )
+        print(f"   source={event['source_cluster_key']}")
+        print(f"   target={event['target_cluster_key']}")
+        if event["matched_signals"]:
+            print(
+                "   matched="
+                + ", ".join(event["matched_signals"])
+            )
+        if event["conflicting_signals"]:
+            print(
+                "   conflicts="
+                + ", ".join(event["conflicting_signals"])
+            )
+        print(
+            f"   source_members={event['source_member_count']} "
+            f"target_members={event['target_member_count']} "
+            f"merged_members={event['merged_member_count']}"
+        )
+        return 0 if event["decision"] == "merged" else 2
+
+    if args.command == "cluster-merges":
+        from spriditis.storage.database import Database
+
+        settings = load_settings()
+        project = load_project(Path(args.project))
+        db = Database(
+            settings.db_path,
+            legacy_path=settings.legacy_db_path,
+        )
+        try:
+            rows = db.entity_cluster_merge_events(
+                project.id,
+                limit=args.limit,
+            )
+        finally:
+            db.close()
+
+        if not rows:
+            print("Cluster merge audit vēl nav ierakstu.")
+            return 0
+
+        for row in rows:
+            print(
+                f"#{row['id']} {row['decision']:<8} "
+                f"reason={row['reason']}"
+            )
+            print(
+                f"   {row['source_cluster_key'][:20]}... -> "
+                f"{row['target_cluster_key'][:20]}..."
+            )
+            if row["matched_signals"]:
+                print(
+                    "   matched="
+                    + ", ".join(row["matched_signals"])
+                )
+            if row["conflicting_signals"]:
+                print(
+                    "   conflicts="
+                    + ", ".join(row["conflicting_signals"])
+                )
         return 0
 
     if args.command == "trace":
