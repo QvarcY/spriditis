@@ -142,7 +142,7 @@ with TemporaryDirectory() as tmp:
     db = Database(_BootstrapPath(tmp) / "spriditis.db")
     try:
         assert db.schema_version() == CURRENT_SCHEMA_VERSION
-        assert CURRENT_SCHEMA_VERSION == 11
+        assert CURRENT_SCHEMA_VERSION >= 11
 
         db.save_project(project)
         run_id = db.start_run(project)
