@@ -34,6 +34,11 @@ def main():
     )
     assert entities, "Netika atrasts testa produkts."
     assert entities[0].price == 18.27
+    assert entities[0].field_evidence["title"].extraction_method == "meistardarbs-html"
+    assert entities[0].field_evidence["price"].value == 18.27
+    assert entities[0].field_evidence["price"].confidence == 0.84
+    assert entities[0].field_evidence["currency"].value == "EUR"
+    assert entities[0].field_evidence["seller"].value == "Testa veikals"
 
     enriched = entities[0].apply_enrichment(
         FallbackProvider().enrich(entities[0], project)
