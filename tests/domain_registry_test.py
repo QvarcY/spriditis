@@ -80,6 +80,29 @@ def main():
     assert blocked.status == "blocked"
     assert discovery.reason == "blocked_host"
 
+    path_registry = DomainRegistry(project())
+    candidate, discovery = path_registry.observe_link(
+        source_url="https://seed.example/products",
+        target_url="https://docs.example/privacy",
+        anchor_text="privacy",
+        raw_score=90,
+    )
+    assert discovery.action == "blocked"
+    assert discovery.reason == "blocked_path"
+    assert candidate.status == "candidate"
+
+    path_registry.add_seed("https://docs.example/start")
+    active, discovery = path_registry.observe_link(
+        source_url="https://docs.example/start",
+        target_url="https://docs.example/privacy",
+        anchor_text="privacy",
+        raw_score=90,
+    )
+    assert discovery.action == "blocked"
+    assert discovery.reason == "blocked_path"
+    assert active.status == "active"
+    assert active.reason == "seed"
+
     domain_only = DomainRegistry(project(mode="domain", max_domains=1))
     domain_only.add_seed("https://seed.example/products")
     record, discovery = domain_only.observe_link(
