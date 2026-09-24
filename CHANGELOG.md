@@ -1,9 +1,9 @@
 # Izmaiņu vēsture / Changelog
 
-## [3.3.0-alpha.5] — release candidate
+## [3.3.0-alpha.5]
 
-> **Statuss / Status:** feature-complete kandidāts pilnai regression validācijai; vēl nav merge uz `main` un vēl nav release taga.  
-> Feature-complete candidate under full regression validation; not yet merged to `main` and not yet tagged as a release.
+> **Statuss / Status:** pilnībā validēts release kandidāts; pilnais regression gate izpildīts ar 32/32 testiem.  
+> Fully validated release candidate; the complete regression gate passed 32/32 tests.
 
 ### Pievienots / Added
 
@@ -45,7 +45,7 @@
 - `adaptive_decision_trace_test.py`
 - DB migration v7 tests
 - iepriekšējie Research Memory testi paliek zaļi / existing Research Memory regressions remain green
-- pilnais 32 testu regression gate vēl jāizpilda pirms merge/tag / the complete 32-test regression gate must pass before merge/tag
+- pilnais 32 testu regression gate izpildīts sekmīgi / complete 32-test regression gate passed
 
 ---
 
