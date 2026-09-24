@@ -1,7 +1,7 @@
 # Sprīdītis — arhitektūra / Architecture
 
 Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.5 — Adaptive Expedition**  
-Validējamais kandidāts / Validating candidate: **3.3.0-alpha.6 — Entity Resolution**
+Pilnībā validēts kandidāts / Fully validated candidate: **3.3.0-alpha.6 — Entity Resolution**
 
 > **Latviski pirmajā vietā, angļu valoda zemāk. / Latvian first, English below.**
 
@@ -186,7 +186,7 @@ Galvenās robežas:
 - katrs nozīmīgais adaptīvais lēmums tiek pievienots `AdaptiveDecision` un persistēts DB schema v7 `adaptive_decisions` tabulā;
 - `trace --run N` parāda lēmumu secību un signālus kopā ar page/discovery/observation provenance.
 
-## Entity Resolution — 3.3.0-alpha.6 release candidate
+## Entity Resolution — 3.3.0-alpha.6 validated release candidate
 
 Alpha6 ievieš atsevišķu identity-resolution slāni **virs** source-specific entity/observation pierādījumiem. Canonical clusteri neaizstāj avota rindas un neizdzēš observations.
 
@@ -453,7 +453,7 @@ Key boundaries:
 - every important adaptive decision is appended as an `AdaptiveDecision` and persisted in the schema-v7 `adaptive_decisions` table;
 - `trace --run N` exposes the decision sequence and signals alongside page/discovery/observation provenance.
 
-## Entity Resolution — 3.3.0-alpha.6 release candidate
+## Entity Resolution — 3.3.0-alpha.6 validated release candidate
 
 Alpha6 adds a dedicated identity-resolution layer **above** source-specific entity/observation evidence. Canonical clusters do not replace source rows and do not discard observations.
 
