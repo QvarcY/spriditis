@@ -1,7 +1,7 @@
 # Sprīdītis — arhitektūra / Architecture
 
 Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.6 — Entity Resolution**  
-Validējamais kandidāts / Validating candidate: **3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence**
+Pilnībā validēts kandidāts / Fully validated candidate: **3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence**
 
 > **Latviski pirmajā vietā, angļu valoda zemāk. / Latvian first, English below.**
 
@@ -235,7 +235,7 @@ Galvenās robežas:
 
 DB schema v10 uztur canonical clusterus, resolution auditu un merge auditu, nezaudējot source provenance.
 
-## Fallback Extraction + Evidence Confidence — 3.3.0-alpha.7 release candidate
+## Fallback Extraction + Evidence Confidence — 3.3.0-alpha.7 fully validated release candidate
 
 Alpha7 paplašina deterministisko extraction slāni un padara katra fakta provenance auditējamu.
 
@@ -278,6 +278,8 @@ Galvenās robežas:
 - target-cluster-aware GTIN hard veto nepieļauj automātisku linku, ja vienā kandidāta clusterī vienlaikus ir strong match un GTIN conflict; nesaistīts atšķirīgs GTIN pats par sevi nav conflict.
 
 DB schema v11 papildina alpha6 canonical Entity Resolution slāni, nezaudējot vēsturisko observation provenance.
+
+Pilnais alpha7 regression gate ir izpildīts: **43/43 deterministiskie testi iziet**.
 
 ## Feed state un HTTP resursu stāvoklis
 
@@ -546,7 +548,7 @@ Key boundaries:
 
 Database schema v10 stores canonical clusters, resolution audit and merge audit without losing source provenance.
 
-## Fallback Extraction + Evidence Confidence — 3.3.0-alpha.7 release candidate
+## Fallback Extraction + Evidence Confidence — 3.3.0-alpha.7 fully validated release candidate
 
 Alpha7 extends deterministic extraction and makes field-level provenance auditable.
 
@@ -589,6 +591,8 @@ Key boundaries:
 - target-cluster-aware GTIN hard veto prevents automatic linking when one candidate cluster contains both a strong match and a GTIN conflict; an unrelated different GTIN alone is not a conflict.
 
 Database schema v11 extends the alpha6 canonical Entity Resolution layer without losing historical observation provenance.
+
+The complete alpha7 regression gate passed: **43/43 deterministic tests**.
 
 ## Feed state and HTTP resource state
 
