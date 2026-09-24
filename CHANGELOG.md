@@ -1,5 +1,60 @@
 # Izmaiņu vēsture / Changelog
 
+## [3.3.0-alpha.7] — release candidate
+
+> **Statuss / Status:** feature-complete kandidāts stabilizācijai; fokusētie alpha7 testi ir zaļi, pilnais 43 testu regression gate vēl jāizpilda pirms merge/tag.  
+> Feature-complete candidate under stabilization; focused alpha7 tests are green, while the full 43-test regression gate still has to pass before merge/tag.
+
+### Pievienots / Added
+
+- field-level `ExtractionEvidence` ar value, source URL, extraction method, confidence, evidence un extracted_at
+- schema.org microdata product extractor ar nested Product/Offer/Brand/Organization scope atbalstu
+- konservatīvs `dom-fallback` extractor kā pēdējais deterministiskais slānis
+- DOM fallback false-positive aizsargi: explicit valūta + semantic price + product context
+- Meistardarbs source adapterim tas pats field-level evidence līgums
+- DB schema v11 ar `entities.field_evidence_json` current provenance glabāšanai
+- historical field provenance saglabājas nemainīgs `observations.snapshot_json`
+- `evidence-quality --project ... [--details]` CLI
+- `explain-cluster` field evidence un Evidence Quality summary
+- Evidence Quality high/medium/low bandi
+- missing evidence, mismatched/stale evidence un default/inferred lauku audits
+- pieci jauni alpha7 deterministiski testi: extraction evidence, microdata, DOM fallback, field-evidence persistence un evidence-quality summary
+
+### Uzlabots / Improved
+
+- extraction prioritāte paplašināta no JSON-LD/OpenGraph uz JSON-LD → microdata → source adapter/OpenGraph → konservatīvu DOM fallback
+- direct structured vērtības un default/fallback vērtības vairs nesaņem vienādu extraction confidence
+- current entity evidence tiek atjaunināts neatkarīgi no vēsturiskajiem observation snapshots
+- schema-version testi izmanto `CURRENT_SCHEMA_VERSION`, lai schema bump neizraisītu stale hardcoded regresijas
+- automatic Entity Resolution GTIN konflikts tagad ir target-cluster-aware
+- nesaistīts produkts ar citu valid GTIN vairs netiek kļūdaini auditēts kā identity conflict
+- strong match + GTIN conflict tajā pašā target clusterī tagad ir hard veto
+- hard-veto auditā tiek saglabāti gan matched, gan conflicting identity signāli
+- review queue atbalsta gan legacy `identity_conflict`, gan jauno `target_cluster_identity_conflict` reason
+
+### Dizaina robežas / Design boundaries
+
+- `MarketEntity.confidence` joprojām nozīmē AI/enrichment confidence; extraction confidence dzīvo tikai field evidence
+- Evidence Quality neveido `score` vai `average_confidence`
+- vecām migrētām rindām netiek izdomāts vēsturisks provenance — `field_evidence_json` sākas kā `{}`
+- DOM fallback nekad neaizēno veiksmīgu structured extraction
+- cena bez explicit valūtas DOM fallbackā tiek noraidīta
+- parastas rakstu/pricing lapas bez produkta konteksta netiek pārvērstas par produktu
+
+### Validācija / Validation
+
+- `extraction_evidence_test.py`
+- `microdata_extraction_test.py`
+- `dom_fallback_extraction_test.py`
+- `field_evidence_persistence_test.py`
+- `evidence_quality_summary_test.py`
+- Entity Resolution target-cluster conflict safety regressions
+- DB migration schema v11
+- Adaptive Decision Trace schema v11 SQLite round-trip
+- fokusētie alpha7 un alpha6/core regression testi paliek zaļi
+- pilnais **43 testu** regression gate vēl jāizpilda pirms merge/tag
+
+---
 ## [3.3.0-alpha.6]
 
 > **Statuss / Status:** release baseline pilnībā validēts; pilnais regression gate izpildīts ar 38/38 testiem.  
