@@ -162,7 +162,7 @@ with TemporaryDirectory() as tmp:
     db = Database(_BootstrapPath(tmp) / "spriditis.db")
     try:
         assert db.schema_version() == CURRENT_SCHEMA_VERSION
-        assert CURRENT_SCHEMA_VERSION == 11
+        assert CURRENT_SCHEMA_VERSION == 12
 
         db.save_project(project)
 
@@ -191,6 +191,7 @@ with TemporaryDirectory() as tmp:
         assert diff["comparison_basis"] == {
             "entity_facts": "historical_observation_snapshots",
             "domain_health": "historical_page_visits",
+            "feed_state": "historical_feed_snapshots",
             "identity": "current_canonical_membership",
         }
         assert diff["before_run"]["id"] == run_a
@@ -209,6 +210,9 @@ with TemporaryDirectory() as tmp:
             "SOURCE_CHANGED": 1,
             "DOMAIN_FAILED": 0,
             "DOMAIN_RECOVERED": 0,
+            "FEED_NEW_ENTRIES": 0,
+            "FEED_FAILED": 0,
+            "FEED_RECOVERED": 0,
         }
 
         assert len(diff["events"]) == 5
@@ -330,4 +334,4 @@ print("events=new+disappeared+price_drop+price_increase+source_changed")
 print("price_comparison=same_source_entity_only")
 print("currency_mismatch=no_price_event")
 print("price_event_provenance=historical_field_evidence")
-print("schema_version=11")
+print(f"schema_version={CURRENT_SCHEMA_VERSION}")
