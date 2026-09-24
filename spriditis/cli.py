@@ -1289,6 +1289,9 @@ def main() -> int:
                     f"disappeared={counts['ENTITY_DISAPPEARED']}",
                     f"price_drop={counts['PRICE_DROP']}",
                     f"price_increase={counts['PRICE_INCREASE']}",
+                    f"seller_changed={counts['SELLER_CHANGED']}",
+                    f"description_changed={counts['DESCRIPTION_CHANGED']}",
+                    f"image_changed={counts['IMAGE_CHANGED']}",
                     f"source_changed={counts['SOURCE_CHANGED']}",
                 )
             )
@@ -1320,6 +1323,18 @@ def main() -> int:
                 print(
                     f"      {old['price']} {old['currency']} → "
                     f"{new['price']} {new['currency']}"
+                )
+            elif event["change_type"] in (
+                "SELLER_CHANGED",
+                "DESCRIPTION_CHANGED",
+                "IMAGE_CHANGED",
+            ):
+                field = event["evidence"]["field"]
+                old_value = event["before"].get(field)
+                new_value = event["after"].get(field)
+                print(
+                    f"      {field}: "
+                    f"{str(old_value)[:100]} → {str(new_value)[:100]}"
                 )
             if args.details:
                 print(
