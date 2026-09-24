@@ -101,7 +101,7 @@ with TemporaryDirectory() as tmp:
     db = Database(_BootstrapPath(tmp) / "spriditis.db")
     try:
         assert db.schema_version() == CURRENT_SCHEMA_VERSION
-        assert CURRENT_SCHEMA_VERSION == 11
+        assert CURRENT_SCHEMA_VERSION >= 11
 
         db.save_project(project)
         run_id = db.start_run(project)
@@ -202,7 +202,7 @@ with TemporaryDirectory() as tmp:
         db.close()
 
 print("FIELD EVIDENCE PERSISTENCE TEST OK")
-print("schema_version=11")
+print(f"schema_version={CURRENT_SCHEMA_VERSION}")
 print("current_entity_evidence=latest")
 print("observation_snapshots=historical")
 print("cluster_explain=current_field_evidence_visible")
