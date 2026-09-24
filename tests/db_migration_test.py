@@ -64,6 +64,17 @@ def main():
                 '2026-01-01T00:00:00+00:00',
                 '2026-01-01T00:00:00+00:00'
             );
+
+            INSERT INTO domains(
+                project_id, domain, status, relevance_score,
+                first_seen, last_seen, reason
+            )
+            VALUES (
+                'demo', 'candidate.example', 'candidate', 0.5,
+                '2026-01-01T00:00:00+00:00',
+                '2026-01-01T00:00:00+00:00',
+                'blocked_path'
+            );
             """
         )
         conn.commit()
@@ -71,12 +82,23 @@ def main():
 
         sqlite_backup(old_db, new_db)
 
+        conn = sqlite3.connect(new_db)
+        conn.execute(
+            """
+            UPDATE domains
+            SET status='blocked', reason='blocked_path'
+            WHERE project_id='demo' AND domain='example.com'
+            """
+        )
+        conn.commit()
+        conn.close()
+
         db = Database(new_db)
         try:
             columns = db._table_columns("domains")
             assert "sitemap_urls_found" in columns
             assert db.schema_version() == CURRENT_SCHEMA_VERSION
-            assert db.schema_version() == 5
+            assert db.schema_version() == 6
 
             feed_table = db.conn.execute(
                 "SELECT name FROM sqlite_master "
@@ -84,14 +106,28 @@ def main():
             ).fetchone()
             assert feed_table == ("feeds",)
 
+            page_visit_table = db.conn.execute(
+                "SELECT name FROM sqlite_master "
+                "WHERE type='table' AND name='page_visits'"
+            ).fetchone()
+            assert page_visit_table == ("page_visits",)
+
             run_columns = db._table_columns("runs")
             assert "feed_entries_new" in run_columns
             assert "feed_not_modified" in run_columns
 
-            row = db.conn.execute(
-                "SELECT domain FROM domains WHERE project_id='demo'"
-            ).fetchone()
-            assert row == ("example.com",)
+            rows = db.conn.execute(
+                """
+                SELECT domain, status, reason
+                FROM domains
+                WHERE project_id='demo'
+                ORDER BY domain
+                """
+            ).fetchall()
+            assert rows == [
+                ("candidate.example", "candidate", ""),
+                ("example.com", "candidate", ""),
+            ]
         finally:
             db.close()
 

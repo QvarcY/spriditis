@@ -37,6 +37,17 @@ SKIP_PATH_PARTS = (
     "/noteikumi",
 )
 
+DOMAIN_BLOCKING_SAFETY_REASONS = frozenset({
+    "blocked_host",
+    "local_host",
+    "non_public_ip",
+})
+
+
+def safety_reason_blocks_domain(reason: str) -> bool:
+    return reason in DOMAIN_BLOCKING_SAFETY_REASONS
+
+
 BINARY_EXTENSIONS = re.compile(
     r"\.(?:jpg|jpeg|png|gif|webp|svg|pdf|zip|rar|7z|css|js|xml|mp4|mp3|woff2?)$",
     re.I,

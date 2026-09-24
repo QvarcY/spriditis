@@ -8,6 +8,7 @@ from spriditis.config import load_settings
 from spriditis.search.base import SearchProviderError
 from spriditis.search.factory import build_search_provider
 from spriditis.search.query import build_search_queries
+from spriditis.storage.database import DEFAULT_STALE_AFTER_DAYS
 
 from spriditis.core.projects import (
     PRESETS,
@@ -25,6 +26,45 @@ DOMAIN_STATUSES = [
     "rejected",
     "failed",
 ]
+
+
+def _group_trace_discoveries(events: list[dict]) -> list[dict]:
+    """Compact repeated discovery evidence without changing the raw audit."""
+    groups: dict[tuple, dict] = {}
+
+    for event in events:
+        key = (
+            event.get("action") or "",
+            event.get("discovered_via") or "",
+            event.get("target_domain") or "",
+            event.get("reason") or "",
+            event.get("provider") or "",
+            event.get("query_text") or "",
+        )
+        group = groups.get(key)
+        if group is None:
+            group = dict(event)
+            group["count"] = 0
+            group["max_relevance_score"] = float(
+                event.get("relevance_score") or 0.0
+            )
+            groups[key] = group
+
+        group["count"] += 1
+        group["max_relevance_score"] = max(
+            group["max_relevance_score"],
+            float(event.get("relevance_score") or 0.0),
+        )
+
+    return sorted(
+        groups.values(),
+        key=lambda row: (
+            -int(row["count"]),
+            row.get("target_domain") or "",
+            row.get("action") or "",
+            row.get("discovered_via") or "",
+        ),
+    )
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -92,6 +132,45 @@ def _parser() -> argparse.ArgumentParser:
     )
     feeds.add_argument("--project", required=True)
     feeds.add_argument("--status")
+
+    memory = sub.add_parser(
+        "memory",
+        help="Parādīt izskaidrojamu query un avotu Research Memory",
+    )
+    memory.add_argument("--project", required=True)
+    memory.add_argument("--limit", type=int, default=10)
+    memory.add_argument(
+        "--stale-days",
+        type=float,
+        default=DEFAULT_STALE_AFTER_DAYS,
+        help="Stale slieksnis dienās Research Memory freshness signālam",
+    )
+
+    explain = sub.add_parser(
+        "explain",
+        help="Izskaidrot, ko Sprīdītis zina par konkrētu domēnu",
+    )
+    explain.add_argument("--project", required=True)
+    explain.add_argument("--domain", required=True)
+    explain.add_argument("--limit", type=int, default=8)
+    explain.add_argument(
+        "--stale-days",
+        type=float,
+        default=DEFAULT_STALE_AFTER_DAYS,
+        help="Stale slieksnis dienās Research Memory freshness signālam",
+    )
+
+    trace = sub.add_parser(
+        "trace",
+        help="Parādīt viena research run provenance pēdas",
+    )
+    trace.add_argument("--project", required=True)
+    trace.add_argument("--run", required=True, type=int)
+    trace.add_argument(
+        "--full",
+        action="store_true",
+        help="Parādīt visus raw discovery eventus bez grupēšanas",
+    )
 
     migrate = sub.add_parser(
         "migrate-db",
@@ -323,6 +402,366 @@ def main() -> int:
 
         return 0
 
+
+    if args.command == "memory":
+        from spriditis.storage.database import Database
+
+        settings = load_settings()
+        project = load_project(Path(args.project))
+        db = Database(
+            settings.db_path,
+            legacy_path=settings.legacy_db_path,
+        )
+
+        try:
+            queries = db.query_memory(project.id, limit=args.limit)
+            duplication = db.search_duplication_memory(
+                project.id,
+                limit=args.limit,
+            )
+            sources = db.source_profiles(
+                project.id,
+                limit=args.limit,
+                stale_after_days=args.stale_days,
+            )
+        finally:
+            db.close()
+
+        print("🧠 Research Memory")
+        print(f"   Projekts: {project.name} ({project.id})")
+        print("")
+        print("QUERY YIELD")
+        if not queries:
+            print("   Vēl nav query provenance datu.")
+        else:
+            print(
+                f"{'YIELD%':>7} {'PROD':>4} {'NEW':>4} {'KNOWN':>5} "
+                f"{'DOM':>4} {'EVT':>4} {'RUNS':>4} "
+                f"{'PROVIDER':<10} QUERY"
+            )
+            print("-" * 122)
+            for row in queries:
+                print(
+                    f"{row['productive_domain_rate'] * 100:>6.1f}% "
+                    f"{row['productive_domains']:>4} "
+                    f"{row['activated']:>4} "
+                    f"{row['known']:>5} "
+                    f"{row['unique_domains']:>4} "
+                    f"{row['result_events']:>4} "
+                    f"{row['runs']:>4} "
+                    f"{(row['provider'] or '-')[:10]:<10} "
+                    f"{row['query_text']}"
+                )
+
+        print("")
+        print("SEARCH DUPLICATION")
+        print(
+            "   scope=normalized search URL across all queries in one run"
+        )
+        if duplication["runs"] == 0:
+            print("   Vēl nav search run datu.")
+        else:
+            print(
+                f"   TOTAL runs={duplication['runs']} "
+                f"queries={duplication['queries']} "
+                f"raw={duplication['raw_results']} "
+                f"unique={duplication['unique_results']} "
+                f"duplicates={duplication['duplicates']} "
+                f"filtered={duplication['filtered_results']} "
+                f"duplicate_rate={duplication['duplicate_rate']:.1%} "
+                f"errors={duplication['provider_errors']}"
+            )
+            print(
+                f"{'RUN':>5} {'RAW':>6} {'UNIQUE':>7} {'DUP':>5} "
+                f"{'FILTER':>6} {'DUP%':>7} {'QUERY':>5} {'ERR':>4}"
+            )
+            print("-" * 57)
+            for row in duplication["recent_runs"]:
+                print(
+                    f"{row['run_id']:>5} "
+                    f"{row['raw_results']:>6} "
+                    f"{row['unique_results']:>7} "
+                    f"{row['duplicates']:>5} "
+                    f"{row['filtered_results']:>6} "
+                    f"{row['duplicate_rate'] * 100:>6.1f}% "
+                    f"{row['queries']:>5} "
+                    f"{row['provider_errors']:>4}"
+                )
+
+        print("")
+        print("SOURCE PROFILES")
+        print(
+            f"   stale > {args.stale_days:g}d; "
+            "basis=last_useful_at -> last_crawled -> last_seen"
+        )
+        if not sources:
+            print("   Vēl nav avotu profilu.")
+        else:
+            print(
+                f"{'DOMAIN':<30} {'STATE':<10} {'REL':>5} "
+                f"{'RUNS':>4} {'PROD%':>6} {'PAGES':>5} "
+                f"{'ENT':>4} {'YIELD':>7} {'OK%':>6} {'FEED':>4} "
+                f"{'AGE':>7} {'FRESH':<6} {'BASIS':<6}"
+            )
+            print("-" * 130)
+            for row in sources:
+                age = row["stale_age_days"]
+                age_text = "-" if age is None else f"{age:.1f}d"
+                basis = {
+                    "last_useful_at": "useful",
+                    "last_crawled": "crawl",
+                    "last_seen": "seen",
+                }.get(row["stale_reference"], "-")
+                print(
+                    f"{row['domain'][:30]:<30} "
+                    f"{row['status']:<10} "
+                    f"{row['relevance_score']:>5.2f} "
+                    f"{row['crawl_runs']:>4} "
+                    f"{row['productive_run_rate'] * 100:>5.1f}% "
+                    f"{row['pages_seen']:>5} "
+                    f"{row['entities_found']:>4} "
+                    f"{row['entity_yield']:>7.2f} "
+                    f"{row['success_rate'] * 100:>5.1f}% "
+                    f"{row['feed_count']:>4} "
+                    f"{age_text:>7} "
+                    f"{row['freshness']:<6} "
+                    f"{basis:<6}"
+                )
+        return 0
+
+    if args.command == "explain":
+        from spriditis.crawler.policy import host_key
+        from spriditis.storage.database import Database
+
+        settings = load_settings()
+        project = load_project(Path(args.project))
+        domain = host_key(args.domain)
+        db = Database(
+            settings.db_path,
+            legacy_path=settings.legacy_db_path,
+        )
+
+        try:
+            explanation = db.explain_domain(
+                project.id,
+                domain,
+                event_limit=args.limit,
+                stale_after_days=args.stale_days,
+            )
+        finally:
+            db.close()
+
+        if explanation is None:
+            print(f"Domēns nav Research Memory: {domain}")
+            return 1
+
+        row = explanation
+        print(f"🧠 Explain domain: {row['domain']}")
+        print(
+            f"   status={row['status']} "
+            f"relevance={row['relevance_score']:.2f} "
+            f"via={row['discovered_via']} "
+            f"reason={row['reason'] or '-'}"
+        )
+        print(
+            f"   pages={row['pages_seen']} "
+            f"entities={row['entities_found']} "
+            f"entity_yield={row['entity_yield']:.2f}"
+        )
+        print(
+            f"   visits={row['visit_count']} "
+            f"ok={row['successful_visits']} "
+            f"failed={row['failed_visits']} "
+            f"success_rate={row['success_rate']:.1%}"
+        )
+        print(
+            f"   crawl_runs={row['crawl_runs']} "
+            f"productive_runs={row['productive_runs']} "
+            f"productive_run_rate={row['productive_run_rate']:.1%} "
+            f"observations={row['observation_count']}"
+        )
+        print(
+            f"   robots={row['robots_status']} "
+            f"sitemap={row['sitemap_status']} "
+            f"feed_count={row['feed_count']}"
+        )
+        print(
+            f"   first={row['first_seen']} "
+            f"last={row['last_seen']} "
+            f"crawled={row['last_crawled'] or '-'}"
+        )
+        stale_age = row["stale_age_days"]
+        stale_age_text = "-" if stale_age is None else f"{stale_age:.1f}d"
+        print(
+            f"   freshness={row['freshness']} "
+            f"age={stale_age_text} "
+            f"threshold={row['stale_after_days']:g}d "
+            f"basis={row['stale_reference']}"
+        )
+        print(
+            f"   last_useful={row['last_useful_at'] or '-'} "
+            f"last_feed_success={row['last_feed_success'] or '-'}"
+        )
+
+        if row["recent_discoveries"]:
+            print("")
+            print("DISCOVERY EVIDENCE")
+            for event in row["recent_discoveries"]:
+                print(
+                    f"   run={event['run_id']} "
+                    f"{event['action']} via={event['discovered_via']} "
+                    f"score={event['relevance_score']:.2f} "
+                    f"reason={event['reason'] or '-'}"
+                )
+                if event["query_text"]:
+                    print(
+                        f"      provider={event['provider'] or '-'} "
+                        f"query={event['query_text']}"
+                    )
+                print(f"      {event['target_url']}")
+
+        if row["recent_visits"]:
+            print("")
+            print("PAGE LINEAGE")
+            for visit in row["recent_visits"]:
+                status = (
+                    str(visit["http_status"])
+                    if visit["http_status"] is not None
+                    else "-"
+                )
+                print(
+                    f"   run={visit['run_id']} "
+                    f"{visit['source_type']:<15} "
+                    f"depth={visit['depth']} "
+                    f"http={status} "
+                    f"outcome={visit['outcome']}"
+                )
+                print(f"      {visit['final_url']}")
+
+        if row["feeds"]:
+            print("")
+            print("FEEDS")
+            for feed in row["feeds"]:
+                print(
+                    f"   {feed['feed_type']} {feed['status']} "
+                    f"seen={feed['entries_seen']} new={feed['new_entries']}"
+                )
+                print(f"      {feed['feed_url']}")
+        return 0
+
+    if args.command == "trace":
+        from spriditis.storage.database import Database
+
+        settings = load_settings()
+        project = load_project(Path(args.project))
+        db = Database(
+            settings.db_path,
+            legacy_path=settings.legacy_db_path,
+        )
+
+        try:
+            trace = db.trace_run(project.id, args.run)
+        finally:
+            db.close()
+
+        if trace is None:
+            print(f"Run nav atrasts projektā {project.id}: {args.run}")
+            return 1
+
+        run = trace["run"]
+        print(f"🧭 Trace run #{run['id']} · {project.name}")
+        print(
+            f"   started={run['started_at']} "
+            f"finished={run['finished_at'] or '-'}"
+        )
+        print(
+            f"   pages={run['visited_pages']} "
+            f"failed={run['failed_pages']} "
+            f"entities={run['entities_found']} "
+            f"domains={run['domains_found']}"
+        )
+        print(
+            f"   search={run['search_results_unique']} unique / "
+            f"{run['search_domains_activated']} activated · "
+            f"feed_new={run['feed_entries_new']} · "
+            f"feed_304={run['feed_not_modified']}"
+        )
+
+        print("")
+        print(f"PAGE VISITS ({len(trace['page_visits'])})")
+        for visit in trace["page_visits"]:
+            status = (
+                str(visit["http_status"])
+                if visit["http_status"] is not None
+                else "-"
+            )
+            print(
+                f"   {visit['source_type']:<15} "
+                f"depth={visit['depth']} "
+                f"http={status} "
+                f"{visit['outcome']}"
+            )
+            print(f"      {visit['final_url']}")
+            if visit["source_url"]:
+                print(f"      from={visit['source_url']}")
+
+        print("")
+        if args.full:
+            print(f"DISCOVERY EVENTS ({len(trace['discoveries'])} raw)")
+            for event in trace["discoveries"]:
+                print(
+                    f"   {event['action']:<10} "
+                    f"via={event['discovered_via']:<15} "
+                    f"{event['target_domain']} "
+                    f"score={event['relevance_score']:.2f}"
+                )
+                if event["query_text"]:
+                    print(
+                        f"      provider={event['provider'] or '-'} "
+                        f"query={event['query_text']}"
+                    )
+        else:
+            grouped = _group_trace_discoveries(trace["discoveries"])
+            print(
+                f"DISCOVERY EVENTS "
+                f"({len(trace['discoveries'])} raw / "
+                f"{len(grouped)} grouped)"
+            )
+            for event in grouped:
+                print(
+                    f"   x{event['count']:<4} "
+                    f"{event['action']:<10} "
+                    f"via={event['discovered_via']:<15} "
+                    f"{event['target_domain']} "
+                    f"max_score={event['max_relevance_score']:.2f}"
+                )
+                if event["query_text"]:
+                    print(
+                        f"      provider={event['provider'] or '-'} "
+                        f"query={event['query_text']}"
+                    )
+                if event["reason"]:
+                    print(f"      reason={event['reason']}")
+
+        print("")
+        print(f"OBSERVATIONS ({len(trace['observations'])})")
+        for obs in trace["observations"]:
+            price = (
+                f"{obs['price']} {obs['currency']}"
+                if obs["price"] is not None
+                else "-"
+            )
+            print(
+                f"   {obs['entity_type'] or '-'} "
+                f"{obs['title'][:70]} · {price}"
+            )
+            print(
+                f"      method={obs['extraction_method'] or '-'} "
+                f"relevance={obs['relevance_score']:.2f}"
+            )
+            print(f"      {obs['source_url']}")
+        return 0
+
     if args.command == "migrate-db":
         from spriditis.storage.database import Database, sqlite_backup
 
@@ -445,7 +884,7 @@ def main() -> int:
             else f"{project.analysis.ai_provider}/{settings.gemini_model}"
         )
 
-        print("🚀 Sprīdītis 3.3.0-alpha.3 sāk pētījumu")
+        print("🚀 Sprīdītis 3.3.0-alpha.4 sāk pētījumu")
         print(f"   Projekts: {project.name}")
         print(f"   ID: {project.id}")
         print(f"   Tips: {project.research_type}")

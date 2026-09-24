@@ -12,6 +12,7 @@ from spriditis.ai.base import AIProvider
 from spriditis.config import AppSettings
 from spriditis.core.domains import DomainRecord
 from spriditis.core.feeds import FeedState
+from spriditis.core.memory import PageVisit
 from spriditis.core.projects import ResearchProject
 from spriditis.core.run import ResearchRunResult
 from spriditis.extraction.engine import extract_entities
@@ -91,7 +92,12 @@ class ResearchCrawler:
             if url and is_safe_public_url(url):
                 seeds.append(url)
                 registry.add_seed(url)
-                frontier.add(url, priority=100, depth=0)
+                frontier.add(
+                    url,
+                    priority=100,
+                    depth=0,
+                    source_type="seed",
+                )
 
         if self.project.crawl.mode == "expedition":
             self._seed_from_search(frontier, registry, result)
@@ -135,6 +141,18 @@ class ResearchCrawler:
                 result.skipped_by_robots += 1
                 visited.add(url)
                 registry.mark_robots(domain, "blocked")
+                result.page_visits.append(
+                    PageVisit(
+                        url=url,
+                        final_url=url,
+                        domain=domain,
+                        source_url=item.source_url,
+                        source_type=item.source_type,
+                        depth=item.depth,
+                        priority=item.priority,
+                        outcome="robots_blocked",
+                    )
+                )
                 print(f"🤖 robots.txt neļauj: {url}")
                 continue
 
@@ -155,6 +173,18 @@ class ResearchCrawler:
                 visited.add(url)
                 result.failed_pages += 1
                 registry.mark_failed(domain, f"http_error:{type(exc).__name__}")
+                result.page_visits.append(
+                    PageVisit(
+                        url=url,
+                        final_url=url,
+                        domain=domain,
+                        source_url=item.source_url,
+                        source_type=item.source_type,
+                        depth=item.depth,
+                        priority=item.priority,
+                        outcome=f"http_error:{type(exc).__name__}",
+                    )
+                )
                 print(f"⚠️ HTTP kļūda: {exc}")
                 continue
 
@@ -164,6 +194,20 @@ class ResearchCrawler:
                 visited.add(url)
                 result.failed_pages += 1
                 registry.mark_failed(domain, "unsafe_redirect")
+                result.page_visits.append(
+                    PageVisit(
+                        url=url,
+                        final_url=final_url,
+                        domain=domain,
+                        source_url=item.source_url,
+                        source_type=item.source_type,
+                        depth=item.depth,
+                        priority=item.priority,
+                        outcome="unsafe_redirect",
+                        http_status=response.status_code,
+                        content_type=response.headers.get("Content-Type", ""),
+                    )
+                )
                 print(
                     f"⚠️ Nedrošs redirect URL, izlaižam: {final_url}"
                 )
@@ -186,6 +230,20 @@ class ResearchCrawler:
                     final_domain,
                     f"http_status:{response.status_code}",
                 )
+                result.page_visits.append(
+                    PageVisit(
+                        url=url,
+                        final_url=final_url,
+                        domain=final_domain,
+                        source_url=item.source_url,
+                        source_type=item.source_type,
+                        depth=item.depth,
+                        priority=item.priority,
+                        outcome="http_status",
+                        http_status=response.status_code,
+                        content_type=response.headers.get("Content-Type", ""),
+                    )
+                )
                 self._sleep()
                 continue
 
@@ -194,8 +252,37 @@ class ResearchCrawler:
             ).lower()
 
             if content_type and "html" not in content_type:
+                result.page_visits.append(
+                    PageVisit(
+                        url=url,
+                        final_url=final_url,
+                        domain=final_domain,
+                        source_url=item.source_url,
+                        source_type=item.source_type,
+                        depth=item.depth,
+                        priority=item.priority,
+                        outcome="non_html",
+                        http_status=response.status_code,
+                        content_type=content_type,
+                    )
+                )
                 self._sleep()
                 continue
+
+            result.page_visits.append(
+                PageVisit(
+                    url=url,
+                    final_url=final_url,
+                    domain=final_domain,
+                    source_url=item.source_url,
+                    source_type=item.source_type,
+                    depth=item.depth,
+                    priority=item.priority,
+                    outcome="html_ok",
+                    http_status=response.status_code,
+                    content_type=content_type,
+                )
+            )
 
             # Sitemap discovery only once per active domain.
             if (
@@ -236,6 +323,7 @@ class ResearchCrawler:
                             priority=30 + score,
                             depth=min(item.depth + 1, self.project.crawl.max_depth),
                             source_url=final_url,
+                            source_type="sitemap",
                         )
 
 
@@ -330,6 +418,7 @@ class ResearchCrawler:
                             priority=55 + score,
                             depth=item.depth + 1,
                             source_url=state.feed_url,
+                            source_type="feed",
                         )
 
             try:
@@ -423,6 +512,7 @@ class ResearchCrawler:
                     priority=priority,
                     depth=item.depth + 1,
                     source_url=final_url,
+                    source_type="html_link",
                 )
 
             self._sleep()
@@ -524,6 +614,7 @@ class ResearchCrawler:
                         priority=80 + score,
                         depth=0,
                         source_url="",
+                        source_type="search_provider",
                     )
 
     def _enrich_entities(self, result: ResearchRunResult):

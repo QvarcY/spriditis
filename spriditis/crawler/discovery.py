@@ -9,7 +9,11 @@ import requests
 from spriditis.core.domains import DomainDiscovery, DomainRecord, utc_now
 from spriditis.core.projects import ResearchProject
 
-from .policy import host_key, url_safety_reason
+from .policy import (
+    host_key,
+    safety_reason_blocks_domain,
+    url_safety_reason,
+)
 
 
 def score_to_ratio(score: int) -> float:
@@ -41,6 +45,27 @@ class DomainRegistry:
             for domain in self.touched_domains
             if domain in self.records
         }
+
+    def _status_for_unsafe_target(
+        self,
+        domain: str,
+        safety_reason: str,
+    ) -> str:
+        """
+        URL-scoped safety failures must not poison a whole domain.
+
+        Host/network safety failures are sticky domain lifecycle states.
+        Path/static-file failures block only the observed URL while preserving
+        the domain's existing lifecycle state.
+        """
+        if safety_reason_blocks_domain(safety_reason):
+            return "blocked"
+
+        record = self.records.get(domain)
+        if record is not None:
+            return record.status
+
+        return "candidate"
 
     def _persisted_state(
         self,
@@ -110,7 +135,10 @@ class DomainRegistry:
         persisted = self._persisted_state(target_domain)
 
         if not safe:
-            status = "blocked"
+            status = self._status_for_unsafe_target(
+                target_domain,
+                safety_reason,
+            )
             action = "blocked"
             reason = safety_reason
         elif persisted is not None:
@@ -147,7 +175,16 @@ class DomainRegistry:
         record.relevance_score = max(record.relevance_score, ratio)
         record.last_seen = utc_now()
 
-        if not record.reason or status in {"blocked", "active"}:
+        # Keep the lifecycle reason that made the domain active. A later
+        # "known" observation is evidence, not a new activation reason.
+        if (
+            action == "activated"
+            or status == "blocked"
+            or (
+                not record.reason
+                and not (action == "blocked" and status != "blocked")
+            )
+        ):
             record.reason = reason
 
         discovery = DomainDiscovery(
@@ -184,7 +221,10 @@ class DomainRegistry:
         persisted = self._persisted_state(target_domain)
 
         if not safe:
-            status = "blocked"
+            status = self._status_for_unsafe_target(
+                target_domain,
+                safety_reason,
+            )
             action = "blocked"
             reason = safety_reason
         elif persisted is not None:
@@ -223,7 +263,16 @@ class DomainRegistry:
             record.discovered_via = "search_provider"
             record.discovered_from_url = ""
 
-        if not record.reason or status in {"blocked", "active"}:
+        # Keep the lifecycle reason that made the domain active. A later
+        # "known" observation is evidence, not a new activation reason.
+        if (
+            action == "activated"
+            or status == "blocked"
+            or (
+                not record.reason
+                and not (action == "blocked" and status != "blocked")
+            )
+        ):
             record.reason = reason
 
         evidence_text = " ".join(part for part in [title, snippet] if part).strip()
@@ -263,7 +312,10 @@ class DomainRegistry:
         persisted = self._persisted_state(target_domain)
 
         if not safe:
-            status = "blocked"
+            status = self._status_for_unsafe_target(
+                target_domain,
+                safety_reason,
+            )
             action = "blocked"
             reason = safety_reason
         elif persisted is not None:
@@ -302,7 +354,16 @@ class DomainRegistry:
             record.discovered_via = "feed"
             record.discovered_from_url = feed_url
 
-        if not record.reason or status in {"blocked", "active"}:
+        # Keep the lifecycle reason that made the domain active. A later
+        # "known" observation is evidence, not a new activation reason.
+        if (
+            action == "activated"
+            or status == "blocked"
+            or (
+                not record.reason
+                and not (action == "blocked" and status != "blocked")
+            )
+        ):
             record.reason = reason
 
         evidence = " ".join(
