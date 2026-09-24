@@ -212,6 +212,26 @@ def discover_feed_urls(
 
     result: list[str] = []
     seen: set[str] = set()
+    page_path = (urlparse(page_url).path or "/").rstrip("/") or "/"
+
+    def candidate_score(url: str) -> int:
+        path = (urlparse(url).path or "/").lower()
+        score = 0
+
+        # Prefer a feed scoped to the page/section being researched.
+        if page_path != "/" and path.startswith(page_path.lower() + "/"):
+            score += 50
+
+        # Generic feed-like paths are useful, but less specific.
+        if "feed" in path or path.endswith((".rss", ".atom", ".xml")):
+            score += 10
+
+        # Comment feeds are usually discussion noise, not source content.
+        if "/comments/" in path or "comments/feed" in path:
+            score -= 100
+
+        return score
+
     for raw in candidates:
         normalized = normalize_url(raw)
         if not normalized or normalized in seen:
@@ -223,6 +243,8 @@ def discover_feed_urls(
             continue
         seen.add(normalized)
         result.append(normalized)
+
+    result.sort(key=candidate_score, reverse=True)
     return result
 
 
