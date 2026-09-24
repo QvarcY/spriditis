@@ -58,12 +58,36 @@ b = make_entity(
     attributes={"brand": "Acme", "model": "X1"},
 )
 
+conflict_seed = make_entity(
+    title="Acme Chair X2 Seed",
+    url="https://seed.example/product/x2",
+    domain="seed.example",
+    price=195.0,
+    attributes={"brand": "Acme", "model": "X2"},
+)
+
+conflict_member = make_entity(
+    title="Acme Chair X2 Member",
+    url="https://member.example/product/x2",
+    domain="member.example",
+    price=192.0,
+    attributes={
+        "brand": "Acme",
+        "model": "X2",
+        "gtin": "036000291452",
+    },
+)
+
 conflict = make_entity(
     title="Acme Chair Conflict",
     url="https://conflict.example/product/c",
     domain="conflict.example",
     price=189.0,
-    attributes={"gtin": "036000291452"},
+    attributes={
+        "brand": "Acme",
+        "model": "X2",
+        "gtin": "9501234600000",
+    },
 )
 
 
@@ -96,6 +120,8 @@ with TemporaryDirectory() as tmp:
         )
         assert merged["decision"] == "merged"
 
+        db.upsert_entity(project, run_id, conflict_seed)
+        db.upsert_entity(project, run_id, conflict_member)
         db.upsert_entity(project, run_id, conflict)
 
         active = db.explain_entity_cluster(
@@ -167,7 +193,7 @@ with TemporaryDirectory() as tmp:
         assert unresolved["source_count"] == 1
         assert unresolved["observation_count"] == 1
         assert unresolved["identity_signals"]["gtin"] == [
-            "036000291452",
+            "9501234600000",
         ]
         assert len(unresolved["resolution_events"]) == 1
         assert (
@@ -176,8 +202,14 @@ with TemporaryDirectory() as tmp:
         )
         assert (
             unresolved["resolution_events"][0]["reason"]
-            == "identity_conflict"
+            == "target_cluster_identity_conflict"
         )
+        assert unresolved["resolution_events"][0]["matched_signals"] == [
+            "maker_model_exact"
+        ]
+        assert unresolved["resolution_events"][0]["conflicting_signals"] == [
+            "gtin_conflict"
+        ]
         assert len(unresolved["review_items"]) == 1
         assert (
             unresolved["review_items"][0]["decision"]
@@ -185,7 +217,7 @@ with TemporaryDirectory() as tmp:
         )
         assert (
             unresolved["review_items"][0]["reason"]
-            == "identity_conflict"
+            == "target_cluster_identity_conflict"
         )
 
         missing = db.explain_entity_cluster(
@@ -199,4 +231,4 @@ with TemporaryDirectory() as tmp:
 print("ENTITY CLUSTER EXPLAIN TEST OK")
 print("active_cluster=members+observations+identity+history")
 print("merged_cluster=redirect+merge_history")
-print("unresolved_cluster=review_item_visible")
+print("unresolved_cluster=target_conflict_review_item_visible")
