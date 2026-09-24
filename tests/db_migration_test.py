@@ -98,7 +98,6 @@ def main():
             columns = db._table_columns("domains")
             assert "sitemap_urls_found" in columns
             assert db.schema_version() == CURRENT_SCHEMA_VERSION
-            assert db.schema_version() == 10
 
             feed_table = db.conn.execute(
                 "SELECT name FROM sqlite_master "
@@ -145,6 +144,21 @@ def main():
             cluster_columns = db._table_columns("entity_clusters")
             assert "merged_into_cluster_key" in cluster_columns
             assert "merged_at" in cluster_columns
+
+            entity_columns = db._table_columns("entities")
+            assert "field_evidence_json" in entity_columns
+
+            legacy_evidence = db.conn.execute(
+                """
+                SELECT field_evidence_json
+                FROM entities
+                WHERE project_id='demo'
+                ORDER BY entity_key
+                LIMIT 1
+                """
+            ).fetchone()
+            if legacy_evidence is not None:
+                assert legacy_evidence[0] == "{}"
 
             run_columns = db._table_columns("runs")
             assert "feed_entries_new" in run_columns
