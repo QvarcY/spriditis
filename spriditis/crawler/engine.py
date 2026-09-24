@@ -223,6 +223,7 @@ class ResearchCrawler:
                 continue
 
             final_domain = host_key(final_url)
+            active_domains_before = set(registry.run_active_domains)
 
             if final_domain not in registry.records:
                 registry.add_seed(final_url)
@@ -292,8 +293,6 @@ class ResearchCrawler:
                     content_type=content_type,
                 )
             )
-
-            active_domains_before = set(registry.run_active_domains)
 
             # Sitemap discovery only once per active domain.
             if (
