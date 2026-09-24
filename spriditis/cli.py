@@ -256,6 +256,13 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Parādīt eventu before/after/evidence detaļas",
     )
+    watch.add_argument(
+        "--jsonl",
+        help=(
+            "Pievienot katru atrasto change eventu JSONL failam; "
+            "baseline un cikli bez izmaiņām rindas nerada"
+        ),
+    )
 
     diff = sub.add_parser(
         "diff",
@@ -404,12 +411,60 @@ def _run_watch_loop(
         return completed
 
 
+def _load_watch_project(path: Path):
+    if not path.is_file():
+        raise ValueError(f"Projekta fails nav atrasts: {path}")
+    return load_project(path)
+
+
+def _append_watch_jsonl(
+    path: Path,
+    *,
+    project_id: str,
+    cycle_number: int,
+    diff: dict | None,
+) -> int:
+    if diff is None or not diff["events"]:
+        return 0
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    before_run = diff["before_run"]
+    after_run = diff["after_run"]
+
+    with path.open("a", encoding="utf-8", newline="\n") as handle:
+        for event in diff["events"]:
+            record = {
+                "schema": "spriditis.watch.change.v1",
+                "record_type": "change_event",
+                "project_id": project_id,
+                "cycle": cycle_number,
+                "before_run_id": before_run["id"],
+                "after_run_id": after_run["id"],
+                "before_finished_at": before_run["finished_at"],
+                "after_finished_at": after_run["finished_at"],
+                "event": event,
+            }
+            handle.write(
+                json.dumps(
+                    record,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                + "\n"
+            )
+
+    return len(diff["events"])
+
+
 def _run_watch_cycle(
     settings,
     project,
     *,
+    cycle_number: int,
     no_ai: bool,
     details: bool,
+    jsonl_path: Path | None,
 ) -> int:
     from spriditis.storage.database import Database
 
@@ -432,8 +487,19 @@ def _run_watch_cycle(
     finally:
         db.close()
 
+    exported = _append_watch_jsonl(
+        jsonl_path,
+        project_id=project.id,
+        cycle_number=cycle_number,
+        diff=diff,
+    ) if jsonl_path is not None else 0
+
     print("")
     print(f"WATCH RESULT · run #{artifacts.run_id}")
+    if jsonl_path is not None:
+        print(
+            f"   jsonl={jsonl_path} · exported_events={exported}"
+        )
 
     if diff is None:
         print(
@@ -1453,7 +1519,13 @@ def main() -> int:
 
     if args.command == "watch":
         settings = load_settings()
-        project = load_project(Path(args.project))
+        try:
+            project = _load_watch_project(Path(args.project))
+        except ValueError as exc:
+            print(f"Watch konfigurācijas kļūda: {exc}")
+            return 2
+
+        jsonl_path = Path(args.jsonl) if args.jsonl else None
 
         try:
             interval, cycle_limit = _watch_schedule(
@@ -1479,14 +1551,18 @@ def main() -> int:
                 f"cycles={limit_text}"
             )
         print("   memory=existing research/feed/domain state")
+        if jsonl_path is not None:
+            print(f"   jsonl_output={jsonl_path}")
 
         def run_cycle(cycle_number: int) -> None:
             print(f"   cycle={cycle_number}")
             _run_watch_cycle(
                 settings,
                 project,
+                cycle_number=cycle_number,
                 no_ai=args.no_ai,
                 details=args.details,
+                jsonl_path=jsonl_path,
             )
 
         _run_watch_loop(
