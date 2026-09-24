@@ -1,9 +1,9 @@
 # Izmaiņu vēsture / Changelog
 
-## [3.3.0-alpha.7] — release candidate
+## [3.3.0-alpha.7]
 
-> **Statuss / Status:** feature-complete kandidāts stabilizācijai; fokusētie alpha7 testi ir zaļi, pilnais 43 testu regression gate vēl jāizpilda pirms merge/tag.  
-> Feature-complete candidate under stabilization; focused alpha7 tests are green, while the full 43-test regression gate still has to pass before merge/tag.
+> **Statuss / Status:** feature-complete un pilnībā validēts publicēšanas kandidāts; pilnais regression gate izpildīts ar 43/43 testiem.  
+> Feature-complete and fully validated for publication; the complete regression gate passed 43/43 tests.
 
 ### Pievienots / Added
 
@@ -52,7 +52,7 @@
 - DB migration schema v11
 - Adaptive Decision Trace schema v11 SQLite round-trip
 - fokusētie alpha7 un alpha6/core regression testi paliek zaļi
-- pilnais **43 testu** regression gate vēl jāizpilda pirms merge/tag
+- pilnais **43/43** testu regression gate izpildīts sekmīgi / complete **43/43** regression gate passed
 
 ---
 ## [3.3.0-alpha.6]
