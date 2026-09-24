@@ -40,6 +40,7 @@ class ResearchCrawler:
         search_provider: SearchProvider | None = None,
         feed_states: dict[str, FeedState] | None = None,
         domain_states: dict[str, DomainRecord] | None = None,
+        query_memory: list[dict] | None = None,
     ):
         self.settings = settings
         self.project = project
@@ -47,6 +48,7 @@ class ResearchCrawler:
         self.search_provider = search_provider
         self.feed_states = dict(feed_states or {})
         self.domain_states = dict(domain_states or {})
+        self.query_memory = list(query_memory or [])
 
         self.session = requests.Session()
         self.session.headers.update(
@@ -536,7 +538,11 @@ class ResearchCrawler:
                 "Norādi project.search.provider vai izmanto provider injekciju testos."
             )
 
-        queries = build_search_queries(self.project)
+        queries = build_search_queries(
+            self.project,
+            query_memory=self.query_memory,
+            provider=self.search_provider.name,
+        )
         if not queries:
             raise ValueError(
                 "Expedition režīmam nav neviena search query. "
@@ -555,7 +561,17 @@ class ResearchCrawler:
 
         for query in queries:
             result.search_queries_issued += 1
-            print(f"   🔍 {query.query}")
+            memory_note = ""
+            if query.memory_state != "untested":
+                rate = query.memory_productive_domain_rate or 0.0
+                memory_note = (
+                    f" · memory={query.memory_state}"
+                    f" yield={rate:.1%}"
+                    f" productive={query.memory_productive_domains}"
+                    f"/{query.memory_unique_domains}"
+                    f" runs={query.memory_runs}"
+                )
+            print(f"   🔍 {query.query}{memory_note}")
 
             try:
                 hits = self.search_provider.search(
