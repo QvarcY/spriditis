@@ -524,6 +524,23 @@ def _run_watch_cycle(
     if nonzero:
         print("   " + " · ".join(nonzero))
 
+    coverage = diff.get("coverage") or {}
+    suppressed_count = int(
+        coverage.get("suppressed_event_count") or 0
+    )
+    if suppressed_count:
+        suppressed_counts = coverage.get("suppressed_counts") or {}
+        parts = [
+            f"{name.lower()}={count}"
+            for name, count in sorted(suppressed_counts.items())
+            if count
+        ]
+        summary = " · ".join(parts)
+        print(
+            f"   suppressed_uncertain={suppressed_count}"
+            + (f" · {summary}" if summary else "")
+        )
+
     if not events:
         print("   Nozīmīgas izmaiņas nav atrastas.")
         return 0
