@@ -168,7 +168,7 @@ Pilnais regression gate ir izpildīts: **38/38 deterministiskie testi iziet**.
 
 ## 🧪 3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence
 
-**Statuss:** feature-complete release candidate stabilizācijas posmā.
+**Statuss:** feature-complete un pilnībā validēts publicēšanas kandidāts.
 
 Ieviests:
 
@@ -196,7 +196,7 @@ Dizaina robežas:
 - DOM heuristikas ir konservatīvs pēdējais deterministiskais slānis, nevis strukturēto avotu aizvietotājs;
 - labāk palaist garām robežgadījumu nekā radīt viltus produktu no parastas lapas teksta.
 
-Alpha7 fokusētie testi ir zaļi. Pirms merge/tag vēl jāizpilda pilnais **43 testu regression gate**.
+Pilnais alpha7 regression gate ir izpildīts: **43/43 deterministiskie testi iziet**. Nākamais solis ir PR → merge → tag.
 
 ## 🧭 3.3.0-alpha.8 — Change Detection
 
@@ -417,7 +417,7 @@ The complete regression gate passed: **38/38 deterministic tests**.
 
 ## 🧪 3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence
 
-**Status:** feature-complete release candidate under stabilization.
+**Status:** feature-complete and fully validated for publication.
 
 Implemented:
 
@@ -445,7 +445,7 @@ Design boundaries:
 - DOM heuristics are a conservative final deterministic layer, not a replacement for structured sources;
 - missing a borderline product is preferable to manufacturing a false product from ordinary page text.
 
-Focused alpha7 tests are green. The complete **43-test regression gate** still has to pass before merge/tag.
+The complete alpha7 regression gate passed: **43/43 deterministic tests**. Next step: PR → merge → tag.
 
 ## 🧭 3.3.0-alpha.8 — Change Detection
 
