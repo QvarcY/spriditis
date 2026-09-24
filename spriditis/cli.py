@@ -1277,6 +1277,10 @@ def main() -> int:
             f"clusters={before_run['cluster_count']}→"
             f"{after_run['cluster_count']}"
         )
+        basis = diff["comparison_basis"]
+        print(
+            f"   basis={basis['facts']} + {basis['identity']}"
+        )
         print(
             "   "
             + " · ".join(
