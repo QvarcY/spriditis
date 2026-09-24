@@ -242,7 +242,7 @@ def project_from_preset(name: str) -> ResearchProject:
 
 
 def load_project(path: Path) -> ResearchProject:
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = json.loads(path.read_text(encoding="utf-8-sig"))
     project = ResearchProject.model_validate(data)
     if project.research_type not in IMPLEMENTED_RESEARCH_TYPES:
         raise NotImplementedError(
