@@ -4,9 +4,25 @@ from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup
 
-from spriditis.core.entities import MarketEntity
+from spriditis.core.entities import ExtractionEvidence, MarketEntity
 
 from .common import clean_text, meta, parse_price
+
+
+def _fact(
+    value,
+    *,
+    page_url: str,
+    confidence: float,
+    evidence: str,
+) -> ExtractionEvidence:
+    return ExtractionEvidence(
+        value=value,
+        source_url=page_url,
+        extraction_method="opengraph",
+        confidence=confidence,
+        evidence=evidence,
+    )
 
 
 def extract_opengraph_product(
@@ -37,15 +53,63 @@ def extract_opengraph_product(
     )
     image = meta(soup, prop="og:image")
 
+    price = parse_price(amount)
+    image_url = urljoin(page_url, image) if image else ""
+
+    field_evidence: dict[str, ExtractionEvidence] = {
+        "title": _fact(
+            title,
+            page_url=page_url,
+            confidence=0.88,
+            evidence="opengraph:og:title",
+        ),
+        "source_url": _fact(
+            page_url,
+            page_url=page_url,
+            confidence=0.88,
+            evidence="page_url",
+        ),
+    }
+
+    if description:
+        field_evidence["description"] = _fact(
+            description,
+            page_url=page_url,
+            confidence=0.88,
+            evidence="opengraph:og:description|meta:description",
+        )
+    if price is not None:
+        field_evidence["price"] = _fact(
+            price,
+            page_url=page_url,
+            confidence=0.88,
+            evidence="opengraph:product:price:amount|og:price:amount",
+        )
+    if currency:
+        field_evidence["currency"] = _fact(
+            currency,
+            page_url=page_url,
+            confidence=0.84,
+            evidence="opengraph:product:price:currency|og:price:currency|default",
+        )
+    if image_url:
+        field_evidence["image_url"] = _fact(
+            image_url,
+            page_url=page_url,
+            confidence=0.88,
+            evidence="opengraph:og:image",
+        )
+
     return MarketEntity(
         title=title,
         entity_type="product",
         source_url=page_url,
         source_domain=(urlparse(page_url).hostname or "").lower(),
         description=description,
-        price=parse_price(amount),
+        price=price,
         currency=currency,
-        image_url=urljoin(page_url, image) if image else "",
+        image_url=image_url,
         extraction_method="opengraph",
         evidence=clean_text(f"{title}. {description}", 800),
+        field_evidence=field_evidence,
     )
