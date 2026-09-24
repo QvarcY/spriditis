@@ -1,9 +1,9 @@
 # Izmaiņu vēsture / Changelog
 
-## [3.3.0-alpha.8] — validating
+## [3.3.0-alpha.8]
 
-> **Statuss / Status:** funkcionālais Change Detection scope ir ieviests; release baseline vēl tiek validēts.  
-> The functional Change Detection scope is implemented; the release baseline is still under validation.
+> **Statuss / Status:** release baseline pilnībā validēts; pilnais regression gate izpildīts ar 48/48 testiem.  
+> Release baseline fully validated; the complete regression gate passed 48/48 tests.
 
 ### Pievienots / Added
 
@@ -36,7 +36,7 @@
 - `change_detection_feed_test.py`
 - feed storage/incremental/crawler/parser regressions
 - Entity Resolution, Evidence Quality un Adaptive Decision Trace regresijas paliek zaļas
-- release regression gate vēl jāizpilda pirms statusa maiņas uz released
+- pilnais **48/48** testu regression gate izpildīts sekmīgi / complete **48/48** regression gate passed
 
 ---
 
