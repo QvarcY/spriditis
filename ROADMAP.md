@@ -91,21 +91,29 @@ Mērķis: pārvērst katru vērtīgu domēnu par iespējamu efektīvu atkārtota
 - deterministiski RSS/Atom/JSON Feed, storage, 304 un repeat-run testi;
 - reāls publiska RSS tests ar apstiprinātu `304 Not Modified`.
 
-## 🧭 3.3.0-alpha.4 — Research Memory
+## 🧪 3.3.0-alpha.4 — Research Memory
 
 Mērķis: atcerēties ne tikai atrastos datus, bet arī pētījuma procesa efektivitāti.
 
-- query yield;
-- source/domain yield;
-- useful-entity yield;
-- duplicate rate;
-- source success rate;
-- freshness/staleness;
-- discovery provenance metrics;
-- source profiles;
-- source/query value signāli;
-- `spriditis explain` — kāpēc domēns/query/entity tika aktivizēts, noraidīts vai iegūts;
-- `spriditis trace` — query → provider → domain → discovery path → page → extraction → entity → observation.
+**Statuss:** implementēts un pilnībā regresijas testēts release candidate branchā; vēl nav mergeots `main` un tagots.
+
+Ieviests:
+
+- DB schema v6 ar `page_visits` lineage auditu;
+- query yield ar stabilu `productive_domain_rate` pāri atkārtotiem runiem;
+- source/domain yield un entity yield;
+- source profiles ar HTTP success, crawl run, observation un productive-run signāliem;
+- search duplicate rate ar raw / unique / duplicate / filtered numeratoriem;
+- freshness/staleness ar `last_useful_at → last_crawled → last_seen` pamatu un konfigurējamu stale slieksni;
+- discovery provenance un page lineage metrikas;
+- URL-scoped safety semantika, kas vairs nepārvērš visu domēnu par sticky `blocked`;
+- `memory` CLI Research Memory kopsavilkumam;
+- `explain` domēna vēstures un lēmumu izskaidrošanai;
+- `trace` viena run provenance ķēdei; pēc noklusējuma discovery eventi tiek grupēti, bet `--full` saglabā raw auditu;
+- deterministiski Research Memory, repeat-query, source-profile, freshness un duplicate-rate testi;
+- pilns alpha4 regression gate pret iepriekšējiem discovery/search/feed/core slāņiem.
+
+Alpha4 **krāj un izskaidro** pieredzi. Tā vēl neveic automātisku source/query prioritizāciju.
 
 Jaunajām metrikām jābūt izskaidrojamām; viens “mistisks score” nedrīkst aizstāt atsevišķos signālus.
 
@@ -300,23 +308,31 @@ Goal: turn every useful domain into a possible efficient recurring discovery sou
 - deterministic RSS/Atom/JSON Feed, storage, 304 and repeat-run tests;
 - real public RSS validation confirming `304 Not Modified`.
 
-## 🧭 3.3.0-alpha.4 — Research Memory
+## 🧪 3.3.0-alpha.4 — Research Memory
 
 Goal: remember not only collected data, but the effectiveness of the research process itself.
 
-- query yield;
-- source/domain yield;
-- useful-entity yield;
-- duplicate rate;
-- source success rate;
-- freshness/staleness;
-- discovery provenance metrics;
-- source profiles;
-- source/query value signals;
-- `spriditis explain`;
-- `spriditis trace` for query → provider → domain → discovery path → page → extraction → entity → observation.
+**Status:** implemented and fully regression-tested on the release-candidate branch; not yet merged into `main` or tagged.
 
-Metrics should stay explainable; one opaque “magic score” must not replace the underlying signals.
+Implemented:
+
+- database schema v6 with `page_visits` lineage auditing;
+- query yield with stable `productive_domain_rate` across repeated runs;
+- source/domain yield and entity yield;
+- source profiles with HTTP success, crawl-run, observation and productive-run signals;
+- search duplicate rate with explicit raw / unique / duplicate / filtered numerators;
+- freshness/staleness based on `last_useful_at → last_crawled → last_seen` with a configurable stale threshold;
+- discovery provenance and page-lineage metrics;
+- URL-scoped safety semantics that no longer turn an entire domain into sticky `blocked`;
+- `memory` CLI for Research Memory summaries;
+- `explain` for domain history and decision evidence;
+- `trace` for one-run provenance; discovery events are grouped by default while `--full` preserves raw audit output;
+- deterministic Research Memory, repeat-query, source-profile, freshness and duplicate-rate tests;
+- a full alpha4 regression gate across the existing discovery/search/feed/core layers.
+
+Alpha4 **records and explains** experience. It does not yet perform automatic source/query prioritization.
+
+Metrics stay explainable; one opaque “magic score” must not replace the underlying signals.
 
 ## 🧭 3.3.0-alpha.5 — Adaptive Expedition
 
