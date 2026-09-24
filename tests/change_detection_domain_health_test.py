@@ -142,6 +142,11 @@ with TemporaryDirectory() as tmp:
 
         diff = db.compare_runs(project.id, run_a, run_b)
 
+        assert diff["comparison_basis"] == {
+            "entity_facts": "historical_observation_snapshots",
+            "domain_health": "historical_page_visits",
+            "identity": "current_canonical_membership",
+        }
         assert diff["before_run"]["domain_count"] == 7
         assert diff["after_run"]["domain_count"] == 7
 
