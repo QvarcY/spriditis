@@ -136,19 +136,35 @@ Mērķis: izvēlēties labākos pētījuma ceļus bez obligāta maksas MI.
 - DB schema v7 ar `adaptive_decisions` audita tabulu;
 - pilnais alpha5 regression gate izpildīts: 32/32 deterministiskie testi iziet.
 
-## 🚧 3.3.0-alpha.6 — Entity Resolution
+## 🧪 3.3.0-alpha.6 — Entity Resolution
 
-Mērķis: vienu un to pašu reālās pasaules produktu/pakalpojumu attēlot kā vienu entity ar vairākiem avotiem.
+Mērķis: vienu un to pašu reālās pasaules produktu/pakalpojumu attēlot kā vienu canonical entity ar vairākiem source observations.
 
-Primārie signāli:
-- GTIN / EAN;
-- manufacturer + model;
-- SKU, kur tas ir jēgpilni;
-- normalized title.
+**Statuss:** feature-complete release candidate stabilizācijas posmā.
 
-Papildu signāli:
-- cenu diapazons;
-- fuzzy title similarity, piemēram, ar `rapidfuzz`, tikai kā papildsignāls.
+Ieviests:
+
+- JSON-LD identity signālu saglabāšana: GTIN/EAN, brand/manufacturer, model, MPN un SKU;
+- deterministisks resolveris ar strong-signal secību: valid GTIN → maker+model → maker+MPN → source-scoped SKU;
+- vienāds title un cross-source SKU vieni paši nav pietiekami automātiskam merge;
+- source-specific `MarketEntity` un observations paliek kā pierādījumu slānis;
+- canonical `entity_clusters` + `entity_cluster_members`;
+- ambiguity/conflict resolution audits un `entity_resolution_events`;
+- guarded explicit cluster merge ar identity conflict/no-strong-match noraidīšanu;
+- merge audit un vēsturiskais `merged_into` statuss;
+- dzīva unresolved review queue ambiguity/conflict gadījumiem;
+- `clusters`, `explain-cluster`, `merge-clusters`, `cluster-merges`, `review-queue` CLI;
+- DB schema v10;
+- 6 jauni deterministiski Entity Resolution testi.
+
+Dizaina robežas:
+
+- normalized title ir supporting signāls, nevis standalone cross-source merge identitāte;
+- fuzzy title un price-range heuristikas netika ieviestas kā automātiska merge loģika šajā milestone;
+- bridge entity, kas strong-matcho vairākus clusterus, tiek atlikta review queue, nevis automātiski sapludina clusterus;
+- rejected explicit merge nemaina membership un paliek auditējams.
+
+Pilnais 38 testu regression gate vēl jāizpilda pirms merge/tag.
 
 ## 🧭 3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence
 
@@ -358,17 +374,33 @@ Goal: choose better research paths without requiring paid AI.
 
 ## 🚧 3.3.0-alpha.6 — Entity Resolution
 
-Goal: represent the same real-world product/service as one entity with multiple source observations.
+Goal: represent the same real-world product/service as one canonical entity with multiple source observations.
 
-Primary signals:
-- GTIN / EAN;
-- manufacturer + model;
-- SKU where meaningful;
-- normalized title.
+**Status:** feature-complete release candidate under stabilization.
 
-Supporting signals:
-- price range;
-- fuzzy title similarity, e.g. `rapidfuzz`, only as a supporting signal.
+Implemented:
+
+- JSON-LD identity preservation for GTIN/EAN, brand/manufacturer, model, MPN and SKU;
+- deterministic strong-signal resolver: valid GTIN → maker+model → maker+MPN → source-scoped SKU;
+- equal title and cross-source SKU are not sufficient by themselves for automatic merge;
+- source-specific `MarketEntity` rows and observations remain the evidence layer;
+- canonical `entity_clusters` + `entity_cluster_members`;
+- ambiguity/conflict resolution audit through `entity_resolution_events`;
+- guarded explicit cluster merge with conflict/no-strong-match rejection;
+- merge audit with historical `merged_into` status;
+- live unresolved review queue for ambiguity/conflict cases;
+- `clusters`, `explain-cluster`, `merge-clusters`, `cluster-merges`, `review-queue` CLI;
+- database schema v10;
+- six new deterministic Entity Resolution tests.
+
+Design boundaries:
+
+- normalized title is a supporting signal, not standalone cross-source merge identity;
+- fuzzy-title and price-range heuristics were deliberately not promoted to automatic merge logic in this milestone;
+- a bridge entity matching multiple clusters is deferred to review instead of auto-merging clusters;
+- a rejected explicit merge leaves membership unchanged and remains auditable.
+
+The complete 38-test regression gate still has to pass before merge/tag.
 
 ## 🧭 3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence
 
