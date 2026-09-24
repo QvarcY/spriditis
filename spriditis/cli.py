@@ -688,6 +688,26 @@ def main() -> int:
         )
 
         print("")
+        print(
+            f"ADAPTIVE DECISIONS "
+            f"({len(trace['adaptive_decisions'])})"
+        )
+        for item in trace["adaptive_decisions"]:
+            print(
+                f"   #{item['sequence']:<3} "
+                f"{item['stage']:<24} "
+                f"{item['decision']:<18} "
+                f"{item['target'][:72]}"
+            )
+            signals = item["signals"]
+            if signals:
+                signal_text = " · ".join(
+                    f"{key}={value}"
+                    for key, value in signals.items()
+                )
+                print(f"      {signal_text}")
+
+        print("")
         print(f"PAGE VISITS ({len(trace['page_visits'])})")
         for visit in trace["page_visits"]:
             status = (
@@ -884,7 +904,7 @@ def main() -> int:
             else f"{project.analysis.ai_provider}/{settings.gemini_model}"
         )
 
-        print("🚀 Sprīdītis 3.3.0-alpha.4 sāk pētījumu")
+        print("🚀 Sprīdītis 3.3.0-alpha.5 sāk pētījumu")
         print(f"   Projekts: {project.name}")
         print(f"   ID: {project.id}")
         print(f"   Tips: {project.research_type}")
@@ -915,6 +935,20 @@ def main() -> int:
         print(f"   Run ID: {artifacts.run_id}")
         print(f"   Apmeklētas lapas: {artifacts.visited_pages}")
         print(f"   Atrasti objekti: {artifacts.entity_count}")
+        print(
+            f"   STOP_REASON: {artifacts.stop_reason or '-'} "
+            f"(diminishing={artifacts.diminishing_returns_streak}, "
+            f"saturation={artifacts.saturation_streak})"
+        )
+        print(
+            f"   Diversity: {artifacts.diversity_penalties_applied} "
+            f"priority penalties / "
+            f"{artifacts.diversity_domain_count} domēni"
+        )
+        print(
+            f"   Adaptive decisions: "
+            f"{artifacts.adaptive_decision_count}"
+        )
         print(
             f"   Domēni: {artifacts.observed_domain_count} novēroti / "
             f"{artifacts.activated_domain_count} aktivizēti / "

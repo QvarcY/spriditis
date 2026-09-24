@@ -1,5 +1,54 @@
 # Izmaiņu vēsture / Changelog
 
+## [3.3.0-alpha.5]
+
+> **Statuss / Status:** release baseline pilnībā validēts; pilnais regression gate izpildīts ar 32/32 testiem.  
+> Release baseline fully validated; the complete regression gate passed 32/32 tests.
+
+### Pievienots / Added
+
+- Research Memory balstīta automātiska query prioritizācija ar explicit `configured > productive > untested > nonproductive` secību / Research Memory-driven query prioritization with an explicit ordering
+- source-profile prioritizācija ar atsevišķiem productive/fresh/stale/untested/nonproductive stāvokļiem / source-profile priority bands without an opaque aggregate score
+- lokāls BM25 search-result relevance slānis ar title/path/domain un negative-keyword signāliem / local BM25 result relevance with separate title/path/domain and negative-keyword signals
+- konfigurējami `diminishing_returns_window` un `saturation_window`, pēc noklusējuma `0 = disabled`
+- auditējams `STOP_REASON`: `max_pages`, `max_domains`, `diminishing_returns`, `saturation_reached`, `budget_exhausted`
+- atsevišķs `discovery_depth` starpdomēnu hopiem, `max_discovery_depth` un per-depth activation budgets
+- soft source-diversity frontier penalty ar konfigurējamu entity soft-cap; atrastās entity netiek dzēstas / soft source-diversity prioritization without dropping collected entities
+- DB schema v7 ar `adaptive_decisions` tabulu / database schema v7 with a persisted adaptive-decision audit table
+- `AdaptiveDecision` modelis query priority, search-result priority, source-diversity, discovery-depth un stop lēmumiem
+- `trace --run N` Adaptive Decision Trace skats ar lēmumu secību un atsevišķiem signāliem
+
+### Uzlabots / Improved
+
+- alpha4 Research Memory vairs nav tikai inspekcijas slānis: alpha5 to patērē nākamā run prioritizācijai / Research Memory now directly informs the next run
+- provider sākotnējā rezultātu secība kļūst par tie-breaker pēc izskaidrojamiem source/local relevance signāliem
+- viena liela avota same-domain frontier dominance var tikt mīksti samazināta, saglabājot visus jau atrastos datus
+- controlled multi-hop discovery neizmanto parasto page depth kā domēnu hop aizstājēju
+- CLI run kopsavilkums rāda STOP_REASON, adaptive streaks, diversity diagnostiku un adaptive-decision skaitu
+- feed discovery depth ierobežojumi tiek auditēti tajā pašā Decision Trace kā HTML linku discovery
+
+### Dizaina robeža / Milestone boundary
+
+- alpha5 prioritizē un aptur deterministiski; obligāts maksas MI nav vajadzīgs / adaptive behavior remains deterministic and does not require paid AI
+- Research Memory, BM25, freshness, productivity, diversity un depth signāli netiek sapludināti vienā opaque “magic score”
+- soft limits maina izpētes secību, nevis slēpj atrastus pierādījumus
+- Adaptive Decision Trace saglabā lēmumu iemeslus SQLite un ļauj tos pārbaudīt pēc run
+
+### Validācija / Validation
+
+- `adaptive_query_priority_test.py`
+- `adaptive_source_priority_test.py`
+- `adaptive_local_relevance_test.py`
+- `adaptive_stopping_test.py`
+- `adaptive_multihop_test.py`
+- `adaptive_source_diversity_test.py`
+- `adaptive_decision_trace_test.py`
+- DB migration v7 tests
+- iepriekšējie Research Memory testi paliek zaļi / existing Research Memory regressions remain green
+- pilnais 32 testu regression gate izpildīts sekmīgi / complete 32-test regression gate passed
+
+---
+
 ## [3.3.0-alpha.4]
 
 ### Pievienots / Added

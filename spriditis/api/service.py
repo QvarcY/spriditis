@@ -36,6 +36,12 @@ class RunArtifacts:
     feed_entries_new: int = 0
     feed_not_modified: int = 0
     feed_errors: int = 0
+    stop_reason: str = ""
+    diminishing_returns_streak: int = 0
+    saturation_streak: int = 0
+    diversity_penalties_applied: int = 0
+    diversity_domain_count: int = 0
+    adaptive_decision_count: int = 0
     database_migrated_from: Path | None = None
 
     @property
@@ -69,6 +75,8 @@ def run_project(
         search_provider = build_search_provider(settings, project)
         feed_states = db.load_feed_states(project.id)
         domain_states = db.load_domain_states(project.id)
+        query_memory = db.query_memory(project.id, limit=1000)
+        source_profiles = db.source_profiles(project.id, limit=1000)
         crawler = ResearchCrawler(
             settings,
             project,
@@ -76,6 +84,8 @@ def run_project(
             search_provider=search_provider,
             feed_states=feed_states,
             domain_states=domain_states,
+            query_memory=query_memory,
+            source_profiles=source_profiles,
         )
         result = crawler.crawl()
 
@@ -85,6 +95,7 @@ def run_project(
         db.save_domain_registry(project, run_id, result)
         db.save_feed_states(project, result)
         db.save_page_visits(project, run_id, result)
+        db.save_adaptive_decisions(project, run_id, result)
         db.finish_run(run_id, result)
 
         html = generate_html_report(project, result)
@@ -130,6 +141,12 @@ def run_project(
             feed_entries_new=result.feed_entries_new,
             feed_not_modified=result.feed_not_modified,
             feed_errors=result.feed_errors,
+            stop_reason=result.stop_reason,
+            diminishing_returns_streak=result.diminishing_returns_streak,
+            saturation_streak=result.saturation_streak,
+            diversity_penalties_applied=result.diversity_penalties_applied,
+            diversity_domain_count=len(result.diversity_domains_penalized),
+            adaptive_decision_count=len(result.adaptive_decisions),
             database_migrated_from=migrated_from,
         )
     finally:

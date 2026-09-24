@@ -1,6 +1,6 @@
 # Sprīdītis — arhitektūra / Architecture
 
-Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.4 — Research Memory**
+Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.5 — Adaptive Expedition**
 
 > **Latviski pirmajā vietā, angļu valoda zemāk. / Latvian first, English below.**
 
@@ -75,7 +75,7 @@ Avotiem specifiski adapteri, izolējot konkrētas vietnes īpatnības no crawler
 Izvēles MI enrichment. Crawler/extraction plūsmai jāstrādā arī bez MI.
 
 ### `spriditis/storage`
-SQLite persistence un schema evolution. Alpha4 izmanto DB schema v6 un pievieno `page_visits` tabulu Research Memory lineage auditam. Esošie `runs` search skaitītāji tiek izmantoti arī duplicate-rate atmiņai, tāpēc šim signālam nav vajadzīga paralēla dublējoša tabula.
+SQLite persistence un schema evolution. Alpha4 izmanto DB schema v6 un pievieno `page_visits` tabulu Research Memory lineage auditam. Alpha5 pāriet uz DB schema v7 un pievieno `adaptive_decisions` tabulu izskaidrojamai adaptīvo lēmumu secībai. Esošie `runs` search skaitītāji tiek izmantoti arī duplicate-rate atmiņai, tāpēc šim signālam nav vajadzīga paralēla dublējoša tabula.
 
 Noklusējuma DB:
 ```text
@@ -142,6 +142,48 @@ Research Memory saglabā atsevišķus signālus, nevis vienu opaque score:
 Svarīga robeža: alpha4 **krāj un izskaidro** pieredzi. Automātiska šo signālu izmantošana prioritizācijai un stopping lēmumiem pieder alpha5 Adaptive Expedition.
 
 Svarīgs princips: **katram nozīmīgam lēmumam jābūt izskaidrojamam.**
+
+## Adaptive Expedition — 3.3.0-alpha.5
+
+Alpha5 sāk **patērēt** alpha4 Research Memory un lokālos relevance signālus, bet saglabā tos atsevišķi auditējamus.
+
+Adaptīvā plūsma:
+
+```text
+Research Memory
+  ├── query productive-domain history
+  └── source productivity/freshness
+             ↓
+Query priority
+             ↓
+Search result priority
+  ├── source-memory band
+  ├── local BM25
+  ├── title/path/domain matches
+  └── negative-keyword signal
+             ↓
+Controlled discovery
+  ├── discovery_depth
+  ├── per-depth activation budgets
+  └── source-diversity priority penalty
+             ↓
+Adaptive stopping
+  ├── saturation streak
+  └── diminishing-returns streak
+             ↓
+Adaptive Decision Trace
+```
+
+Galvenās robežas:
+
+- configured query vienmēr paliek priekšā automātiski ģenerētiem query;
+- produktīva query/source vēsture palīdz prioritizēt, bet neveido vienu opaque quality score;
+- nepārbaudīti avoti paliek eksplorējami un netiek automātiski sodīti kā neproduktīvi;
+- `depth` apzīmē lapas navigācijas dziļumu, bet `discovery_depth` — starpdomēnu hop skaitu;
+- source diversity ir soft frontier penalty, nevis entity dzēšana;
+- adaptive stopping ir opt-in ar `0 = disabled` logiem;
+- katrs nozīmīgais adaptīvais lēmums tiek pievienots `AdaptiveDecision` un persistēts DB schema v7 `adaptive_decisions` tabulā;
+- `trace --run N` parāda lēmumu secību un signālus kopā ar page/discovery/observation provenance.
 
 ## Feed state un HTTP resursu stāvoklis
 
@@ -251,7 +293,7 @@ Source-specific adapters isolate site quirks from crawler core.
 Optional AI enrichment. Crawling/extraction must remain usable without AI.
 
 ### `spriditis/storage`
-SQLite persistence and schema evolution. Alpha4 uses database schema v6 and adds a `page_visits` table for Research Memory lineage auditing. Existing search counters in `runs` also back duplicate-rate memory, avoiding a parallel duplicate source of truth.
+SQLite persistence and schema evolution. Alpha4 uses database schema v6 and adds a `page_visits` table for Research Memory lineage auditing. Alpha5 moves to database schema v7 and adds an `adaptive_decisions` table for explainable adaptive-decision sequences. Existing search counters in `runs` also back duplicate-rate memory, avoiding a parallel duplicate source of truth.
 
 Default DB:
 ```text
@@ -318,6 +360,48 @@ Research Memory preserves separate signals instead of collapsing them into one o
 The milestone boundary is deliberate: alpha4 **records and explains** experience. Automatic use of these signals for prioritization and stopping decisions belongs to alpha5 Adaptive Expedition.
 
 Important principle: **every important decision should be explainable.**
+
+## Adaptive Expedition — 3.3.0-alpha.5
+
+Alpha5 begins to **consume** alpha4 Research Memory together with local relevance signals while keeping the underlying evidence separate and auditable.
+
+Adaptive flow:
+
+```text
+Research Memory
+  ├── query productive-domain history
+  └── source productivity/freshness
+             ↓
+Query priority
+             ↓
+Search result priority
+  ├── source-memory band
+  ├── local BM25
+  ├── title/path/domain matches
+  └── negative-keyword signal
+             ↓
+Controlled discovery
+  ├── discovery_depth
+  ├── per-depth activation budgets
+  └── source-diversity priority penalty
+             ↓
+Adaptive stopping
+  ├── saturation streak
+  └── diminishing-returns streak
+             ↓
+Adaptive Decision Trace
+```
+
+Key boundaries:
+
+- configured queries always remain ahead of automatically generated queries;
+- productive query/source history influences priority without collapsing into one opaque quality score;
+- untested sources remain explorable and are not treated as historically nonproductive;
+- `depth` is page-navigation depth while `discovery_depth` counts cross-domain hops;
+- source diversity is a soft frontier penalty, not entity deletion;
+- adaptive stopping is opt-in with `0 = disabled` windows;
+- every important adaptive decision is appended as an `AdaptiveDecision` and persisted in the schema-v7 `adaptive_decisions` table;
+- `trace --run N` exposes the decision sequence and signals alongside page/discovery/observation provenance.
 
 ## Feed state and HTTP resource state
 

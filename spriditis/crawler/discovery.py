@@ -126,6 +126,7 @@ class DomainRegistry:
         target_url: str,
         anchor_text: str,
         raw_score: int,
+        activation_block_reason: str = "",
     ) -> tuple[DomainRecord, DomainDiscovery]:
         source_domain = host_key(source_url)
         target_domain = host_key(target_url)
@@ -151,6 +152,10 @@ class DomainRegistry:
             status = "candidate"
             action = "recorded"
             reason = "below_threshold"
+        elif activation_block_reason:
+            status = "candidate"
+            action = "recorded"
+            reason = activation_block_reason
         elif self.active_count >= self.project.crawl.max_domains:
             status = "candidate"
             action = "recorded"
@@ -304,6 +309,7 @@ class DomainRegistry:
         title: str,
         summary: str,
         raw_score: int,
+        activation_block_reason: str = "",
     ) -> tuple[DomainRecord, DomainDiscovery]:
         source_domain = host_key(feed_url)
         target_domain = host_key(target_url)
@@ -328,6 +334,10 @@ class DomainRegistry:
             status = "candidate"
             action = "recorded"
             reason = "below_threshold"
+        elif activation_block_reason:
+            status = "candidate"
+            action = "recorded"
+            reason = activation_block_reason
         elif self.active_count >= self.project.crawl.max_domains:
             status = "candidate"
             action = "recorded"

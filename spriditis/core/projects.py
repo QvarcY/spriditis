@@ -34,6 +34,12 @@ class CrawlConfig(BaseModel):
     probe_common_feed_paths: bool = False
     max_feeds_per_domain: int = Field(default=3, ge=0, le=20)
     max_feed_entries_per_feed: int = Field(default=50, ge=0, le=1000)
+    diminishing_returns_window: int = Field(default=0, ge=0, le=10000)
+    saturation_window: int = Field(default=0, ge=0, le=10000)
+    max_discovery_depth: int = Field(default=20, ge=0, le=20)
+    discovery_depth_budgets: dict[int, int] = Field(default_factory=dict)
+    entity_diversity_soft_cap: int = Field(default=0, ge=0, le=100000)
+    entity_diversity_priority_penalty: int = Field(default=30, ge=0, le=100)
 
 
 class SearchConfig(BaseModel):
@@ -80,6 +86,20 @@ class ResearchProject(BaseModel):
             raise ValueError(
                 "Project id drīkst saturēt tikai a-z, 0-9, _ un -, 2-64 zīmes."
             )
+        return value
+
+    @field_validator("crawl")
+    @classmethod
+    def validate_crawl(cls, value: CrawlConfig) -> CrawlConfig:
+        for depth, budget in value.discovery_depth_budgets.items():
+            if depth < 1 or depth > 20:
+                raise ValueError(
+                    "discovery_depth_budgets hop jābūt diapazonā 1..20."
+                )
+            if budget < 0:
+                raise ValueError(
+                    "discovery_depth_budgets budžets nevar būt negatīvs."
+                )
         return value
 
     @field_validator("seed_urls")

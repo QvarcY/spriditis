@@ -25,9 +25,8 @@
 
 | | Status |
 |---|---|
-| **Publiskā versija / Public baseline** | ✅ `v3.3.0-alpha.4` — Research Memory |
-| **Šobrīd / Current work** | 🚧 `3.3.0-alpha.5` — Adaptive Expedition |
-| **Nākamais / Next** | 🧭 `3.3.0-alpha.6` — Entity Resolution |
+| **Publiskā versija / Public baseline** | ✅ `v3.3.0-alpha.5` — Adaptive Expedition |
+| **Šobrīd / Current work** | 🚧 `3.3.0-alpha.6` — Entity Resolution |
 | **Galvenais virziens / North star** | 🧠 **Research Memory + Adaptive Discovery** |
 | **Pamatprincips / Core principle** | 🔎 **source-backed facts > AI guesses** |
 | **Izmaksu princips / Cost direction** | 🌱 Priekšroka lokāliem, atvērtiem, pašhostējamiem un bezmaksas risinājumiem / Prefer local, open, self-hostable and zero-cost building blocks |
@@ -52,7 +51,7 @@
 | ✅ | **3.3.0-alpha.2** | SearchProvider hardening | retry/backoff, `Retry-After`, structured provider errors, result dedupe, `search-check`, schema v4 |
 | ✅ | **3.3.0-alpha.3** | Feed Discovery & Incremental Monitoring | RSS 2.0, Atom, JSON Feed, autodiscovery, ETag / Last-Modified, feed provenance, repeat-run domain persistence |
 | ✅ | **3.3.0-alpha.4** | Research Memory | query/source yield, source profiles, search duplication, provenance, `memory` + `explain` + `trace`, freshness/staleness |
-| 🚧 | **3.3.0-alpha.5** | Adaptive Expedition | BM25, query prioritization, coverage saturation, per-depth budgets, multi-hop, source diversity |
+| ✅ | **3.3.0-alpha.5** | Adaptive Expedition | Research Memory-driven query/source priority, local BM25, adaptive stopping, multi-hop budgets, source diversity, persisted Decision Trace |
 | 🧭 | **3.3.0-alpha.6** | Entity Resolution | cross-source matching, duplicate clustering, one entity with many source observations |
 | 🧭 | **3.3.0-alpha.7** | Fallback Extraction + Evidence Confidence | schema.org microdata, DOM heuristics, field-level extraction method + confidence |
 | 🧭 | **3.3.0-alpha.8** | Change Detection | price/new/disappeared events, source/domain changes, `diff` between runs |
@@ -230,6 +229,12 @@ Sprīdītis nav piesaistīts vienai nozarei. Ideja ir vienu un to pašu kodolu p
 - `feeds` CLI komanda feed stāvokļa pārbaudei
 - Domain Registry stāvokļa hidratācija pirms atkārtota run; `blocked`/`rejected` dzīves cikla stāvokļi paliek sticky
 - Research Memory ar query yield, source profiles, HTTP success un productive-run signāliem
+- Adaptive Expedition ar vēsturisku query/source prioritizāciju bez opaque quality score
+- lokāls BM25 ar atsevišķiem title/path/domain/negative-keyword signāliem
+- adaptīvs stopping ar auditējamu `STOP_REASON`, saturation un diminishing-returns logiem
+- kontrolēts multi-hop discovery ar atsevišķu `discovery_depth`, per-depth budžetiem un depth limitu
+- soft source-diversity frontier penalty, nezaudējot atrastās entity
+- persistēts Adaptive Decision Trace (DB schema v7) query/source/diversity/depth/stop lēmumiem
 - search duplicate rate ar atsevišķiem raw / unique / duplicate / filtered skaitītājiem
 - freshness/staleness signāli ar skaidru `last_useful_at → last_crawled → last_seen` pamatu un konfigurējamu stale slieksni
 - page lineage `page_visits` audita dati ar source type, source URL, depth, outcome un HTTP statusu
@@ -337,7 +342,7 @@ python main.py explain --project projects\mans_tirgus.json --domain example.com
 python main.py trace --project projects\mans_tirgus.json --run 1
 ```
 
-`memory` rāda query yield, search deduplikāciju, source profiles un freshness signālus. `explain` apkopo viena domēna auditējamo vēsturi, bet `trace` sasaista viena run page lineage, discovery eventus un observations. Alpha4 šos signālus **krāj un izskaidro**; automātiska prioritizācija pēc atmiņas ir atstāta alpha5.
+`memory` rāda query yield, search deduplikāciju, source profiles un freshness signālus. `explain` apkopo viena domēna auditējamo vēsturi, bet `trace` sasaista viena run page lineage, discovery eventus un observations. Alpha4 šos signālus **krāj un izskaidro**. Alpha5 tos izmanto query/source prioritizācijai, lokālai relevance izvēlei, controlled multi-hop, source diversity un stopping lēmumiem; šie lēmumi tiek saglabāti arī Adaptive Decision Trace.
 
 Pilno zero-seed Expedition plūsmu bez ārēja meklētāja var pārbaudīt ar:
 
@@ -417,11 +422,11 @@ Sprīdīti nevajadzētu izmantot autentifikācijas, piekļuves kontroles, paywal
 
 ### Projekta statuss
 
-Pašreizējais publiskais atskaites punkts ir **Sprīdītis 3.3.0-alpha.4 — Research Memory**.
+Pašreizējais publiskais atskaites punkts ir **Sprīdītis 3.3.0-alpha.5 — Adaptive Expedition**.
 
-Alpha4 pievieno DB schema v6 `page_visits` lineage auditu, stabilu query productive-domain yield pāri atkārtotiem runiem, source profiles, HTTP success un productive-run signālus, search duplicate rate, freshness/staleness, kā arī `memory`, `explain` un `trace` CLI. Signāli paliek atsevišķi un auditējami; tie netiek sapludināti vienā opaque “quality score”.
+Alpha5 izmanto alpha4 Research Memory automātiskai query/source prioritizācijai, lokālam BM25 relevance slānim, adaptive stopping, controlled multi-hop un source-diversity lēmumiem. DB schema v7 pievieno persistētu `adaptive_decisions` auditu, un `trace` parāda adaptīvo lēmumu secību kopā ar provenance.
 
-Svarīga versiju robeža: alpha4 **krāj un izskaidro** pētniecības pieredzi. Nākamais **3.3.0-alpha.5 — Adaptive Expedition** sāk izmantot šo atmiņu automātiskai query/source prioritizācijai, saturation un stopping lēmumiem.
+Pilnais alpha5 regression gate ir izpildīts: **32/32 deterministiskie testi iziet**, ieskaitot DB migration v7, Adaptive Decision Trace SQLite round-trip un visus iepriekšējos Research Memory/Search/Discovery/Feed slāņus.
 
 Šis ir alpha projekts, tāpēc līdz stabilai versijai iespējamas arī nesavietojamas izmaiņas.
 

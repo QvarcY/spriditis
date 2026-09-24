@@ -26,7 +26,7 @@
 
 # Latviski
 
-## ✅ Pašreizējā publiskā bāze — 3.3.0-alpha.3
+## ✅ Pašreizējā publiskā bāze — 3.3.0-alpha.5
 
 Ieviests un publiski pieejams:
 
@@ -117,7 +117,7 @@ Alpha4 **krāj un izskaidro** pieredzi. Tā vēl neveic automātisku source/quer
 
 Jaunajām metrikām jābūt izskaidrojamām; viens “mistisks score” nedrīkst aizstāt atsevišķos signālus.
 
-## 🚧 3.3.0-alpha.5 — Adaptive Expedition
+## ✅ 3.3.0-alpha.5 — Adaptive Expedition
 
 Mērķis: izvēlēties labākos pētījuma ceļus bez obligāta maksas MI.
 
@@ -131,9 +131,12 @@ Mērķis: izvēlēties labākos pētījuma ceļus bez obligāta maksas MI.
 - kontrolēts multi-hop discovery;
 - `max_discovery_depth`;
 - per-depth budgets;
-- soft entity diversity limits, lai viens milzu avots neaizēnotu pārējos.
+- soft entity diversity limits, lai viens milzu avots neaizēnotu pārējos;
+- persistēts Adaptive Decision Trace ar query priority, search-result priority, source-diversity, discovery-depth un stop lēmumiem;
+- DB schema v7 ar `adaptive_decisions` audita tabulu;
+- pilnais alpha5 regression gate izpildīts: 32/32 deterministiskie testi iziet.
 
-## 🧭 3.3.0-alpha.6 — Entity Resolution
+## 🚧 3.3.0-alpha.6 — Entity Resolution
 
 Mērķis: vienu un to pašu reālās pasaules produktu/pakalpojumu attēlot kā vienu entity ar vairākiem avotiem.
 
@@ -243,7 +246,7 @@ Tas ir **Research Memory + Adaptive Discovery + Evidence Confidence + Incrementa
 
 # English
 
-## ✅ Current public baseline — 3.3.0-alpha.3
+## ✅ Current public baseline — 3.3.0-alpha.5
 
 Implemented and public:
 
@@ -334,7 +337,7 @@ Alpha4 **records and explains** experience. It does not yet perform automatic so
 
 Metrics stay explainable; one opaque “magic score” must not replace the underlying signals.
 
-## 🚧 3.3.0-alpha.5 — Adaptive Expedition
+## ✅ 3.3.0-alpha.5 — Adaptive Expedition
 
 Goal: choose better research paths without requiring paid AI.
 
@@ -348,9 +351,12 @@ Goal: choose better research paths without requiring paid AI.
 - controlled multi-hop discovery;
 - `max_discovery_depth`;
 - per-depth budgets;
-- soft entity-diversity limits so one giant source does not dominate coverage.
+- soft entity-diversity limits so one giant source does not dominate coverage;
+- persisted Adaptive Decision Trace for query priority, search-result priority, source-diversity, discovery-depth and stop decisions;
+- database schema v7 with an `adaptive_decisions` audit table;
+- the full alpha5 regression gate passed: 32/32 deterministic tests.
 
-## 🧭 3.3.0-alpha.6 — Entity Resolution
+## 🚧 3.3.0-alpha.6 — Entity Resolution
 
 Goal: represent the same real-world product/service as one entity with multiple source observations.
 

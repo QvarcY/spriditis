@@ -12,6 +12,7 @@ class FrontierItem:
     order: int
     url: str = field(compare=False)
     depth: int = field(compare=False)
+    discovery_depth: int = field(compare=False, default=0)
     source_url: str = field(compare=False, default="")
     source_type: str = field(compare=False, default="unknown")
 
@@ -31,6 +32,7 @@ class URLFrontier:
         *,
         priority: int,
         depth: int,
+        discovery_depth: int = 0,
         source_url: str = "",
         source_type: str = "unknown",
     ) -> bool:
@@ -42,6 +44,7 @@ class URLFrontier:
             order=order,
             url=url,
             depth=depth,
+            discovery_depth=discovery_depth,
             source_url=source_url,
             source_type=source_type,
         )
