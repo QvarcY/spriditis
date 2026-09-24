@@ -904,7 +904,7 @@ def main() -> int:
             else f"{project.analysis.ai_provider}/{settings.gemini_model}"
         )
 
-        print("🚀 Sprīdītis 3.3.0-alpha.5 sāk pētījumu")
+        print("🚀 Sprīdītis 3.3.0-alpha.6 sāk pētījumu")
         print(f"   Projekts: {project.name}")
         print(f"   ID: {project.id}")
         print(f"   Tips: {project.research_type}")
