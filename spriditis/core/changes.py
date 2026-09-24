@@ -183,6 +183,16 @@ def compare_run_snapshots(
                     "after_observation_id": new["observation_id"],
                     "before_run_id": before["run_id"],
                     "after_run_id": after["run_id"],
+                    "before_field_evidence": {
+                        field: old["field_evidence"][field]
+                        for field in ("price", "currency")
+                        if field in old["field_evidence"]
+                    },
+                    "after_field_evidence": {
+                        field: new["field_evidence"][field]
+                        for field in ("price", "currency")
+                        if field in new["field_evidence"]
+                    },
                 },
             )
         )
