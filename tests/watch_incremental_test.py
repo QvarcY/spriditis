@@ -9,7 +9,9 @@ sys.path.insert(0, str(_BootstrapPath(__file__).resolve().parents[1]))
 
 from spriditis.cli import _parser
 from spriditis.core.entities import MarketEntity
+from spriditis.core.memory import PageVisit
 from spriditis.core.projects import ResearchProject
+from spriditis.core.run import ResearchRunResult
 from spriditis.storage.database import Database
 
 
@@ -46,6 +48,34 @@ def finish(db: Database, run_id: int) -> None:
     db.conn.commit()
 
 
+def save_visits(
+    db: Database,
+    run_id: int,
+    *urls: str,
+) -> None:
+    visits = []
+    for url in urls:
+        visits.append(
+            PageVisit(
+                url=url,
+                final_url=url,
+                domain=url.split("/")[2],
+                source_type="watch_test",
+                outcome="html_ok",
+                http_status=200,
+                content_type="text/html",
+            )
+        )
+    db.save_page_visits(
+        project,
+        run_id,
+        ResearchRunResult(
+            project_id=project.id,
+            page_visits=visits,
+        ),
+    )
+
+
 with TemporaryDirectory() as tmp:
     db = Database(_BootstrapPath(tmp) / "spriditis.db")
     try:
@@ -62,6 +92,12 @@ with TemporaryDirectory() as tmp:
 
         run_a = db.start_run(project)
         db.upsert_entity(project, run_a, item_a)
+        save_visits(
+            db,
+            run_a,
+            item_a.source_url,
+            item_b.source_url,
+        )
         finish(db, run_a)
 
         assert db.compare_with_previous_run(project.id, run_a) is None
@@ -69,6 +105,12 @@ with TemporaryDirectory() as tmp:
         run_b = db.start_run(project)
         db.upsert_entity(project, run_b, item_a)
         db.upsert_entity(project, run_b, item_b)
+        save_visits(
+            db,
+            run_b,
+            item_a.source_url,
+            item_b.source_url,
+        )
         finish(db, run_b)
 
         diff_b = db.compare_with_previous_run(project.id, run_b)
@@ -92,6 +134,12 @@ with TemporaryDirectory() as tmp:
         run_c = db.start_run(project)
         db.upsert_entity(project, run_c, item_a)
         db.upsert_entity(project, run_c, item_b)
+        save_visits(
+            db,
+            run_c,
+            item_a.source_url,
+            item_b.source_url,
+        )
         finish(db, run_c)
 
         diff_c = db.compare_with_previous_run(project.id, run_c)
@@ -119,4 +167,5 @@ print("first_completed_run=baseline")
 print("previous_completed_run=selected")
 print("unfinished_run=ignored")
 print("change_only_diff=new_entity")
+print("coverage_mode=comparable_source_url_recheck")
 print("watch_cli=once")
