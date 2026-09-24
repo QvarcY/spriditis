@@ -2683,6 +2683,9 @@ class Database:
                 "title": snapshot.get("title") or "",
                 "source_url": snapshot.get("source_url") or "",
                 "source_domain": snapshot.get("source_domain") or "",
+                "description": snapshot.get("description") or "",
+                "seller": snapshot.get("seller") or "",
+                "image_url": snapshot.get("image_url") or "",
                 "price": snapshot.get("price"),
                 "currency": snapshot.get("currency") or "",
                 "field_evidence": snapshot.get("field_evidence") or {},
@@ -2770,6 +2773,9 @@ class Database:
             "ENTITY_DISAPPEARED": 0,
             "PRICE_DROP": 0,
             "PRICE_INCREASE": 0,
+            "SELLER_CHANGED": 0,
+            "DESCRIPTION_CHANGED": 0,
+            "IMAGE_CHANGED": 0,
             "SOURCE_CHANGED": 0,
         }
         for event in events:
