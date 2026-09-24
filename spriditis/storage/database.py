@@ -14,6 +14,27 @@ from spriditis.core.run import ResearchRunResult
 
 
 CURRENT_SCHEMA_VERSION = 6
+DEFAULT_STALE_AFTER_DAYS = 30.0
+
+
+def _parse_iso_datetime(value: str) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _age_days(value: str, now: datetime) -> float | None:
+    parsed = _parse_iso_datetime(value)
+    if parsed is None:
+        return None
+    return max(0.0, (now - parsed).total_seconds() / 86400.0)
+
 
 
 SCHEMA = """
@@ -808,7 +829,15 @@ class Database:
         project_id: str,
         *,
         limit: int = 50,
+        stale_after_days: float = DEFAULT_STALE_AFTER_DAYS,
+        as_of: datetime | None = None,
     ) -> list[dict]:
+        stale_after_days = max(0.0, float(stale_after_days))
+        now = as_of or datetime.now(timezone.utc)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=timezone.utc)
+        else:
+            now = now.astimezone(timezone.utc)
         rows = self.conn.execute(
             """
             WITH visit_stats AS (
@@ -922,6 +951,34 @@ class Database:
             crawl_runs = int(row[14] or 0)
             html_ok = int(row[15] or 0)
             productive_runs = int(row[25] or 0)
+            last_seen = row[11] or ""
+            last_crawled = row[12] or ""
+            last_visit = row[17] or ""
+            last_feed_success = row[19] or ""
+            last_useful_at = row[26] or ""
+
+            age_since_last_useful = _age_days(last_useful_at, now)
+            age_since_last_crawl = _age_days(last_crawled, now)
+            age_since_last_feed_success = _age_days(last_feed_success, now)
+
+            if last_useful_at:
+                stale_reference = "last_useful_at"
+                stale_reference_at = last_useful_at
+                stale_age_days = age_since_last_useful
+            elif last_crawled:
+                stale_reference = "last_crawled"
+                stale_reference_at = last_crawled
+                stale_age_days = age_since_last_crawl
+            else:
+                stale_reference = "last_seen"
+                stale_reference_at = last_seen
+                stale_age_days = _age_days(last_seen, now)
+
+            is_stale = bool(
+                stale_age_days is not None
+                and stale_age_days > stale_after_days
+            )
+
             profiles.append(
                 {
                     "domain": row[0],
@@ -939,8 +996,8 @@ class Database:
                     "discovered_via": row[8] or "",
                     "reason": row[9] or "",
                     "first_seen": row[10] or "",
-                    "last_seen": row[11] or "",
-                    "last_crawled": row[12] or "",
+                    "last_seen": last_seen,
+                    "last_crawled": last_crawled,
                     "visit_count": visits,
                     "crawl_runs": crawl_runs,
                     "successful_visits": html_ok,
@@ -948,9 +1005,9 @@ class Database:
                     "success_rate": (
                         html_ok / visits if visits else 0.0
                     ),
-                    "last_visit": row[17] or "",
+                    "last_visit": last_visit,
                     "feed_count": int(row[18] or 0),
-                    "last_feed_success": row[19] or "",
+                    "last_feed_success": last_feed_success,
                     "discovery_events": int(row[20] or 0),
                     "activated_events": int(row[21] or 0),
                     "blocked_events": int(row[22] or 0),
@@ -961,7 +1018,18 @@ class Database:
                         productive_runs / crawl_runs
                         if crawl_runs else 0.0
                     ),
-                    "last_useful_at": row[26] or "",
+                    "last_useful_at": last_useful_at,
+                    "age_since_last_useful_days": age_since_last_useful,
+                    "age_since_last_crawl_days": age_since_last_crawl,
+                    "age_since_last_feed_success_days": (
+                        age_since_last_feed_success
+                    ),
+                    "stale_after_days": stale_after_days,
+                    "stale_reference": stale_reference,
+                    "stale_reference_at": stale_reference_at,
+                    "stale_age_days": stale_age_days,
+                    "is_stale": is_stale,
+                    "freshness": "stale" if is_stale else "fresh",
                 }
             )
         return profiles
@@ -972,11 +1040,18 @@ class Database:
         domain: str,
         *,
         event_limit: int = 10,
+        stale_after_days: float = DEFAULT_STALE_AFTER_DAYS,
+        as_of: datetime | None = None,
     ) -> dict | None:
         profile = next(
             (
                 item
-                for item in self.source_profiles(project_id, limit=1000)
+                for item in self.source_profiles(
+                    project_id,
+                    limit=1000,
+                    stale_after_days=stale_after_days,
+                    as_of=as_of,
+                )
                 if item["domain"] == domain
             ),
             None,
