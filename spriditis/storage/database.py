@@ -385,7 +385,8 @@ class Database:
         self.conn.execute(
             """
             UPDATE domains
-            SET status='candidate'
+            SET status='candidate',
+                reason=''
             WHERE status='blocked'
               AND reason IN ('blocked_path', 'binary_or_static_file')
             """
