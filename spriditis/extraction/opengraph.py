@@ -41,11 +41,11 @@ def extract_opengraph_product(
     if "product" not in og_type and not amount:
         return None
 
-    currency = (
+    raw_currency = (
         meta(soup, prop="product:price:currency")
         or meta(soup, prop="og:price:currency")
-        or "EUR"
-    ).upper()
+    )
+    currency = (raw_currency or "EUR").upper()
 
     description = (
         meta(soup, prop="og:description")
@@ -89,8 +89,12 @@ def extract_opengraph_product(
         field_evidence["currency"] = _fact(
             currency,
             page_url=page_url,
-            confidence=0.84,
-            evidence="opengraph:product:price:currency|og:price:currency|default",
+            confidence=0.88 if raw_currency else 0.50,
+            evidence=(
+                "opengraph:product:price:currency|og:price:currency"
+                if raw_currency
+                else "default:EUR"
+            ),
         )
     if image_url:
         field_evidence["image_url"] = _fact(
