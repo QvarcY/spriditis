@@ -1275,7 +1275,9 @@ def main() -> int:
             f"   entities={before_run['entity_count']}→"
             f"{after_run['entity_count']} · "
             f"clusters={before_run['cluster_count']}→"
-            f"{after_run['cluster_count']}"
+            f"{after_run['cluster_count']} · "
+            f"domains={before_run['domain_count']}→"
+            f"{after_run['domain_count']}"
         )
         basis = diff["comparison_basis"]
         print(
@@ -1293,6 +1295,8 @@ def main() -> int:
                     f"description_changed={counts['DESCRIPTION_CHANGED']}",
                     f"image_changed={counts['IMAGE_CHANGED']}",
                     f"source_changed={counts['SOURCE_CHANGED']}",
+                    f"domain_failed={counts['DOMAIN_FAILED']}",
+                    f"domain_recovered={counts['DOMAIN_RECOVERED']}",
                 )
             )
         )
@@ -1335,6 +1339,15 @@ def main() -> int:
                 print(
                     f"      {field}: "
                     f"{str(old_value)[:100]} → {str(new_value)[:100]}"
+                )
+            elif event["change_type"] in (
+                "DOMAIN_FAILED",
+                "DOMAIN_RECOVERED",
+            ):
+                print(
+                    f"      domain={event['source_domain']} "
+                    f"{event['before']['state']} → "
+                    f"{event['after']['state']}"
                 )
             if args.details:
                 print(
