@@ -7,6 +7,7 @@ from tempfile import TemporaryDirectory
 sys.path.insert(0, str(_BootstrapPath(__file__).resolve().parents[1]))
 
 from spriditis.core.feeds import FeedState
+from spriditis.core.memory import PageVisit
 from spriditis.core.projects import ResearchProject
 from spriditis.core.run import ResearchRunResult
 from spriditis.storage.database import CURRENT_SCHEMA_VERSION, Database
@@ -60,6 +61,20 @@ feed_steady = "https://steady.example/feed.xml"
 feed_reset = "https://reset.example/feed.xml"
 feed_old_only = "https://old-only.example/feed.xml"
 feed_new_only = "https://new-only.example/feed.xml"
+feed_unchecked_old = "https://unchecked.example/feed.xml"
+
+
+def visit(domain: str) -> PageVisit:
+    url = f"https://{domain}/"
+    return PageVisit(
+        url=url,
+        final_url=url,
+        domain=domain,
+        source_type="seed",
+        outcome="html_ok",
+        http_status=200,
+        content_type="text/html",
+    )
 
 
 with TemporaryDirectory() as tmp:
@@ -71,7 +86,14 @@ with TemporaryDirectory() as tmp:
         db.save_project(project)
 
         run_a = db.start_run(project)
-        result_a = ResearchRunResult(project_id=project.id)
+        result_a = ResearchRunResult(
+            project_id=project.id,
+            page_visits=[
+                visit("old-only.example"),
+                visit("new-only.example"),
+                visit("unchecked.example"),
+            ],
+        )
         result_a.feed_states = {
             feed_new: state(
                 feed_new,
@@ -110,11 +132,24 @@ with TemporaryDirectory() as tmp:
                 new_entries=1,
                 last_entry_id="entry-old",
             ),
+            feed_unchecked_old: state(
+                feed_unchecked_old,
+                status="active",
+                new_entries=1,
+                last_entry_id="entry-unchecked",
+            ),
         }
+        db.save_page_visits(project, run_a, result_a)
         db.save_feed_states(project, run_a, result_a)
 
         run_b = db.start_run(project)
-        result_b = ResearchRunResult(project_id=project.id)
+        result_b = ResearchRunResult(
+            project_id=project.id,
+            page_visits=[
+                visit("old-only.example"),
+                visit("new-only.example"),
+            ],
+        )
         result_b.feed_states = {
             feed_new: state(
                 feed_new,
@@ -154,11 +189,12 @@ with TemporaryDirectory() as tmp:
                 last_entry_id="entry-new-only",
             ),
         }
+        db.save_page_visits(project, run_b, result_b)
         db.save_feed_states(project, run_b, result_b)
 
         snapshots_a = db.feed_snapshots(project.id, run_a)
         snapshots_b = db.feed_snapshots(project.id, run_b)
-        assert len(snapshots_a) == 6
+        assert len(snapshots_a) == 7
         assert len(snapshots_b) == 6
 
         diff = db.compare_runs(project.id, run_a, run_b)
@@ -169,7 +205,7 @@ with TemporaryDirectory() as tmp:
             "feed_state": "historical_feed_snapshots",
             "identity": "current_canonical_membership",
         }
-        assert diff["before_run"]["feed_count"] == 6
+        assert diff["before_run"]["feed_count"] == 7
         assert diff["after_run"]["feed_count"] == 6
 
         assert diff["counts"] == {
@@ -183,16 +219,30 @@ with TemporaryDirectory() as tmp:
             "SOURCE_CHANGED": 0,
             "DOMAIN_FAILED": 0,
             "DOMAIN_RECOVERED": 0,
+            "FEED_APPEARED": 1,
+            "FEED_DISAPPEARED": 1,
             "FEED_NEW_ENTRIES": 1,
             "FEED_FAILED": 1,
             "FEED_RECOVERED": 1,
         }
-        assert len(diff["events"]) == 3
+        assert len(diff["events"]) == 5
 
         by_type = {
             event["change_type"]: event
             for event in diff["events"]
         }
+
+        appeared = by_type["FEED_APPEARED"]
+        assert appeared["source_url"] == feed_new_only
+        assert appeared["before"] == {"observed": False}
+        assert appeared["after"]["observed"] is True
+        assert appeared["after"]["status"] == "active"
+
+        disappeared = by_type["FEED_DISAPPEARED"]
+        assert disappeared["source_url"] == feed_old_only
+        assert disappeared["before"]["observed"] is True
+        assert disappeared["after"] == {"observed": False}
+        assert disappeared["evidence"]["after_domain_reachable_visit_ids"]
 
         new_event = by_type["FEED_NEW_ENTRIES"]
         assert new_event["source_url"] == feed_new
@@ -217,14 +267,15 @@ with TemporaryDirectory() as tmp:
         }
         assert feed_steady not in event_urls
         assert feed_reset not in event_urls
-        assert feed_old_only not in event_urls
-        assert feed_new_only not in event_urls
+        assert feed_unchecked_old not in event_urls
+        assert feed_old_only in event_urls
+        assert feed_new_only in event_urls
 
         trace_a = db.trace_run(project.id, run_a)
         trace_b = db.trace_run(project.id, run_b)
         assert trace_a is not None
         assert trace_b is not None
-        assert len(trace_a["feed_snapshots"]) == 6
+        assert len(trace_a["feed_snapshots"]) == 7
         assert len(trace_b["feed_snapshots"]) == 6
 
         trace_a_by_id = {
@@ -237,19 +288,21 @@ with TemporaryDirectory() as tmp:
         }
 
         for event in diff["events"]:
-            before_snapshot_id = event["evidence"]["before_snapshot_id"]
-            after_snapshot_id = event["evidence"]["after_snapshot_id"]
+            before_snapshot_id = event["evidence"].get("before_snapshot_id")
+            after_snapshot_id = event["evidence"].get("after_snapshot_id")
 
-            assert before_snapshot_id in trace_a_by_id
-            assert after_snapshot_id in trace_b_by_id
-            assert (
-                trace_a_by_id[before_snapshot_id]["feed_url"]
-                == event["source_url"]
-            )
-            assert (
-                trace_b_by_id[after_snapshot_id]["feed_url"]
-                == event["source_url"]
-            )
+            if before_snapshot_id is not None:
+                assert before_snapshot_id in trace_a_by_id
+                assert (
+                    trace_a_by_id[before_snapshot_id]["feed_url"]
+                    == event["source_url"]
+                )
+            if after_snapshot_id is not None:
+                assert after_snapshot_id in trace_b_by_id
+                assert (
+                    trace_b_by_id[after_snapshot_id]["feed_url"]
+                    == event["source_url"]
+                )
 
         assert (
             trace_b_by_id[
@@ -267,9 +320,11 @@ with TemporaryDirectory() as tmp:
         db.close()
 
 print("CHANGE DETECTION FEED TEST OK")
-print("events=new_entries+failed+recovered")
+print("events=appeared+disappeared+new_entries+failed+recovered")
 print("new_entries=cumulative_positive_delta")
 print("counter_reset=no_event")
+print("disappeared=requires_later_reachable_domain")
+print("unchecked_domain=no_disappearance_event")
 print("one_run_only=no_transition_event")
 print("feed_evidence=historical_feed_snapshots")
 print("trace_links=event_snapshot_ids_resolve")
