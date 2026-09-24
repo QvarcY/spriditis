@@ -864,6 +864,29 @@ class Database:
             match_reason = "target_cluster_identity_conflict"
             resolution_decision = "created_separate"
             resolution_reason = "target_cluster_identity_conflict"
+            matched_signals = tuple(
+                sorted(
+                    {
+                        signal
+                        for key in hard_conflict_clusters
+                        for decision in matches_by_cluster[key]
+                        for signal in decision.matched_signals
+                    }
+                )
+            )
+            supporting_signals = tuple(
+                sorted(
+                    {
+                        *supporting_signal_set,
+                        *(
+                            signal
+                            for key in hard_conflict_clusters
+                            for decision in matches_by_cluster[key]
+                            for signal in decision.supporting_signals
+                        ),
+                    }
+                )
+            )
 
         self.conn.execute(
             """
