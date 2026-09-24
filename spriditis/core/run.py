@@ -27,6 +27,8 @@ class ResearchRunResult:
     stop_reason: str = ""
     diminishing_returns_streak: int = 0
     saturation_streak: int = 0
+    diversity_penalties_applied: int = 0
+    diversity_domains_penalized: set[str] = field(default_factory=set)
 
     search_queries_issued: int = 0
     search_results_seen: int = 0
