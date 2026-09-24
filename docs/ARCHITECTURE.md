@@ -1,7 +1,8 @@
 # Sprīdītis — arhitektūra / Architecture
 
 Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence**  
-Nākamais posms / Next milestone: **3.3.0-alpha.8 — Change Detection**
+Validējamais izstrādes baseline / Development baseline under validation: **3.3.0-alpha.8 — Change Detection**  
+Nākamais plānotais posms / Next planned milestone: **3.3.0-alpha.9 — Watch mode**
 
 > **Latviski pirmajā vietā, angļu valoda zemāk. / Latvian first, English below.**
 
