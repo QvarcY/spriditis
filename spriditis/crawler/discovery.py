@@ -17,10 +17,58 @@ def score_to_ratio(score: int) -> float:
 
 
 class DomainRegistry:
-    def __init__(self, project: ResearchProject):
+    def __init__(
+        self,
+        project: ResearchProject,
+        *,
+        initial_records: dict[str, DomainRecord] | None = None,
+    ):
         self.project = project
-        self.records: dict[str, DomainRecord] = {}
+        self.records: dict[str, DomainRecord] = {
+            domain: record.model_copy(deep=True)
+            for domain, record in (initial_records or {}).items()
+        }
         self.discoveries: list[DomainDiscovery] = []
+        self.touched_domains: set[str] = set()
+        self.run_active_domains: set[str] = set()
+
+    def _touch(self, domain: str):
+        self.touched_domains.add(domain)
+
+    def current_run_records(self) -> dict[str, DomainRecord]:
+        return {
+            domain: self.records[domain]
+            for domain in self.touched_domains
+            if domain in self.records
+        }
+
+    def _persisted_state(
+        self,
+        domain: str,
+    ) -> tuple[str, str, str] | None:
+        record = self.records.get(domain)
+        if record is None:
+            return None
+
+        if record.status == "blocked":
+            return (
+                "blocked",
+                "blocked",
+                record.reason or "persisted_blocked",
+            )
+
+        if record.status == "rejected":
+            return (
+                "rejected",
+                "recorded",
+                record.reason or "persisted_rejected",
+            )
+
+        if record.status == "active":
+            self.run_active_domains.add(domain)
+            return ("active", "known", "already_active")
+
+        return None
 
     def add_seed(self, url: str) -> DomainRecord:
         domain = host_key(url)
@@ -31,9 +79,14 @@ class DomainRegistry:
             discovered_from_url="",
             relevance_score=1.0,
         )
+        # A configured seed is an explicit reactivation signal for a
+        # previously rejected/failed domain. Safety policy is checked before
+        # add_seed() is called, so unsafe blocked hosts still never reach here.
         record.status = "active"
         record.reason = "seed"
         record.last_seen = utc_now()
+        self.run_active_domains.add(domain)
+        self._touch(domain)
         return record
 
     def observe_link(
@@ -49,15 +102,14 @@ class DomainRegistry:
         ratio = score_to_ratio(raw_score)
 
         safe, safety_reason = url_safety_reason(target_url)
+        persisted = self._persisted_state(target_domain)
 
         if not safe:
             status = "blocked"
             action = "blocked"
             reason = safety_reason
-        elif target_domain in self.records and self.records[target_domain].status == "active":
-            status = "active"
-            action = "known"
-            reason = "already_active"
+        elif persisted is not None:
+            status, action, reason = persisted
         elif self.project.crawl.mode == "domain":
             status = "candidate"
             action = "recorded"
@@ -104,6 +156,9 @@ class DomainRegistry:
             reason=reason,
             discovered_via="external_link",
         )
+        if status == "active":
+            self.run_active_domains.add(target_domain)
+        self._touch(target_domain)
         self.discoveries.append(discovery)
         return record, discovery
 
@@ -121,15 +176,14 @@ class DomainRegistry:
         target_domain = host_key(target_url)
         ratio = score_to_ratio(raw_score)
         safe, safety_reason = url_safety_reason(target_url)
+        persisted = self._persisted_state(target_domain)
 
         if not safe:
             status = "blocked"
             action = "blocked"
             reason = safety_reason
-        elif target_domain in self.records and self.records[target_domain].status == "active":
-            status = "active"
-            action = "known"
-            reason = "already_active"
+        elif persisted is not None:
+            status, action, reason = persisted
         elif self.project.crawl.mode != "expedition":
             status = "candidate"
             action = "recorded"
@@ -181,6 +235,9 @@ class DomainRegistry:
             provider=provider,
             query_text=query_text[:500],
         )
+        if status == "active":
+            self.run_active_domains.add(target_domain)
+        self._touch(target_domain)
         self.discoveries.append(discovery)
         return record, discovery
 
@@ -198,15 +255,14 @@ class DomainRegistry:
         target_domain = host_key(target_url)
         ratio = score_to_ratio(raw_score)
         safe, safety_reason = url_safety_reason(target_url)
+        persisted = self._persisted_state(target_domain)
 
         if not safe:
             status = "blocked"
             action = "blocked"
             reason = safety_reason
-        elif target_domain in self.records and self.records[target_domain].status == "active":
-            status = "active"
-            action = "known"
-            reason = "already_active"
+        elif persisted is not None:
+            status, action, reason = persisted
         elif self.project.crawl.mode == "domain":
             status = "candidate"
             action = "recorded"
@@ -259,33 +315,41 @@ class DomainRegistry:
             reason=reason,
             discovered_via="feed",
         )
+        if status == "active":
+            self.run_active_domains.add(target_domain)
+        self._touch(target_domain)
         self.discoveries.append(discovery)
         return record, discovery
 
     def mark_page(self, domain: str):
         record = self._get_or_create(domain)
+        self._touch(domain)
         record.pages_seen += 1
         record.last_seen = utc_now()
         record.last_crawled = utc_now()
 
     def mark_entities(self, domain: str, count: int):
         record = self._get_or_create(domain)
+        self._touch(domain)
         record.entities_found += max(0, count)
         record.last_seen = utc_now()
 
     def mark_robots(self, domain: str, status: str):
         record = self._get_or_create(domain)
+        self._touch(domain)
         record.robots_status = status
         record.last_seen = utc_now()
 
     def mark_sitemap(self, domain: str, status: str, urls_found: int = 0):
         record = self._get_or_create(domain)
+        self._touch(domain)
         record.sitemap_status = status
         record.sitemap_urls_found = max(record.sitemap_urls_found, max(0, urls_found))
         record.last_seen = utc_now()
 
     def mark_failed(self, domain: str, reason: str):
         record = self._get_or_create(domain)
+        self._touch(domain)
         if record.status != "blocked":
             record.status = "failed"
         record.reason = reason
@@ -293,7 +357,7 @@ class DomainRegistry:
 
     @property
     def active_count(self) -> int:
-        return sum(1 for record in self.records.values() if record.status == "active")
+        return len(self.run_active_domains)
 
     def _get_or_create(
         self,
