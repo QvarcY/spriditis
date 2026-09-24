@@ -21,6 +21,11 @@ class ResearchRunResult:
     failed_pages: int = 0
     skipped_by_robots: int = 0
 
+    search_queries_issued: int = 0
+    search_results_seen: int = 0
+    search_domains_activated: int = 0
+    search_provider_errors: int = 0
+
     domains: dict[str, DomainRecord] = field(default_factory=dict)
     domain_discoveries: list[DomainDiscovery] = field(default_factory=list)
 

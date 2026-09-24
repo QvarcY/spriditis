@@ -5,6 +5,8 @@ from pathlib import Path
 
 from spriditis.api.service import run_project
 from spriditis.config import load_settings
+from spriditis.search.query import build_search_queries
+
 from spriditis.core.projects import (
     PRESETS,
     TEMPLATE_CATALOG,
@@ -42,10 +44,17 @@ def _parser() -> argparse.ArgumentParser:
     run = sub.add_parser("run", help="Palaist tirgus pētījumu")
     run.add_argument("--project", required=True)
     run.add_argument("--max-pages", type=int)
+    run.add_argument("--max-domains", type=int)
+    run.add_argument("--max-pages-per-domain", type=int)
+    run.add_argument("--search-provider", choices=["none", "searxng"])
+    run.add_argument("--max-search-queries", type=int)
     run.add_argument("--mode", choices=["domain", "discovery", "expedition"])
     run.add_argument("--no-ai", action="store_true")
     run.add_argument("--email", action="store_true")
     run.add_argument("--no-email", action="store_true")
+
+    queries = sub.add_parser("queries", help="Parādīt deterministisko Expedition search plānu")
+    queries.add_argument("--project", required=True)
 
     domains = sub.add_parser("domains", help="Parādīt projekta Domain Registry")
     domains.add_argument("--project", required=True)
@@ -138,6 +147,17 @@ def main() -> int:
         return 0
 
 
+    if args.command == "queries":
+        project = load_project(Path(args.project))
+        queries = build_search_queries(project)
+        if not queries:
+            print("Projektam nav ģenerējamu search vaicājumu.")
+            return 0
+        print(f"Expedition query plāns ({len(queries)}):")
+        for index, query in enumerate(queries, start=1):
+            print(f"  {index:>2}. {query.query}  [{query.reason}]")
+        return 0
+
     if args.command == "discoveries":
         from spriditis.storage.database import Database
 
@@ -169,21 +189,24 @@ def main() -> int:
             return 0
 
         print(
-            f"{'RUN':>4} {'ACTION':<10} {'SCORE':>6} "
-            f"{'SOURCE':<27} {'TARGET':<27} {'REASON':<22}"
+            f"{'RUN':>4} {'ACTION':<10} {'VIA':<15} {'SCORE':>6} "
+            f"{'SOURCE':<22} {'TARGET':<25} {'REASON':<22}"
         )
-        print("-" * 108)
+        print("-" * 116)
 
         for row in rows:
             print(
                 f"{row['run_id']:>4} "
                 f"{row['action']:<10} "
+                f"{row['discovered_via']:<15} "
                 f"{row['relevance_score']:>6.2f} "
-                f"{(row['source_domain'] or '-')[:27]:<27} "
-                f"{row['target_domain'][:27]:<27} "
+                f"{(row['source_domain'] or '-')[:22]:<22} "
+                f"{row['target_domain'][:25]:<25} "
                 f"{(row['reason'] or '-')[:22]:<22}"
             )
             print(f"     {row['target_url']}")
+            if row.get("query_text"):
+                print(f"     provider={row.get('provider') or '-'} query={row['query_text']}")
 
         print("")
         print(
@@ -276,6 +299,26 @@ def main() -> int:
             data["crawl"]["max_pages_total"] = args.max_pages
             project = project.model_validate(data)
 
+        if args.max_domains is not None:
+            data = project.model_dump()
+            data["crawl"]["max_domains"] = args.max_domains
+            project = project.model_validate(data)
+
+        if args.max_pages_per_domain is not None:
+            data = project.model_dump()
+            data["crawl"]["max_pages_per_domain"] = args.max_pages_per_domain
+            project = project.model_validate(data)
+
+        if args.search_provider is not None:
+            data = project.model_dump()
+            data["search"]["provider"] = args.search_provider
+            project = project.model_validate(data)
+
+        if args.max_search_queries is not None:
+            data = project.model_dump()
+            data["search"]["max_queries"] = args.max_search_queries
+            project = project.model_validate(data)
+
         if args.mode is not None:
             data = project.model_dump()
             data["crawl"]["mode"] = args.mode
@@ -297,7 +340,7 @@ def main() -> int:
             else f"{project.analysis.ai_provider}/{settings.gemini_model}"
         )
 
-        print("🚀 Sprīdītis 3.2.0-alpha.3 sāk pētījumu")
+        print("🚀 Sprīdītis 3.3.0-alpha.1 sāk pētījumu")
         print(f"   Projekts: {project.name}")
         print(f"   ID: {project.id}")
         print(f"   Tips: {project.research_type}")
@@ -305,6 +348,9 @@ def main() -> int:
         print(f"   Max lapas: {project.crawl.max_pages_total}")
         print(f"   Max domēni: {project.crawl.max_domains}")
         print(f"   AI: {ai_state}")
+        if project.crawl.mode == "expedition":
+            print(f"   SearchProvider: {project.search.provider}")
+            print(f"   Max search queries: {project.search.max_queries}")
         print(f"   DB: {settings.db_path}")
 
         artifacts = run_project(
@@ -334,6 +380,13 @@ def main() -> int:
             print(
                 f"      {status}: "
                 f"{artifacts.domain_status_counts.get(status, 0)}"
+            )
+        if project.crawl.mode == "expedition":
+            print(
+                f"   Search: {artifacts.search_queries_issued} vaicājumi / "
+                f"{artifacts.search_results_seen} rezultāti / "
+                f"{artifacts.search_domains_activated} aktivizēti domēni / "
+                f"{artifacts.search_provider_errors} kļūdas"
             )
         print(f"   Atskaite: {artifacts.report_path.resolve()}")
         return 0

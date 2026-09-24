@@ -82,6 +82,9 @@ class AppSettings:
     user_agent: str
     request_timeout_seconds: int
 
+    searxng_base_url: str = ""
+    searxng_timeout_seconds: int = 15
+
 
 def load_settings() -> AppSettings:
     load_dotenv()
@@ -109,7 +112,9 @@ def load_settings() -> AppSettings:
         send_email=_bool("SEND_EMAIL", False),
         user_agent=os.getenv(
             "USER_AGENT",
-            "SpriditisResearchBot/3.2 (+market research)",
+            "SpriditisResearchBot/3.3 (+market research)",
         ).strip(),
         request_timeout_seconds=_int("REQUEST_TIMEOUT_SECONDS", 15),
+        searxng_base_url=os.getenv("SEARXNG_BASE_URL", "").strip(),
+        searxng_timeout_seconds=max(1, _int("SEARXNG_TIMEOUT_SECONDS", 15)),
     )

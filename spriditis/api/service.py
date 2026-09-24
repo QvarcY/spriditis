@@ -10,6 +10,7 @@ from spriditis.core.projects import ResearchProject
 from spriditis.crawler.engine import ResearchCrawler
 from spriditis.mailer import send_html_report
 from spriditis.reports.html import generate_html_report, save_html_report
+from spriditis.search.factory import build_search_provider
 from spriditis.storage.database import Database
 
 
@@ -23,6 +24,10 @@ class RunArtifacts:
     crawled_domain_count: int
     domain_status_counts: dict[str, int]
     activated_domain_count: int = 0
+    search_queries_issued: int = 0
+    search_results_seen: int = 0
+    search_domains_activated: int = 0
+    search_provider_errors: int = 0
     database_migrated_from: Path | None = None
 
     @property
@@ -53,7 +58,13 @@ def run_project(
             project,
             force_no_ai=force_no_ai,
         )
-        crawler = ResearchCrawler(settings, project, ai)
+        search_provider = build_search_provider(settings, project)
+        crawler = ResearchCrawler(
+            settings,
+            project,
+            ai,
+            search_provider=search_provider,
+        )
         result = crawler.crawl()
 
         for entity in result.entities:
@@ -93,6 +104,10 @@ def run_project(
                 1 for item in result.domain_discoveries
                 if item.action == "activated"
             ),
+            search_queries_issued=result.search_queries_issued,
+            search_results_seen=result.search_results_seen,
+            search_domains_activated=result.search_domains_activated,
+            search_provider_errors=result.search_provider_errors,
             database_migrated_from=migrated_from,
         )
     finally:

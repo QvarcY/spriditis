@@ -102,6 +102,84 @@ class DomainRegistry:
             relevance_score=ratio,
             action=action,
             reason=reason,
+            discovered_via="external_link",
+        )
+        self.discoveries.append(discovery)
+        return record, discovery
+
+
+    def observe_search_result(
+        self,
+        *,
+        provider: str,
+        query_text: str,
+        target_url: str,
+        title: str,
+        snippet: str,
+        raw_score: int,
+    ) -> tuple[DomainRecord, DomainDiscovery]:
+        target_domain = host_key(target_url)
+        ratio = score_to_ratio(raw_score)
+        safe, safety_reason = url_safety_reason(target_url)
+
+        if not safe:
+            status = "blocked"
+            action = "blocked"
+            reason = safety_reason
+        elif target_domain in self.records and self.records[target_domain].status == "active":
+            status = "active"
+            action = "known"
+            reason = "already_active"
+        elif self.project.crawl.mode != "expedition":
+            status = "candidate"
+            action = "recorded"
+            reason = "not_expedition_mode"
+        elif raw_score < self.project.search.result_threshold:
+            status = "candidate"
+            action = "recorded"
+            reason = "below_search_threshold"
+        elif self.active_count >= self.project.crawl.max_domains:
+            status = "candidate"
+            action = "recorded"
+            reason = "domain_budget_reached"
+        else:
+            status = "active"
+            action = "activated"
+            reason = "search_relevance_threshold"
+
+        record = self._get_or_create(
+            target_domain,
+            status=status,
+            discovered_via="search_provider",
+            discovered_from_url="",
+            relevance_score=ratio,
+        )
+
+        if record.status != "active":
+            record.status = status
+        record.relevance_score = max(record.relevance_score, ratio)
+        record.last_seen = utc_now()
+
+        if action == "activated" and record.discovered_via != "seed":
+            record.discovered_via = "search_provider"
+            record.discovered_from_url = ""
+
+        if not record.reason or status in {"blocked", "active"}:
+            record.reason = reason
+
+        evidence_text = " ".join(part for part in [title, snippet] if part).strip()
+        discovery = DomainDiscovery(
+            source_domain="",
+            target_domain=target_domain,
+            source_url="",
+            target_url=target_url,
+            anchor_text=evidence_text[:500],
+            relevance_score=ratio,
+            action=action,
+            reason=reason,
+            discovered_via="search_provider",
+            provider=provider,
+            query_text=query_text[:500],
         )
         self.discoveries.append(discovery)
         return record, discovery

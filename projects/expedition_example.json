@@ -1,0 +1,39 @@
+{
+  "id": "office_chairs_expedition",
+  "name": "Office chair market expedition",
+  "description": "Generic example for active source discovery.",
+  "research_type": "product_market",
+  "entity_type": "product",
+  "languages": ["en"],
+  "countries": ["LV"],
+  "keywords": ["ergonomic office chair", "lumbar support", "mesh chair"],
+  "negative_keywords": ["repair manual", "spare parts"],
+  "seed_urls": [],
+  "crawl": {
+    "mode": "expedition",
+    "max_pages_total": 20,
+    "max_pages_per_domain": 4,
+    "max_domains": 4,
+    "max_depth": 3,
+    "delay_seconds": 1.5,
+    "respect_robots": true,
+    "external_link_threshold": 45,
+    "discover_sitemaps": true,
+    "max_sitemap_urls_per_domain": 50
+  },
+  "search": {
+    "provider": "searxng",
+    "max_queries": 4,
+    "results_per_query": 8,
+    "result_threshold": 35,
+    "safesearch": 1,
+    "queries": []
+  },
+  "analysis": {
+    "ai_enabled": false,
+    "ai_provider": "none",
+    "min_relevance_score": 0.35,
+    "categories": ["chair"],
+    "desired_attributes": []
+  }
+}

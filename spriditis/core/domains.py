@@ -49,4 +49,7 @@ class DomainDiscovery(BaseModel):
     relevance_score: float = Field(default=0.0, ge=0.0, le=1.0)
     action: str = "recorded"
     reason: str = ""
+    discovered_via: str = "external_link"
+    provider: str = ""
+    query_text: str = ""
     discovered_at: str = Field(default_factory=utc_now)

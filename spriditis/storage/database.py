@@ -11,7 +11,7 @@ from spriditis.core.projects import ResearchProject
 from spriditis.core.run import ResearchRunResult
 
 
-CURRENT_SCHEMA_VERSION = 2
+CURRENT_SCHEMA_VERSION = 3
 
 
 SCHEMA = """
@@ -36,6 +36,10 @@ CREATE TABLE IF NOT EXISTS runs (
     skipped_by_robots INTEGER DEFAULT 0,
     entities_found INTEGER DEFAULT 0,
     domains_found INTEGER DEFAULT 0,
+    search_queries_issued INTEGER DEFAULT 0,
+    search_results_seen INTEGER DEFAULT 0,
+    search_domains_activated INTEGER DEFAULT 0,
+    search_provider_errors INTEGER DEFAULT 0,
     FOREIGN KEY(project_id) REFERENCES projects(project_id)
 );
 
@@ -118,6 +122,9 @@ CREATE TABLE IF NOT EXISTS domain_discoveries (
     relevance_score REAL DEFAULT 0,
     action TEXT,
     reason TEXT,
+    discovered_via TEXT NOT NULL DEFAULT 'external_link',
+    provider TEXT DEFAULT '',
+    query_text TEXT DEFAULT '',
     discovered_at TEXT NOT NULL,
     FOREIGN KEY(run_id) REFERENCES runs(id)
 );
@@ -234,6 +241,42 @@ class Database:
             "domains",
             "sitemap_urls_found",
             "INTEGER NOT NULL DEFAULT 0",
+        )
+
+        self._ensure_column(
+            "runs",
+            "search_queries_issued",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
+        self._ensure_column(
+            "runs",
+            "search_results_seen",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
+        self._ensure_column(
+            "runs",
+            "search_domains_activated",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
+        self._ensure_column(
+            "runs",
+            "search_provider_errors",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
+        self._ensure_column(
+            "domain_discoveries",
+            "discovered_via",
+            "TEXT NOT NULL DEFAULT 'external_link'",
+        )
+        self._ensure_column(
+            "domain_discoveries",
+            "provider",
+            "TEXT DEFAULT ''",
+        )
+        self._ensure_column(
+            "domain_discoveries",
+            "query_text",
+            "TEXT DEFAULT ''",
         )
 
         self.conn.execute(
@@ -396,7 +439,7 @@ class Database:
             existing = self.conn.execute(
                 """
                 SELECT first_seen, pages_seen, entities_found,
-                       sitemap_urls_found
+                       sitemap_urls_found, status, reason
                 FROM domains
                 WHERE project_id=? AND domain=?
                 """,
@@ -407,6 +450,21 @@ class Database:
             previous_pages = int(existing[1]) if existing else 0
             previous_entities = int(existing[2]) if existing else 0
             previous_sitemap_urls = int(existing[3]) if existing else 0
+
+            persisted_status = record.status
+            persisted_reason = record.reason
+            if existing and len(existing) >= 6:
+                old_status = existing[4]
+                old_reason = existing[5] or ""
+                if old_status == "blocked":
+                    persisted_status = "blocked"
+                    persisted_reason = old_reason or record.reason
+                elif old_status == "rejected" and record.status != "active":
+                    persisted_status = "rejected"
+                    persisted_reason = old_reason or record.reason
+                elif old_status == "active" and record.status == "candidate":
+                    persisted_status = "active"
+                    persisted_reason = old_reason or record.reason
 
             self.conn.execute(
                 """
@@ -461,7 +519,7 @@ class Database:
                 (
                     project.id,
                     record.domain,
-                    record.status,
+                    persisted_status,
                     record.discovered_via,
                     record.discovered_from_url,
                     record.relevance_score,
@@ -473,7 +531,7 @@ class Database:
                     first_seen,
                     record.last_seen,
                     record.last_crawled,
-                    record.reason,
+                    persisted_reason,
                     previous_pages + record.pages_seen,
                     previous_entities + record.entities_found,
                 ),
@@ -485,9 +543,10 @@ class Database:
                 INSERT INTO domain_discoveries(
                     project_id, run_id, source_domain, target_domain,
                     source_url, target_url, anchor_text, relevance_score,
-                    action, reason, discovered_at
+                    action, reason, discovered_via, provider, query_text,
+                    discovered_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     project.id,
@@ -500,6 +559,9 @@ class Database:
                     discovery.relevance_score,
                     discovery.action,
                     discovery.reason,
+                    discovery.discovered_via,
+                    discovery.provider,
+                    discovery.query_text,
                     discovery.discovered_at,
                 ),
             )
@@ -573,7 +635,8 @@ class Database:
         sql = """
         SELECT id, run_id, source_domain, target_domain,
                source_url, target_url, anchor_text,
-               relevance_score, action, reason, discovered_at
+               relevance_score, action, reason, discovered_via,
+               provider, query_text, discovered_at
         FROM domain_discoveries
         WHERE project_id=?
         """
@@ -598,6 +661,9 @@ class Database:
             "relevance_score",
             "action",
             "reason",
+            "discovered_via",
+            "provider",
+            "query_text",
             "discovered_at",
         ]
         return [dict(zip(keys, row)) for row in rows]
@@ -636,7 +702,11 @@ class Database:
                 failed_pages=?,
                 skipped_by_robots=?,
                 entities_found=?,
-                domains_found=?
+                domains_found=?,
+                search_queries_issued=?,
+                search_results_seen=?,
+                search_domains_activated=?,
+                search_provider_errors=?
             WHERE id=?
             """,
             (
@@ -646,6 +716,10 @@ class Database:
                 result.skipped_by_robots,
                 len(result.entities),
                 len(result.discovered_domains),
+                result.search_queries_issued,
+                result.search_results_seen,
+                result.search_domains_activated,
+                result.search_provider_errors,
                 run_id,
             ),
         )

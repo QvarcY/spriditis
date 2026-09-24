@@ -13,6 +13,8 @@ from spriditis.config import AppSettings
 from spriditis.core.projects import ResearchProject
 from spriditis.core.run import ResearchRunResult
 from spriditis.extraction.engine import extract_entities
+from spriditis.search.base import SearchProvider, SearchProviderError
+from spriditis.search.query import build_search_queries
 
 from .discovery import DomainRegistry, SitemapDiscovery
 from .frontier import URLFrontier
@@ -31,10 +33,12 @@ class ResearchCrawler:
         settings: AppSettings,
         project: ResearchProject,
         ai: AIProvider,
+        search_provider: SearchProvider | None = None,
     ):
         self.settings = settings
         self.project = project
         self.ai = ai
+        self.search_provider = search_provider
 
         self.session = requests.Session()
         self.session.headers.update(
@@ -78,7 +82,14 @@ class ResearchCrawler:
                 registry.add_seed(url)
                 frontier.add(url, priority=100, depth=0)
 
-        if not seeds:
+        if self.project.crawl.mode == "expedition":
+            self._seed_from_search(frontier, registry, result)
+
+        if not frontier:
+            if self.project.crawl.mode == "expedition":
+                raise ValueError(
+                    "Expedition neieguva nevienu derīgu sākuma URL no seed vai SearchProvider."
+                )
             raise ValueError("Projektam nav neviena derīga seed URL.")
 
         while (
@@ -317,6 +328,88 @@ class ResearchCrawler:
         result.domain_discoveries = registry.discoveries
         result.finished_at = datetime.now(timezone.utc).isoformat()
         return result
+
+    def _seed_from_search(
+        self,
+        frontier: URLFrontier,
+        registry: DomainRegistry,
+        result: ResearchRunResult,
+    ):
+        if self.search_provider is None:
+            raise ValueError(
+                "Expedition režīmam vajadzīgs SearchProvider. "
+                "Norādi project.search.provider vai izmanto provider injekciju testos."
+            )
+
+        queries = build_search_queries(self.project)
+        if not queries:
+            raise ValueError(
+                "Expedition režīmam nav neviena search query. "
+                "Pievieno keywords vai search.queries."
+            )
+
+        language = self.project.languages[0] if self.project.languages else "all"
+
+        print("")
+        print(
+            f"🔎 Expedition: {self.search_provider.name} · "
+            f"{len(queries)} vaicājumi"
+        )
+
+        for query in queries:
+            result.search_queries_issued += 1
+            print(f"   🔍 {query.query}")
+
+            try:
+                hits = self.search_provider.search(
+                    query.query,
+                    language=language,
+                    limit=self.project.search.results_per_query,
+                    safesearch=self.project.search.safesearch,
+                )
+            except SearchProviderError as exc:
+                result.search_provider_errors += 1
+                print(f"   ⚠️ SearchProvider kļūda: {exc}")
+                continue
+
+            for hit in hits:
+                result.search_results_seen += 1
+                normalized = normalize_url(hit.url)
+                if not normalized:
+                    continue
+
+                evidence = " ".join(
+                    part for part in [hit.title, hit.snippet] if part
+                )
+                score = text_relevance_score(
+                    self.project,
+                    normalized,
+                    evidence,
+                )
+
+                record, discovery = registry.observe_search_result(
+                    provider=self.search_provider.name,
+                    query_text=query.query,
+                    target_url=normalized,
+                    title=hit.title,
+                    snippet=hit.snippet,
+                    raw_score=score,
+                )
+
+                if discovery.action == "activated":
+                    result.search_domains_activated += 1
+                    print(
+                        f"      🧭 Search domēns aktivizēts: "
+                        f"{record.domain} (score={record.relevance_score:.2f})"
+                    )
+
+                if record.status == "active":
+                    frontier.add(
+                        normalized,
+                        priority=80 + score,
+                        depth=0,
+                        source_url="",
+                    )
 
     def _enrich_entities(self, result: ResearchRunResult):
         if not result.entities:

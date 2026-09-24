@@ -1,54 +1,26 @@
 # Changelog
 
-## [3.2.0-alpha.3]
+## [3.3.0-alpha.1]
 
 ### Added
-- persistent CLI view of the discovery audit trail
-- `discoveries --action ...` filtering
-- activated-domain count in run summaries
-- controlled offline multi-domain crawler integration test
-
-### Validated
-- relevant external domain can move from unseen → active → crawled
-- domain-budget overflow remains a candidate with `domain_budget_reached`
-- blocked social domains cannot activate even with high relevance
-- per-domain page budget prevents extra pages from being crawled
-- discovery activation is preserved as an auditable event
-
-## [3.2.0-alpha.2]
-
-### Added
-- schema migration foundation (`PRAGMA user_version` + schema metadata)
-- safe SQLite backup migration command
-- sitemap URL counts per domain
-- detailed Domain Registry view
+- provider-neutral SearchProvider abstraction
+- deterministic Expedition query generator
+- SearXNG JSON API provider
+- offline FakeSearchProvider
+- true zero-seed Expedition bootstrap
+- search-provider provenance in domain discoveries
+- search query/result/activation/error run counters
+- `queries` CLI command
+- run overrides for search provider and domain/search budgets
+- Windows-friendly direct test bootstrap
 
 ### Changed
-- default DB path is now version-neutral: `data/spriditis.db`
-- copied legacy default `DB_PATH=data/spriditis_v31.db` is treated as a migration source
-- run summary distinguishes observed domains from crawled domains
-- filtered Domain Registry empty states now identify the requested status
-- README examples are generic and bilingual
+- database schema version is now 3
+- persistent Domain Registry protects sticky blocked/rejected states and avoids active → candidate downgrades
+- report footer includes active-search counters
 
-### Fixed
-- ambiguous `Domēni: N` run summary
-- ambiguous empty-state message for `domains --status ...`
-
-## [3.2.0-alpha.1]
-
-### Added
-- first-class Domain Registry
-- candidate/active/blocked/failed domain states
-- external-domain discovery lineage
-- per-domain relevance score and crawl statistics
-- robots/sitemap status tracking
-- sitemap discovery from robots.txt and `/sitemap.xml`
-- sitemap URL injection into the frontier
-- persistent `domains` and `domain_discoveries` SQLite tables
-- `python main.py domains --project ...` CLI view
-- external candidates are recorded even when domain mode prevents crawling them
-
-### Architecture
-- domain discovery remains crawler-side and DB-agnostic
-- persistence happens through the service/storage layer
-- this creates the foundation for a future UI and active SearchProvider/Expedition mode
+### Validation target
+- a project with no seed URLs can generate a query, receive search results, activate a safe/relevant domain, and crawl it
+- a second relevant domain remains a candidate when the domain budget is full
+- blocked hosts remain blocked even when returned by SearchProvider
+- provider and query provenance remain auditable

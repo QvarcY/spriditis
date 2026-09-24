@@ -32,6 +32,15 @@ class CrawlConfig(BaseModel):
     max_sitemap_urls_per_domain: int = Field(default=100, ge=0, le=5000)
 
 
+class SearchConfig(BaseModel):
+    provider: Literal["none", "searxng"] = "none"
+    max_queries: int = Field(default=4, ge=0, le=50)
+    results_per_query: int = Field(default=8, ge=1, le=100)
+    result_threshold: int = Field(default=35, ge=0, le=100)
+    safesearch: Literal[0, 1, 2] = 1
+    queries: list[str] = Field(default_factory=list)
+
+
 class AnalysisConfig(BaseModel):
     ai_enabled: bool = True
     ai_provider: Literal["gemini", "none"] = "gemini"
@@ -56,6 +65,7 @@ class ResearchProject(BaseModel):
     seed_urls: list[str] = Field(default_factory=list)
 
     crawl: CrawlConfig = Field(default_factory=CrawlConfig)
+    search: SearchConfig = Field(default_factory=SearchConfig)
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
 
     @field_validator("id")
@@ -233,7 +243,7 @@ def load_project(path: Path) -> ResearchProject:
     if project.research_type not in IMPLEMENTED_RESEARCH_TYPES:
         raise NotImplementedError(
             f"Research type '{project.research_type}' ir definēts, "
-            "bet 3.1 alpha vēl nav izpildāms."
+            "bet šajā alpha vēl nav izpildāms."
         )
     return project
 

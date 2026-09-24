@@ -164,7 +164,7 @@ td,th {{ padding:10px;border-bottom:1px solid var(--line);text-align:left }}
 <body>
 <div class="wrap">
 <header class="hero">
-  <h1>Sprīdītis 3.2</h1>
+  <h1>Sprīdītis 3.3</h1>
   <h2>{escape(project.name)}</h2>
   <p>{escape(project.description)}</p>
   <p class="muted">
@@ -209,6 +209,8 @@ td,th {{ padding:10px;border-bottom:1px solid var(--line);text-align:left }}
 
 <p class="muted">
   failed={result.failed_pages} · robots_skipped={result.skipped_by_robots} ·
+  search_queries={result.search_queries_issued} · search_results={result.search_results_seen} ·
+  search_activated={result.search_domains_activated} · search_errors={result.search_provider_errors} ·
   kopā atrasti={len(result.entities)}
 </p>
 </div>
