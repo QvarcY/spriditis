@@ -566,6 +566,14 @@ class ResearchCrawler:
 
                 if not is_external:
                     priority += 15
+                    penalty = self._source_diversity_penalty(
+                        final_domain,
+                        registry,
+                    )
+                    if penalty:
+                        priority -= penalty
+                        result.diversity_penalties_applied += 1
+                        result.diversity_domains_penalized.add(final_domain)
 
                 frontier.add(
                     absolute,
@@ -613,6 +621,21 @@ class ResearchCrawler:
         result.domain_discoveries = registry.discoveries
         result.finished_at = datetime.now(timezone.utc).isoformat()
         return result
+
+    def _source_diversity_penalty(
+        self,
+        domain: str,
+        registry: DomainRegistry,
+    ) -> int:
+        cap = self.project.crawl.entity_diversity_soft_cap
+        if cap <= 0:
+            return 0
+
+        record = registry.records.get(domain)
+        if record is None or record.entities_found < cap:
+            return 0
+
+        return self.project.crawl.entity_diversity_priority_penalty
 
     def _discovery_activation_block_reason(
         self,
