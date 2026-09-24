@@ -26,7 +26,7 @@
 
 # Latviski
 
-## ✅ Pašreizējā publiskā bāze — 3.3.0-alpha.1
+## ✅ Pašreizējā publiskā bāze — 3.3.0-alpha.2
 
 Ieviests un publiski pieejams:
 
@@ -52,9 +52,9 @@ Ieviests un publiski pieejams:
 - search skaitītāji;
 - integrācijas tests `search → activation → crawl`.
 
-## 🧪 3.3.0-alpha.2 — SearchProvider stabilizācija
+## ✅ 3.3.0-alpha.2 — SearchProvider stabilizācija
 
-Lokāli ieviests un validēts; nākamais solis ir publicēšana.
+Publicēts un validēts.
 
 - retry/backoff transient kļūdām;
 - `Retry-After`;
@@ -228,7 +228,7 @@ Tas ir **Research Memory + Adaptive Discovery + Evidence Confidence + Incrementa
 
 # English
 
-## ✅ Current public baseline — 3.3.0-alpha.1
+## ✅ Current public baseline — 3.3.0-alpha.2
 
 Implemented and public:
 
@@ -254,9 +254,9 @@ Implemented and public:
 - search counters;
 - `search → activation → crawl` integration coverage.
 
-## 🧪 3.3.0-alpha.2 — SearchProvider hardening
+## ✅ 3.3.0-alpha.2 — SearchProvider hardening
 
-Implemented and validated locally; publication is next.
+Published and validated.
 
 - retry/backoff for transient provider failures;
 - `Retry-After`;

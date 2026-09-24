@@ -25,9 +25,9 @@
 
 | | Status |
 |---|---|
-| **Publiskā versija / Public baseline** | ✅ `v3.3.0-alpha.1` — SearchProvider + zero-seed Expedition |
-| **Šobrīd / Current work** | 🧪 `3.3.0-alpha.2` — SearchProvider reliability + dedupe; locally validated, preparing publication |
-| **Nākamais / Next** | 🚧 `3.3.0-alpha.3` — Feed Discovery & Incremental Monitoring |
+| **Publiskā versija / Public baseline** | ✅ `v3.3.0-alpha.2` — SearchProvider hardening + dedupe |
+| **Šobrīd / Current work** | 🚧 `3.3.0-alpha.3` — Feed Discovery & Incremental Monitoring |
+| **Nākamais / Next** | 🧭 `3.3.0-alpha.4` — Research Memory |
 | **Galvenais virziens / North star** | 🧠 **Research Memory + Adaptive Discovery** |
 | **Pamatprincips / Core principle** | 🔎 **source-backed facts > AI guesses** |
 | **Izmaksu princips / Cost direction** | 🌱 Priekšroka lokāliem, atvērtiem, pašhostējamiem un bezmaksas risinājumiem / Prefer local, open, self-hostable and zero-cost building blocks |
@@ -49,7 +49,7 @@
 | ✅ | **3.1** | Configurable research core | `ResearchProject`, generic entities, structured extraction, optional AI enrichment |
 | ✅ | **3.2** | Domain Registry + Discovery Engine | persistent domain memory, sitemap discovery, controlled multi-domain crawling, DB migrations |
 | ✅ | **3.3.0-alpha.1** | SearchProvider + zero-seed Expedition | provider abstraction, query generation, search provenance, search → activation → crawl |
-| 🧪 | **3.3.0-alpha.2** | SearchProvider hardening | retry/backoff, `Retry-After`, structured provider errors, result dedupe, `search-check`, schema v4 |
+| ✅ | **3.3.0-alpha.2** | SearchProvider hardening | retry/backoff, `Retry-After`, structured provider errors, result dedupe, `search-check`, schema v4 |
 | 🚧 | **3.3.0-alpha.3** | Feed Discovery & Incremental Monitoring | RSS 2.0, Atom, JSON Feed, autodiscovery, ETag / Last-Modified, feed provenance |
 | 🧭 | **3.3.0-alpha.4** | Research Memory | query/source yield, source profiles, provenance, `explain` + `trace`, freshness/staleness |
 | 🧭 | **3.3.0-alpha.5** | Adaptive Expedition | BM25, query prioritization, coverage saturation, per-depth budgets, multi-hop, source diversity |
@@ -396,13 +396,13 @@ Sprīdīti nevajadzētu izmantot autentifikācijas, piekļuves kontroles, paywal
 
 ### Projekta statuss
 
-Pašreizējais publiskais atskaites punkts: **Sprīdītis 3.3.0-alpha.1**.
+Pašreizējais publiskais atskaites punkts: **Sprīdītis 3.3.0-alpha.2**.
 
 Šajā pieturas punktā Sprīdītim pirmo reizi ir īsts Expedition starts: projekts var sākties bez neviena seed URL, ģenerēt deterministiskus meklēšanas vaicājumus, saņemt rezultātus caur provider-neatkarīgu SearchProvider, piemērot esošos drošības, relevances un domēnu budžeta noteikumus, aktivizēt derīgu domēnu un to pārmeklēt.
 
 Pašlaik ir pieejams offline fake provideris deterministiskiem testiem un SearXNG JSON API provideris reālai meklēšanas integrācijai. Providera un vaicājuma izcelsme tiek saglabāta auditam un neapiet Domain Registry.
 
-**3.3.0-alpha.2** SearchProvider stabilizācijas darbi ir lokāli pārbaudīti un tiek gatavoti publicēšanai. Nākamais apstiprinātais pieturas punkts ir **3.3.0-alpha.3 — Feed Discovery & Incremental Monitoring**.
+**3.3.0-alpha.2** nostiprina SearchProvider slāni ar retry/backoff, `Retry-After`, strukturētām providera kļūdām, search rezultātu deduplikāciju, raw/unique/duplicate skaitītājiem, nederīgu non-HTTP(S) rezultātu agrīnu atmešanu, `search-check` komandu un DB shēmu v4. Nākamais aktīvais pieturas punkts ir **3.3.0-alpha.3 — Feed Discovery & Incremental Monitoring**.
 
 Šis ir alpha projekts, tāpēc līdz stabilai versijai iespējamas arī nesavietojamas izmaiņas.
 
@@ -696,13 +696,13 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ### Project status
 
-Current public baseline: **Sprīdītis 3.3.0-alpha.1**.
+Current public baseline: **Sprīdītis 3.3.0-alpha.2**.
 
 This checkpoint adds the first true Expedition bootstrap. A project can start with zero seed URLs, generate deterministic search queries, receive results through a provider-neutral SearchProvider, apply the existing safety/relevance/domain-budget rules, activate an eligible domain and crawl it.
 
 The current implementation includes an offline fake provider for deterministic validation and a SearXNG JSON API provider for real search integration. Search-provider and query provenance are kept auditable instead of bypassing the Domain Registry.
 
-The SearchProvider-hardening work for **3.3.0-alpha.2** has been validated locally and is being prepared for publication. The next accepted milestone is **3.3.0-alpha.3 — Feed Discovery & Incremental Monitoring**.
+**3.3.0-alpha.2** hardens the SearchProvider layer with retry/backoff, `Retry-After`, structured provider errors, result deduplication, raw/unique/duplicate counters, early rejection of invalid non-HTTP(S) results, the `search-check` command, and database schema v4. The next active milestone is **3.3.0-alpha.3 — Feed Discovery & Incremental Monitoring**.
 
 This is alpha software. Expect breaking changes before a stable release.
 

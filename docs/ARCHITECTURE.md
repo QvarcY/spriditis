@@ -1,6 +1,6 @@
 # Sprīdītis — arhitektūra / Architecture
 
-Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.1**
+Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.2**
 
 > **Latviski pirmajā vietā, angļu valoda zemāk. / Latvian first, English below.**
 
@@ -55,6 +55,8 @@ URL frontier, normalizācija, drošības politika, robots, crawl dziļums/budže
 
 ### `spriditis/search`
 Provider-neatkarīgs `SearchProvider`, query ģenerēšana, search rezultātu modeļi, FakeSearchProvider testiem un SearXNG provideris.
+
+3.3.0-alpha.2 papildus nostiprina šo slāni ar transient kļūdu retry/backoff, `Retry-After`, strukturētām providera kļūdām un rezultātu deduplikāciju starp query. `search-check` ļauj pārbaudīt providera konfigurāciju pirms pilna crawl.
 
 Search rezultāti nedrīkst apiet Domain Registry vai crawlera drošības politiku.
 
@@ -204,6 +206,8 @@ URL frontier, normalization, safety policy, robots handling, crawl depth/budgets
 
 ### `spriditis/search`
 Provider-neutral `SearchProvider`, query generation, search-result models, FakeSearchProvider for tests and SearXNG provider.
+
+3.3.0-alpha.2 further hardens this layer with transient-error retry/backoff, `Retry-After`, structured provider errors and result deduplication across queries. `search-check` validates provider configuration before a full crawl.
 
 Search results must not bypass Domain Registry or crawler safety policy.
 
