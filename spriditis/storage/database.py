@@ -2984,6 +2984,8 @@ class Database:
             (project_id, run_id),
         ).fetchall()
 
+        feed_snapshot_rows = self.feed_snapshots(project_id, run_id)
+
         return {
             "run": {
                 "id": run[0],
@@ -3085,6 +3087,7 @@ class Database:
                 }
                 for row in observation_rows
             ],
+            "feed_snapshots": feed_snapshot_rows,
         }
 
     def load_domain_states(
