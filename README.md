@@ -26,7 +26,7 @@
 | | Status |
 |---|---|
 | **Publiskā versija / Public baseline** | ✅ `v3.3.0-alpha.7` — Fallback Extraction + Evidence Confidence |
-| **Šobrīd / Current work** | 🚧 `3.3.0-alpha.8` — Change Detection |
+| **Šobrīd / Current work** | 🧪 `3.3.0-alpha.8` — Change Detection validation |
 | **Galvenais virziens / North star** | 🧠 **Research Memory + Adaptive Discovery** |
 | **Pamatprincips / Core principle** | 🔎 **source-backed facts > AI guesses** |
 | **Izmaksu princips / Cost direction** | 🌱 Priekšroka lokāliem, atvērtiem, pašhostējamiem un bezmaksas risinājumiem / Prefer local, open, self-hostable and zero-cost building blocks |
@@ -54,7 +54,7 @@
 | ✅ | **3.3.0-alpha.5** | Adaptive Expedition | Research Memory-driven query/source priority, local BM25, adaptive stopping, multi-hop budgets, source diversity, persisted Decision Trace |
 | ✅ | **3.3.0-alpha.6** | Entity Resolution | deterministic cross-source identity, canonical clusters, resolution audit, guarded merge, review queue, cluster explain |
 | ✅ | **3.3.0-alpha.7** | Fallback Extraction + Evidence Confidence | JSON-LD → microdata → OpenGraph → conservative DOM fallback, field provenance/confidence, schema v11, evidence-quality inspection |
-| 🚧 | **3.3.0-alpha.8** | Change Detection | price/new/disappeared events, source/domain changes, `diff` between runs |
+| 🧪 | **3.3.0-alpha.8** | Change Detection | entity/price/field/source/domain/feed lifecycle events, historical provenance, `diff` between runs |
 | 🧭 | **3.3.0-alpha.9** | Watch mode | incremental repeated research, scheduling hooks, change-only output, JSONL export |
 | 🧭 | **3.3.0-alpha.10** | Async crawler | bounded concurrency, adaptive politeness, faster crawling without abandoning safety |
 
