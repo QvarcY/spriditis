@@ -26,7 +26,7 @@
 
 # Latviski
 
-## ✅ Pašreizējā publiskā bāze — 3.3.0-alpha.5
+## ✅ Pašreizējā publiskā bāze — 3.3.0-alpha.7
 
 Ieviests un publiski pieejams:
 
@@ -198,19 +198,34 @@ Dizaina robežas:
 
 Pilnais alpha7 regression gate ir izpildīts: **43/43 deterministiskie testi iziet**.
 
-## 🚧 3.3.0-alpha.8 — Change Detection
+## 🧪 3.3.0-alpha.8 — Change Detection
 
-Mērķis: pārvērst observations jēgpilnos notikumos.
+**Statuss:** funkcionālais scope ir ieviests; notiek release validācija.
 
-- `PRICE_DROP`;
-- `PRICE_INCREASE`;
-- `NEW_ENTITY`;
-- `ENTITY_DISAPPEARED`;
-- `SOURCE_CHANGED`;
-- `DOMAIN_FAILED`;
-- `DOMAIN_RECOVERED`;
-- feed parādījās/pazuda;
-- `spriditis diff --run A --run B`.
+Mērķis: pārvērst vēsturiskos observations, page visits un feed snapshots jēgpilnos, auditējamos notikumos.
+
+Ieviests:
+
+- `NEW_ENTITY` un `ENTITY_DISAPPEARED` canonical entity līmenī;
+- `PRICE_DROP` un `PRICE_INCREASE` tikai vienam un tam pašam source entity ar vienādu valūtu;
+- `SELLER_CHANGED`, `DESCRIPTION_CHANGED` un `IMAGE_CHANGED` tikai ar atbilstošu field evidence un minimum confidence `0.70`;
+- `SOURCE_CHANGED` canonical cluster source sastāva izmaiņām;
+- `DOMAIN_FAILED` un `DOMAIN_RECOVERED` no vēsturiskajiem `page_visits`, ar konservatīvu reachable/failed/unknown semantiku;
+- HTTP 4xx nozīmē sasniedzamu serveri, bet robots/safety-only rezultāti neveido failure eventu;
+- DB schema v12 ar run-scoped `feed_snapshots`;
+- `FEED_APPEARED`, `FEED_DISAPPEARED`, `FEED_NEW_ENTRIES`, `FEED_FAILED` un `FEED_RECOVERED`;
+- feed disappearance tiek emitēts tikai tad, ja vēlākajā runā attiecīgais domēns tiešām bija sasniedzams;
+- feed change evidence sasaistās ar konkrētiem vēsturiskajiem snapshot ID un ir pārbaudāms caur run trace;
+- `spriditis diff --project ... --run-a A --run-b B [--details]`;
+- comparison basis tiek eksplicīti parādīts: historical observation snapshots + historical page visits + historical feed snapshots + current canonical membership.
+
+Dizaina robežas:
+
+- change detection neizdomā vēsturisku provenance;
+- currency mismatch neveido price eventu;
+- low-confidence, missing vai mismatched field evidence neveido field-change eventu;
+- domēns/feed netiek pasludināts par pazudušu tikai tāpēc, ka konkrētajā runā tas netika droši pārbaudīts;
+- canonical merge var mainīt identitātes skatu, bet vēsturiskie observation fakti netiek pārrakstīti.
 
 Secība paliek apzināta: **Entity Resolution → Evidence Confidence → Change Detection**.
 
