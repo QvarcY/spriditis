@@ -1,7 +1,6 @@
 # Sprīdītis — arhitektūra / Architecture
 
-Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.3**  
-Aktīvais release candidate / Active release candidate: **3.3.0-alpha.4 — Research Memory**
+Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.4 — Research Memory**
 
 > **Latviski pirmajā vietā, angļu valoda zemāk. / Latvian first, English below.**
 
