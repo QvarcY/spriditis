@@ -78,7 +78,7 @@ title_only = make_entity(
 with TemporaryDirectory() as tmp:
     db = Database(_BootstrapPath(tmp) / "spriditis.db")
     try:
-        assert db.schema_version() == 9
+        assert db.schema_version() == 10
         db.save_project(project)
         run_id = db.start_run(project)
 
