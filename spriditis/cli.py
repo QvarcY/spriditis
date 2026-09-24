@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import argparse
+import time
 from pathlib import Path
 
 from spriditis import __version__
@@ -233,6 +234,22 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Izpildīt vienu drošu watch ciklu un iziet",
     )
+    watch.add_argument(
+        "--interval-seconds",
+        type=float,
+        help=(
+            "Atkārtotā watch režīmā gaidīt tik sekundes pēc pabeigta cikla "
+            "pirms nākamā cikla (minimums 60)"
+        ),
+    )
+    watch.add_argument(
+        "--max-cycles",
+        type=int,
+        help=(
+            "Izvēles ciklu limits atkārtotam watch režīmam; "
+            "bez limita darbojas līdz Ctrl+C"
+        ),
+    )
     watch.add_argument("--no-ai", action="store_true")
     watch.add_argument(
         "--details",
@@ -305,6 +322,181 @@ def _print_domain_table(rows: list[dict], *, details: bool):
                 f"last={row['last_seen']} "
                 f"crawled={row['last_crawled'] or '-'}"
             )
+
+
+
+MIN_WATCH_INTERVAL_SECONDS = 60.0
+
+
+def _watch_schedule(
+    *,
+    once: bool,
+    interval_seconds: float | None,
+    max_cycles: int | None,
+) -> tuple[float | None, int | None]:
+    if once:
+        if interval_seconds is not None or max_cycles is not None:
+            raise ValueError(
+                "--once nevar kombinēt ar --interval-seconds vai --max-cycles."
+            )
+        return None, 1
+
+    if interval_seconds is None:
+        raise ValueError(
+            "Atkārtotam watch režīmam norādi --interval-seconds "
+            f"(minimums {int(MIN_WATCH_INTERVAL_SECONDS)})."
+        )
+    if interval_seconds < MIN_WATCH_INTERVAL_SECONDS:
+        raise ValueError(
+            "--interval-seconds nedrīkst būt mazāks par "
+            f"{int(MIN_WATCH_INTERVAL_SECONDS)}."
+        )
+    if max_cycles is not None and max_cycles < 1:
+        raise ValueError("--max-cycles jābūt vismaz 1.")
+
+    return float(interval_seconds), max_cycles
+
+
+def _run_watch_loop(
+    run_cycle,
+    *,
+    once: bool,
+    interval_seconds: float | None,
+    max_cycles: int | None,
+    sleep_fn=time.sleep,
+) -> int:
+    interval, cycle_limit = _watch_schedule(
+        once=once,
+        interval_seconds=interval_seconds,
+        max_cycles=max_cycles,
+    )
+    completed = 0
+
+    try:
+        while True:
+            cycle_number = completed + 1
+            print("")
+            print(f"WATCH CYCLE #{cycle_number} · start")
+            run_cycle(cycle_number)
+            completed += 1
+
+            if cycle_limit is not None and completed >= cycle_limit:
+                print("")
+                print(
+                    f"WATCH COMPLETE · completed_cycles={completed} · "
+                    "reason=cycle_limit"
+                )
+                return completed
+
+            assert interval is not None
+            print("")
+            print(
+                f"WATCH WAIT · next_cycle=#{completed + 1} · "
+                f"in={interval:g}s · Ctrl+C to stop"
+            )
+            sleep_fn(interval)
+    except KeyboardInterrupt:
+        print("")
+        print(
+            f"WATCH STOPPED · completed_cycles={completed} · "
+            "reason=keyboard_interrupt"
+        )
+        return completed
+
+
+def _run_watch_cycle(
+    settings,
+    project,
+    *,
+    no_ai: bool,
+    details: bool,
+) -> int:
+    from spriditis.storage.database import Database
+
+    artifacts = run_project(
+        settings,
+        project,
+        force_no_ai=no_ai,
+        send_email=False,
+    )
+
+    db = Database(
+        settings.db_path,
+        legacy_path=settings.legacy_db_path,
+    )
+    try:
+        diff = db.compare_with_previous_run(
+            project.id,
+            artifacts.run_id,
+        )
+    finally:
+        db.close()
+
+    print("")
+    print(f"WATCH RESULT · run #{artifacts.run_id}")
+
+    if diff is None:
+        print(
+            "   baseline=created · previous_completed_run=none · "
+            "changes=not_applicable"
+        )
+        return 0
+
+    before_run = diff["before_run"]
+    after_run = diff["after_run"]
+    events = diff["events"]
+    nonzero = [
+        f"{name.lower()}={count}"
+        for name, count in diff["counts"].items()
+        if count
+    ]
+
+    print(
+        f"   compared=run #{before_run['id']} → "
+        f"#{after_run['id']} · changes={len(events)}"
+    )
+    if nonzero:
+        print("   " + " · ".join(nonzero))
+
+    if not events:
+        print("   Nozīmīgas izmaiņas nav atrastas.")
+        return 0
+
+    print("")
+    print(f"CHANGES ({len(events)})")
+    for event in events:
+        print(
+            f"   {event['change_type']:<20} "
+            f"{event['title'] or event['source_url'] or '-'}"
+        )
+        if event["source_domain"]:
+            print(f"      source={event['source_domain']}")
+        if details:
+            print(
+                "      before="
+                + json.dumps(
+                    event["before"],
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+            )
+            print(
+                "      after="
+                + json.dumps(
+                    event["after"],
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+            )
+            print(
+                "      evidence="
+                + json.dumps(
+                    event["evidence"],
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+            )
+    return len(events)
 
 
 def main() -> int:
@@ -1260,109 +1452,49 @@ def main() -> int:
         return 0
 
     if args.command == "watch":
-        from spriditis.storage.database import Database
-
-        if not args.once:
-            print(
-                "Alpha9 pašlaik atbalsta drošu vienas iterācijas watch režīmu. "
-                "Izmanto --once."
-            )
-            return 2
-
         settings = load_settings()
         project = load_project(Path(args.project))
 
+        try:
+            interval, cycle_limit = _watch_schedule(
+                once=args.once,
+                interval_seconds=args.interval_seconds,
+                max_cycles=args.max_cycles,
+            )
+        except ValueError as exc:
+            print(f"Watch konfigurācijas kļūda: {exc}")
+            return 2
+
         print(f"WATCH · {project.name}")
-        print("   mode=once")
+        if args.once:
+            print("   mode=once")
+        else:
+            limit_text = (
+                str(cycle_limit)
+                if cycle_limit is not None
+                else "until_interrupt"
+            )
+            print(
+                f"   mode=repeat · interval={interval:g}s · "
+                f"cycles={limit_text}"
+            )
         print("   memory=existing research/feed/domain state")
 
-        artifacts = run_project(
-            settings,
-            project,
-            force_no_ai=args.no_ai,
-            send_email=False,
-        )
-
-        db = Database(
-            settings.db_path,
-            legacy_path=settings.legacy_db_path,
-        )
-        try:
-            try:
-                diff = db.compare_with_previous_run(
-                    project.id,
-                    artifacts.run_id,
-                )
-            except ValueError as exc:
-                print(str(exc))
-                return 1
-        finally:
-            db.close()
-
-        print("")
-        print(f"WATCH RESULT · run #{artifacts.run_id}")
-
-        if diff is None:
-            print(
-                "   baseline=created · previous_completed_run=none · "
-                "changes=not_applicable"
+        def run_cycle(cycle_number: int) -> None:
+            print(f"   cycle={cycle_number}")
+            _run_watch_cycle(
+                settings,
+                project,
+                no_ai=args.no_ai,
+                details=args.details,
             )
-            return 0
 
-        before_run = diff["before_run"]
-        after_run = diff["after_run"]
-        events = diff["events"]
-        nonzero = [
-            f"{name.lower()}={count}"
-            for name, count in diff["counts"].items()
-            if count
-        ]
-
-        print(
-            f"   compared=run #{before_run['id']} → "
-            f"#{after_run['id']} · changes={len(events)}"
+        _run_watch_loop(
+            run_cycle,
+            once=args.once,
+            interval_seconds=args.interval_seconds,
+            max_cycles=args.max_cycles,
         )
-        if nonzero:
-            print("   " + " · ".join(nonzero))
-
-        if not events:
-            print("   Nozīmīgas izmaiņas nav atrastas.")
-            return 0
-
-        print("")
-        print(f"CHANGES ({len(events)})")
-        for event in events:
-            print(
-                f"   {event['change_type']:<20} "
-                f"{event['title'] or event['source_url'] or '-'}"
-            )
-            if event["source_domain"]:
-                print(f"      source={event['source_domain']}")
-            if args.details:
-                print(
-                    "      before="
-                    + json.dumps(
-                        event["before"],
-                        ensure_ascii=False,
-                        sort_keys=True,
-                    )
-                )
-                print(
-                    "      after="
-                    + json.dumps(
-                        event["after"],
-                        ensure_ascii=False,
-                        sort_keys=True,
-                    )
-                )
-                print(
-                    "      evidence="
-                    + json.dumps(
-                        event["evidence"],
-                        ensure_ascii=False,
-                        sort_keys=True,
-                    )
-                )
         return 0
 
     if args.command == "diff":
