@@ -501,12 +501,17 @@ def main() -> int:
                 f"{'DOMAIN':<30} {'STATE':<10} {'REL':>5} "
                 f"{'RUNS':>4} {'PROD%':>6} {'PAGES':>5} "
                 f"{'ENT':>4} {'YIELD':>7} {'OK%':>6} {'FEED':>4} "
-                f"{'AGE':>7} {'FRESH':<6}"
+                f"{'AGE':>7} {'FRESH':<6} {'BASIS':<6}"
             )
-            print("-" * 123)
+            print("-" * 130)
             for row in sources:
                 age = row["stale_age_days"]
                 age_text = "-" if age is None else f"{age:.1f}d"
+                basis = {
+                    "last_useful_at": "useful",
+                    "last_crawled": "crawl",
+                    "last_seen": "seen",
+                }.get(row["stale_reference"], "-")
                 print(
                     f"{row['domain'][:30]:<30} "
                     f"{row['status']:<10} "
@@ -519,7 +524,8 @@ def main() -> int:
                     f"{row['success_rate'] * 100:>5.1f}% "
                     f"{row['feed_count']:>4} "
                     f"{age_text:>7} "
-                    f"{row['freshness']:<6}"
+                    f"{row['freshness']:<6} "
+                    f"{basis:<6}"
                 )
         return 0
 
