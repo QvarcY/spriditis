@@ -805,6 +805,15 @@ class Database:
             else:
                 supporting_signal_set.update(decision.supporting_signals)
 
+        hard_conflict_clusters = (
+            set(matches_by_cluster) & set(conflicts_by_cluster)
+        )
+        eligible_matches = {
+            key: decisions
+            for key, decisions in matches_by_cluster.items()
+            if key not in hard_conflict_clusters
+        }
+
         cluster_key = entity_key
         match_reason = "new_cluster"
         resolution_decision = "new_cluster"
@@ -816,15 +825,15 @@ class Database:
             sorted(supporting_signal_set)
         )
 
-        if len(matches_by_cluster) == 1:
-            cluster_key, decisions = next(iter(matches_by_cluster.items()))
+        if len(eligible_matches) == 1:
+            cluster_key, decisions = next(iter(eligible_matches.items()))
             selected = decisions[0]
             match_reason = selected.reason
             resolution_decision = "linked"
             resolution_reason = selected.reason
             matched_signals = selected.matched_signals
             supporting_signals = selected.supporting_signals
-        elif len(matches_by_cluster) > 1:
+        elif len(eligible_matches) > 1:
             match_reason = "ambiguous_multiple_clusters"
             resolution_decision = "deferred_ambiguous"
             resolution_reason = "ambiguous_multiple_clusters"
@@ -832,7 +841,7 @@ class Database:
                 sorted(
                     {
                         signal
-                        for decisions in matches_by_cluster.values()
+                        for decisions in eligible_matches.values()
                         for decision in decisions
                         for signal in decision.matched_signals
                     }
@@ -844,17 +853,17 @@ class Database:
                         *supporting_signal_set,
                         *(
                             signal
-                            for decisions in matches_by_cluster.values()
+                            for decisions in eligible_matches.values()
                             for decision in decisions
                             for signal in decision.supporting_signals
                         ),
                     }
                 )
             )
-        elif conflicts_by_cluster:
-            match_reason = "identity_conflict"
+        elif hard_conflict_clusters:
+            match_reason = "target_cluster_identity_conflict"
             resolution_decision = "created_separate"
-            resolution_reason = "identity_conflict"
+            resolution_reason = "target_cluster_identity_conflict"
 
         self.conn.execute(
             """
@@ -900,11 +909,15 @@ class Database:
             (linked_at, project_id, cluster_key),
         )
 
+        blocked_conflicts = {
+            key: conflicts_by_cluster[key]
+            for key in hard_conflict_clusters
+        }
         conflicting_signals = tuple(
             sorted(
                 {
                     signal
-                    for decisions in conflicts_by_cluster.values()
+                    for decisions in blocked_conflicts.values()
                     for decision in decisions
                     for signal in decision.conflicting_signals
                 }
@@ -929,11 +942,11 @@ class Database:
                 resolution_reason,
                 cluster_key,
                 json.dumps(
-                    sorted(matches_by_cluster),
+                    sorted(eligible_matches),
                     ensure_ascii=False,
                 ),
                 json.dumps(
-                    sorted(conflicts_by_cluster),
+                    sorted(hard_conflict_clusters),
                     ensure_ascii=False,
                 ),
                 json.dumps(matched_signals, ensure_ascii=False),
@@ -1012,7 +1025,10 @@ class Database:
             "("
             "r.decision='deferred_ambiguous' "
             "OR (r.decision='created_separate' "
-            "AND r.reason='identity_conflict')"
+            "AND r.reason IN ("
+            "'identity_conflict', "
+            "'target_cluster_identity_conflict'"
+            "))"
             ")",
             "c.merged_into_cluster_key=''",
         ]
@@ -1023,7 +1039,10 @@ class Database:
         elif kind == "conflict":
             filters.append(
                 "r.decision='created_separate' "
-                "AND r.reason='identity_conflict'"
+                "AND r.reason IN ("
+                "'identity_conflict', "
+                "'target_cluster_identity_conflict'"
+                ")"
             )
 
         params.append(max(1, min(int(limit), 1000)))
