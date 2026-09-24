@@ -1,7 +1,7 @@
 # Sprīdītis — arhitektūra / Architecture
 
-Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.6 — Entity Resolution**  
-Pilnībā validēts kandidāts / Fully validated candidate: **3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence**
+Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence**  
+Nākamais posms / Next milestone: **3.3.0-alpha.8 — Change Detection**
 
 > **Latviski pirmajā vietā, angļu valoda zemāk. / Latvian first, English below.**
 
@@ -235,7 +235,7 @@ Galvenās robežas:
 
 DB schema v10 uztur canonical clusterus, resolution auditu un merge auditu, nezaudējot source provenance.
 
-## Fallback Extraction + Evidence Confidence — 3.3.0-alpha.7 fully validated release candidate
+## Fallback Extraction + Evidence Confidence — 3.3.0-alpha.7 released
 
 Alpha7 paplašina deterministisko extraction slāni un padara katra fakta provenance auditējamu.
 
@@ -548,7 +548,7 @@ Key boundaries:
 
 Database schema v10 stores canonical clusters, resolution audit and merge audit without losing source provenance.
 
-## Fallback Extraction + Evidence Confidence — 3.3.0-alpha.7 fully validated release candidate
+## Fallback Extraction + Evidence Confidence — 3.3.0-alpha.7 released
 
 Alpha7 extends deterministic extraction and makes field-level provenance auditable.
 
