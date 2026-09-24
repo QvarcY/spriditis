@@ -269,7 +269,7 @@ Sprīdītis nav piesaistīts vienai nozarei. Ideja ir vienu un to pašu kodolu p
 
 ### Kas vēl nav gatavs?
 
-Pieņemtais attīstības virziens ir redzams README sākumā sadaļā **Development journey / Attīstības ceļš**. Publiskā bāze ir `3.3.0-alpha.7`; nākamais aktīvais posms ir `3.3.0-alpha.8` Change Detection, pēc tam seko Watch mode → kontrolēts async crawleris.
+Pieņemtais attīstības virziens ir redzams README sākumā sadaļā **Development journey / Attīstības ceļš**. Publiskā bāze ir `3.3.0-alpha.7`; `3.3.0-alpha.8` Change Detection funkcionālais scope ir ieviests un pašlaik tiek validēts pirms publicēšanas. Pēc tam seko Watch mode → kontrolēts async crawleris.
 
 Detalizēti skatīt [ROADMAP.md](ROADMAP.md).
 
@@ -559,7 +559,7 @@ Sprīdītis is not tied to one industry. The same core is intended to support ve
 
 The public alpha deliberately does not pretend unfinished features are complete.
 
-The accepted direction is shown in the **Development journey** above. Research Memory is published as `3.3.0-alpha.4`; the next active sequence is Adaptive Expedition → Entity Resolution → evidence-aware fallback extraction → change detection → watch mode → bounded async crawling.
+The accepted direction is shown in the **Development journey** above. The public baseline is `3.3.0-alpha.7`; the functional `3.3.0-alpha.8` Change Detection scope is implemented and currently under release validation. The next planned sequence is Watch mode → bounded async crawling.
 
 See the detailed [ROADMAP.md](ROADMAP.md).
 
