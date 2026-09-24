@@ -36,6 +36,9 @@ class RunArtifacts:
     feed_entries_new: int = 0
     feed_not_modified: int = 0
     feed_errors: int = 0
+    stop_reason: str = ""
+    diminishing_returns_streak: int = 0
+    saturation_streak: int = 0
     database_migrated_from: Path | None = None
 
     @property
@@ -134,6 +137,9 @@ def run_project(
             feed_entries_new=result.feed_entries_new,
             feed_not_modified=result.feed_not_modified,
             feed_errors=result.feed_errors,
+            stop_reason=result.stop_reason,
+            diminishing_returns_streak=result.diminishing_returns_streak,
+            saturation_streak=result.saturation_streak,
             database_migrated_from=migrated_from,
         )
     finally:
