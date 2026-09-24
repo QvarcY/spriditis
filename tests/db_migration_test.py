@@ -71,6 +71,17 @@ def main():
 
         sqlite_backup(old_db, new_db)
 
+        conn = sqlite3.connect(new_db)
+        conn.execute(
+            """
+            UPDATE domains
+            SET status='blocked', reason='blocked_path'
+            WHERE project_id='demo' AND domain='example.com'
+            """
+        )
+        conn.commit()
+        conn.close()
+
         db = Database(new_db)
         try:
             columns = db._table_columns("domains")
@@ -95,9 +106,13 @@ def main():
             assert "feed_not_modified" in run_columns
 
             row = db.conn.execute(
-                "SELECT domain FROM domains WHERE project_id='demo'"
+                """
+                SELECT domain, status, reason
+                FROM domains
+                WHERE project_id='demo'
+                """
             ).fetchone()
-            assert row == ("example.com",)
+            assert row == ("example.com", "candidate", "blocked_path")
         finally:
             db.close()
 
