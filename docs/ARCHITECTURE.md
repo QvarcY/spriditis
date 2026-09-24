@@ -1,6 +1,7 @@
 # Sprīdītis — arhitektūra / Architecture
 
-Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.3**
+Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.3**  
+Aktīvais release candidate / Active release candidate: **3.3.0-alpha.4 — Research Memory**
 
 > **Latviski pirmajā vietā, angļu valoda zemāk. / Latvian first, English below.**
 
@@ -42,13 +43,16 @@ Optional AI enrichment
              ↓
 SQLite persistence
              ↓
+Research Memory
+(memory / explain / trace)
+             ↓
 Reports / service consumers
 ```
 
 ## Galvenie slāņi
 
 ### `spriditis/core`
-Atkārtoti izmantojamie modeļi: `ResearchProject`, `MarketEntity`, run struktūras, Domain Registry ieraksti un discovery eventi.
+Atkārtoti izmantojamie modeļi: `ResearchProject`, `MarketEntity`, run struktūras, `PageVisit`, Domain Registry ieraksti un discovery eventi. Alpha4 `PageVisit` glabā URL/final URL, domēnu, source URL/type, depth, priority, outcome, HTTP statusu, content type un timestamp, lai page lineage būtu auditējams.
 
 ### `spriditis/crawler`
 URL frontier, normalizācija, drošības politika, robots, crawl dziļums/budžeti, sitemap discovery, Feed Discovery, Domain Registry lēmumi un crawl engine.
@@ -72,7 +76,9 @@ Avotiem specifiski adapteri, izolējot konkrētas vietnes īpatnības no crawler
 Izvēles MI enrichment. Crawler/extraction plūsmai jāstrādā arī bez MI.
 
 ### `spriditis/storage`
-SQLite persistence un schema evolution. Noklusējuma DB:
+SQLite persistence un schema evolution. Alpha4 izmanto DB schema v6 un pievieno `page_visits` tabulu Research Memory lineage auditam. Esošie `runs` search skaitītāji tiek izmantoti arī duplicate-rate atmiņai, tāpēc šim signālam nav vajadzīga paralēla dublējoša tabula.
+
+Noklusējuma DB:
 ```text
 data/spriditis.db
 ```
@@ -96,31 +102,47 @@ Discovery eventiem jāsaglabā provenance: source URL, target URL, relevance sig
 
 No 3.3.0-alpha.3 Domain Registry stāvoklis tiek hidratēts no SQLite **pirms** jaunā run discovery lēmumiem. `blocked` un `rejected` saglabājas sticky, `active` tiek atpazīts kā zināms, bet run-local lapu/entity skaitītāji sākas no nulles, lai vēsturiskie skaitītāji netiktu pieskaitīti atkārtoti.
 
-## Research Memory virziens
+## Research Memory — 3.3.0-alpha.4
 
-Plānotais lineage:
+Alpha4 ievieš auditējamu pieredzes slāni virs jau esošajiem run, Domain Registry, feed, entity un observation datiem.
+
+Ieviestais lineage:
 
 ```text
-query
+query / seed
  ↓
-provider
+provider / discovery source
  ↓
 domain
  ↓
 HTML link / sitemap / feed
  ↓
-page
+page visit
  ↓
-extraction method
+extraction
  ↓
 entity
  ↓
 observation
- ↓
-change
 ```
 
-Svarīgs princips: **katram nozīmīgam lēmumam jābūt izskaidrojamam.** Tāpēc `explain` un `trace` ir dabiska Research Memory saskarne.
+Research Memory saglabā atsevišķus signālus, nevis vienu opaque score:
+
+- query `productive_domain_rate`;
+- source entity yield;
+- HTTP success rate;
+- crawl runs / productive runs / productive-run rate;
+- observation count un `last_useful_at`;
+- search raw / unique / duplicate / filtered rezultātus un duplicate rate;
+- `last_seen`, `last_crawled`, `last_feed_success`, `last_useful_at` un no tiem atvasinātus freshness vecumus;
+- konfigurējamu stale slieksni un skaidru freshness basis;
+- discovery provenance un page lineage.
+
+`memory` apkopo query/search/source signālus. `explain` parāda viena domēna profilu, freshness pamatu, discovery evidence, page lineage un feed stāvokli. `trace` parāda viena run provenance; pēc noklusējuma atkārtoti discovery eventi tiek grupēti lasāmībai, bet `--full` saglabā raw audita skatu.
+
+Svarīga robeža: alpha4 **krāj un izskaidro** pieredzi. Automātiska šo signālu izmantošana prioritizācijai un stopping lēmumiem pieder alpha5 Adaptive Expedition.
+
+Svarīgs princips: **katram nozīmīgam lēmumam jābūt izskaidrojamam.**
 
 ## Feed state un HTTP resursu stāvoklis
 
@@ -197,13 +219,16 @@ Optional AI enrichment
              ↓
 SQLite persistence
              ↓
+Research Memory
+(memory / explain / trace)
+             ↓
 Reports / service consumers
 ```
 
 ## Core layers
 
 ### `spriditis/core`
-Reusable models: `ResearchProject`, `MarketEntity`, run structures, Domain Registry records and discovery events.
+Reusable models: `ResearchProject`, `MarketEntity`, run structures, `PageVisit`, Domain Registry records and discovery events. Alpha4 `PageVisit` preserves URL/final URL, domain, source URL/type, depth, priority, outcome, HTTP status, content type and timestamp so page lineage remains auditable.
 
 ### `spriditis/crawler`
 URL frontier, normalization, safety policy, robots handling, crawl depth/budgets, sitemap discovery, Feed Discovery, Domain Registry decisions and crawl engine.
@@ -227,7 +252,9 @@ Source-specific adapters isolate site quirks from crawler core.
 Optional AI enrichment. Crawling/extraction must remain usable without AI.
 
 ### `spriditis/storage`
-SQLite persistence and schema evolution. Default DB:
+SQLite persistence and schema evolution. Alpha4 uses database schema v6 and adds a `page_visits` table for Research Memory lineage auditing. Existing search counters in `runs` also back duplicate-rate memory, avoiding a parallel duplicate source of truth.
+
+Default DB:
 ```text
 data/spriditis.db
 ```
@@ -251,31 +278,47 @@ Discovery events preserve provenance: source URL, target URL, relevance signals,
 
 Since 3.3.0-alpha.3, Domain Registry state is hydrated from SQLite **before** discovery decisions for a new run. `blocked` and `rejected` remain sticky, `active` domains are recognized as known, while run-local page/entity counters start at zero so historical totals are not replayed.
 
-## Research Memory direction
+## Research Memory — 3.3.0-alpha.4
 
-Planned lineage:
+Alpha4 implements an auditable experience layer over the existing run, Domain Registry, feed, entity and observation data.
+
+Implemented lineage:
 
 ```text
-query
+query / seed
  ↓
-provider
+provider / discovery source
  ↓
 domain
  ↓
 HTML link / sitemap / feed
  ↓
-page
+page visit
  ↓
-extraction method
+extraction
  ↓
 entity
  ↓
 observation
- ↓
-change
 ```
 
-Important principle: **every important decision should be explainable.** This makes `explain` and `trace` natural interfaces over Research Memory.
+Research Memory preserves separate signals instead of collapsing them into one opaque score:
+
+- query `productive_domain_rate`;
+- source entity yield;
+- HTTP success rate;
+- crawl runs / productive runs / productive-run rate;
+- observation count and `last_useful_at`;
+- raw / unique / duplicate / filtered search results and duplicate rate;
+- `last_seen`, `last_crawled`, `last_feed_success`, `last_useful_at` and derived freshness ages;
+- configurable stale threshold with an explicit freshness basis;
+- discovery provenance and page lineage.
+
+`memory` summarizes query/search/source signals. `explain` shows one domain's profile, freshness basis, discovery evidence, page lineage and feed state. `trace` exposes one run's provenance; repeated discovery events are grouped by default for readability while `--full` preserves the raw audit view.
+
+The milestone boundary is deliberate: alpha4 **records and explains** experience. Automatic use of these signals for prioritization and stopping decisions belongs to alpha5 Adaptive Expedition.
+
+Important principle: **every important decision should be explainable.**
 
 ## Feed state and HTTP resource state
 
