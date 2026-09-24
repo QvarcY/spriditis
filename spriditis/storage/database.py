@@ -2754,6 +2754,16 @@ class Database:
                 }
             )
 
+        reachable_urls: set[str] = set()
+        for visits in visits_by_domain.values():
+            for visit in visits:
+                if classify_domain_visits([visit])["state"] != "reachable":
+                    continue
+                if visit["url"]:
+                    reachable_urls.add(visit["url"])
+                if visit["final_url"]:
+                    reachable_urls.add(visit["final_url"])
+
         domains = {
             domain: {
                 "domain": domain,
@@ -2821,13 +2831,109 @@ class Database:
             "clusters": clusters,
             "domains": domains,
             "feeds": feeds,
+            "reachable_urls": sorted(reachable_urls),
         }
+
+    @staticmethod
+    def _filter_watch_events_by_coverage(
+        before: dict,
+        after: dict,
+        events: list,
+    ) -> tuple[list, list[dict]]:
+        before_reachable = set(before.get("reachable_urls") or [])
+        after_reachable = set(after.get("reachable_urls") or [])
+        kept = []
+        suppressed: list[dict] = []
+
+        for event in events:
+            change_type = event.change_type
+            reason = ""
+            required_urls: list[str] = []
+            checked_urls: set[str] = set()
+
+            if change_type == "NEW_ENTITY":
+                required_urls = sorted({
+                    item.get("source_url") or ""
+                    for item in event.after.get("sources", [])
+                    if item.get("source_url")
+                })
+                checked_urls = before_reachable
+                reason = "source_url_not_rechecked_in_before_run"
+            elif change_type == "ENTITY_DISAPPEARED":
+                required_urls = sorted({
+                    item.get("source_url") or ""
+                    for item in event.before.get("sources", [])
+                    if item.get("source_url")
+                })
+                checked_urls = after_reachable
+                reason = "source_url_not_rechecked_in_after_run"
+            elif change_type == "SOURCE_CHANGED":
+                added_urls = sorted({
+                    item.get("source_url") or ""
+                    for item in event.evidence.get("added_sources", [])
+                    if item.get("source_url")
+                })
+                removed_urls = sorted({
+                    item.get("source_url") or ""
+                    for item in event.evidence.get("removed_sources", [])
+                    if item.get("source_url")
+                })
+                added_supported = (
+                    bool(added_urls)
+                    and all(url in before_reachable for url in added_urls)
+                )
+                removed_supported = (
+                    bool(removed_urls)
+                    and all(url in after_reachable for url in removed_urls)
+                )
+                if added_supported and removed_supported:
+                    kept.append(event)
+                    continue
+                suppressed.append({
+                    "change_type": change_type,
+                    "title": event.title,
+                    "cluster_key": event.cluster_key,
+                    "reason": "source_set_not_comparably_rechecked",
+                    "added_urls": added_urls,
+                    "removed_urls": removed_urls,
+                    "before_reachable_matches": sorted(
+                        set(added_urls) & before_reachable
+                    ),
+                    "after_reachable_matches": sorted(
+                        set(removed_urls) & after_reachable
+                    ),
+                })
+                continue
+            else:
+                kept.append(event)
+                continue
+
+            if required_urls and all(
+                url in checked_urls for url in required_urls
+            ):
+                kept.append(event)
+                continue
+
+            suppressed.append({
+                "change_type": change_type,
+                "title": event.title,
+                "cluster_key": event.cluster_key,
+                "reason": reason,
+                "required_urls": required_urls,
+                "reachable_matches": sorted(
+                    set(required_urls) & checked_urls
+                ),
+            })
+
+        return kept, suppressed
 
     def compare_runs(
         self,
         project_id: str,
         before_run_id: int,
         after_run_id: int,
+        *,
+        coverage_aware: bool = False,
     ) -> dict:
         if before_run_id == after_run_id:
             raise ValueError("Salīdzināmajiem run ID jābūt atšķirīgiem.")
@@ -2841,6 +2947,13 @@ class Database:
             after_run_id,
         )
         events = compare_run_snapshots(before, after)
+        suppressed_events: list[dict] = []
+        if coverage_aware:
+            events, suppressed_events = self._filter_watch_events_by_coverage(
+                before,
+                after,
+                events,
+            )
 
         counts = {
             "NEW_ENTITY": 0,
@@ -2864,7 +2977,7 @@ class Database:
                 counts.get(event.change_type, 0) + 1
             )
 
-        return {
+        result = {
             "project_id": project_id,
             "comparison_basis": {
                 "entity_facts": "historical_observation_snapshots",
@@ -2893,6 +3006,28 @@ class Database:
             "counts": counts,
             "events": [event.model_dump() for event in events],
         }
+
+        if coverage_aware:
+            suppressed_counts: dict[str, int] = {}
+            for item in suppressed_events:
+                change_type = item["change_type"]
+                suppressed_counts[change_type] = (
+                    suppressed_counts.get(change_type, 0) + 1
+                )
+            result["coverage"] = {
+                "mode": "comparable_source_url_recheck",
+                "before_reachable_url_count": len(
+                    before.get("reachable_urls") or []
+                ),
+                "after_reachable_url_count": len(
+                    after.get("reachable_urls") or []
+                ),
+                "suppressed_event_count": len(suppressed_events),
+                "suppressed_counts": suppressed_counts,
+                "suppressed_events": suppressed_events,
+            }
+
+        return result
 
     def compare_with_previous_run(
         self,
@@ -2933,6 +3068,7 @@ class Database:
             project_id,
             int(previous[0]),
             current_run_id,
+            coverage_aware=True,
         )
 
     def trace_run(
