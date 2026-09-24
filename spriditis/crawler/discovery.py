@@ -178,9 +178,12 @@ class DomainRegistry:
         # Keep the lifecycle reason that made the domain active. A later
         # "known" observation is evidence, not a new activation reason.
         if (
-            not record.reason
-            or action == "activated"
+            action == "activated"
             or status == "blocked"
+            or (
+                not record.reason
+                and not (action == "blocked" and status != "blocked")
+            )
         ):
             record.reason = reason
 
@@ -263,9 +266,12 @@ class DomainRegistry:
         # Keep the lifecycle reason that made the domain active. A later
         # "known" observation is evidence, not a new activation reason.
         if (
-            not record.reason
-            or action == "activated"
+            action == "activated"
             or status == "blocked"
+            or (
+                not record.reason
+                and not (action == "blocked" and status != "blocked")
+            )
         ):
             record.reason = reason
 
@@ -351,9 +357,12 @@ class DomainRegistry:
         # Keep the lifecycle reason that made the domain active. A later
         # "known" observation is evidence, not a new activation reason.
         if (
-            not record.reason
-            or action == "activated"
+            action == "activated"
             or status == "blocked"
+            or (
+                not record.reason
+                and not (action == "blocked" and status != "blocked")
+            )
         ):
             record.reason = reason
 
