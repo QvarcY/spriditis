@@ -192,6 +192,24 @@ assert [item.target_domain for item in limit_events] == [
     "hop3.example",
 ]
 
+depth_decisions = [
+    item
+    for item in result.adaptive_decisions
+    if item.stage == "discovery_depth"
+]
+assert [item.decision for item in depth_decisions] == [
+    "deferred",
+    "deferred",
+]
+assert [item.signals["reason"] for item in depth_decisions] == [
+    "discovery_depth_budget_reached",
+    "discovery_depth_limit",
+]
+assert [item.signals["discovery_depth"] for item in depth_decisions] == [
+    1,
+    3,
+]
+
 print("ADAPTIVE MULTI-HOP TEST OK")
 print("same_domain_navigation_preserves_discovery_depth")
 print("depth1_budget=1 depth2_budget=1 max_discovery_depth=2")
