@@ -13,7 +13,7 @@ from spriditis.core.projects import ResearchProject
 from spriditis.core.run import ResearchRunResult
 
 
-CURRENT_SCHEMA_VERSION = 6
+CURRENT_SCHEMA_VERSION = 7
 DEFAULT_STALE_AFTER_DAYS = 30.0
 
 
@@ -212,6 +212,22 @@ CREATE TABLE IF NOT EXISTS feeds (
 
 CREATE INDEX IF NOT EXISTS idx_feeds_project_domain
 ON feeds(project_id, domain, status);
+
+CREATE TABLE IF NOT EXISTS adaptive_decisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id TEXT NOT NULL,
+    run_id INTEGER NOT NULL,
+    sequence INTEGER NOT NULL,
+    stage TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    target TEXT NOT NULL,
+    signals_json TEXT NOT NULL DEFAULT '{}',
+    decided_at TEXT NOT NULL,
+    FOREIGN KEY(run_id) REFERENCES runs(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_adaptive_decisions_run
+ON adaptive_decisions(project_id, run_id, sequence);
 
 CREATE TABLE IF NOT EXISTS schema_meta (
     key TEXT PRIMARY KEY,
@@ -742,6 +758,42 @@ class Database:
                     visit.visited_at,
                 )
                 for visit in result.page_visits
+            ],
+        )
+        self.conn.commit()
+
+    def save_adaptive_decisions(
+        self,
+        project: ResearchProject,
+        run_id: int,
+        result: ResearchRunResult,
+    ):
+        if not result.adaptive_decisions:
+            return
+
+        self.conn.executemany(
+            """
+            INSERT INTO adaptive_decisions(
+                project_id, run_id, sequence, stage, decision,
+                target, signals_json, decided_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    project.id,
+                    run_id,
+                    sequence,
+                    item.stage,
+                    item.decision,
+                    item.target,
+                    json.dumps(item.signals, ensure_ascii=False, sort_keys=True),
+                    item.decided_at,
+                )
+                for sequence, item in enumerate(
+                    result.adaptive_decisions,
+                    start=1,
+                )
             ],
         )
         self.conn.commit()
@@ -1299,6 +1351,17 @@ class Database:
             (project_id, run_id),
         ).fetchall()
 
+        adaptive_rows = self.conn.execute(
+            """
+            SELECT sequence, stage, decision, target,
+                   signals_json, decided_at
+            FROM adaptive_decisions
+            WHERE project_id=? AND run_id=?
+            ORDER BY sequence
+            """,
+            (project_id, run_id),
+        ).fetchall()
+
         observation_rows = self.conn.execute(
             """
             SELECT o.entity_key, e.title, e.entity_type, e.source_url,
@@ -1369,6 +1432,17 @@ class Database:
                     "discovered_at": row[10] or "",
                 }
                 for row in discovery_rows
+            ],
+            "adaptive_decisions": [
+                {
+                    "sequence": int(row[0]),
+                    "stage": row[1] or "",
+                    "decision": row[2] or "",
+                    "target": row[3] or "",
+                    "signals": json.loads(row[4] or "{}"),
+                    "decided_at": row[5] or "",
+                }
+                for row in adaptive_rows
             ],
             "observations": [
                 {
