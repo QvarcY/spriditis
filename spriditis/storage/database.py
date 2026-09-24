@@ -743,13 +743,24 @@ class Database:
                 SUM(CASE WHEN action='blocked' THEN 1 ELSE 0 END) AS blocked,
                 SUM(CASE WHEN action='recorded' THEN 1 ELSE 0 END) AS recorded,
                 COUNT(DISTINCT run_id) AS runs,
-                MAX(discovered_at) AS last_used
+                MAX(discovered_at) AS last_used,
+                COUNT(DISTINCT CASE
+                    WHEN action IN ('activated', 'known')
+                    THEN target_domain
+                END) AS productive_domains,
+                COUNT(DISTINCT CASE
+                    WHEN action='blocked'
+                    THEN target_domain
+                END) AS blocked_domains
             FROM domain_discoveries
             WHERE project_id=?
               AND query_text IS NOT NULL
               AND query_text<>''
             GROUP BY provider, query_text
-            ORDER BY activated DESC, unique_domains DESC, result_events DESC,
+            ORDER BY productive_domains DESC,
+                     activated DESC,
+                     unique_domains DESC,
+                     result_events DESC,
                      query_text ASC
             LIMIT ?
             """,
@@ -759,21 +770,34 @@ class Database:
         result = []
         for row in rows:
             total = int(row[2] or 0)
+            unique_domains = int(row[3] or 0)
             activated = int(row[4] or 0)
+            productive_domains = int(row[10] or 0)
             result.append(
                 {
                     "provider": row[0] or "",
                     "query_text": row[1] or "",
                     "result_events": total,
-                    "unique_domains": int(row[3] or 0),
+                    "unique_domains": unique_domains,
                     "activated": activated,
                     "known": int(row[5] or 0),
                     "blocked": int(row[6] or 0),
                     "recorded": int(row[7] or 0),
                     "runs": int(row[8] or 0),
                     "last_used": row[9] or "",
+                    "productive_domains": productive_domains,
+                    "blocked_domains": int(row[11] or 0),
+                    # Historical first-activation ratio is kept for
+                    # compatibility and audit. It naturally falls on repeat
+                    # runs as useful domains become "known".
                     "activation_rate": (
                         activated / total if total else 0.0
+                    ),
+                    # Stable query yield: share of unique domains that have
+                    # ever been activated or subsequently recognized as known.
+                    "productive_domain_rate": (
+                        productive_domains / unique_domains
+                        if unique_domains else 0.0
                     ),
                 }
             )
