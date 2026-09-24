@@ -2894,6 +2894,47 @@ class Database:
             "events": [event.model_dump() for event in events],
         }
 
+    def compare_with_previous_run(
+        self,
+        project_id: str,
+        current_run_id: int,
+    ) -> dict | None:
+        current = self.conn.execute(
+            """
+            SELECT id
+            FROM runs
+            WHERE project_id=? AND id=? AND finished_at IS NOT NULL
+            """,
+            (project_id, current_run_id),
+        ).fetchone()
+        if current is None:
+            raise ValueError(
+                f"Pabeigts run nav atrasts projektā {project_id}: "
+                f"{current_run_id}"
+            )
+
+        previous = self.conn.execute(
+            """
+            SELECT id
+            FROM runs
+            WHERE project_id=?
+              AND id < ?
+              AND finished_at IS NOT NULL
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (project_id, current_run_id),
+        ).fetchone()
+
+        if previous is None:
+            return None
+
+        return self.compare_runs(
+            project_id,
+            int(previous[0]),
+            current_run_id,
+        )
+
     def trace_run(
         self,
         project_id: str,
