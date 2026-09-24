@@ -337,7 +337,7 @@ Alpha4 **records and explains** experience. It does not yet perform automatic so
 
 Metrics stay explainable; one opaque “magic score” must not replace the underlying signals.
 
-## 🧪 3.3.0-alpha.5 — Adaptive Expedition
+## ✅ 3.3.0-alpha.5 — Adaptive Expedition
 
 Goal: choose better research paths without requiring paid AI.
 
@@ -356,7 +356,7 @@ Goal: choose better research paths without requiring paid AI.
 - database schema v7 with an `adaptive_decisions` audit table;
 - the full alpha5 regression gate passed: 32/32 deterministic tests.
 
-## 🧭 3.3.0-alpha.6 — Entity Resolution
+## 🚧 3.3.0-alpha.6 — Entity Resolution
 
 Goal: represent the same real-world product/service as one entity with multiple source observations.
 
