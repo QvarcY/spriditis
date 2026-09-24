@@ -14,7 +14,7 @@ from spriditis.core.run import ResearchRunResult
 from spriditis.resolution.identity import resolve_entities
 
 
-CURRENT_SCHEMA_VERSION = 10
+CURRENT_SCHEMA_VERSION = 11
 DEFAULT_STALE_AFTER_DAYS = 30.0
 
 
@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS entities (
     opportunity_notes TEXT,
     extraction_method TEXT,
     evidence TEXT,
+    field_evidence_json TEXT NOT NULL DEFAULT '{}',
     first_seen TEXT NOT NULL,
     last_seen TEXT NOT NULL,
     PRIMARY KEY(project_id, entity_key)
@@ -508,6 +509,12 @@ class Database:
         )
 
         self._ensure_column(
+            "entities",
+            "field_evidence_json",
+            "TEXT NOT NULL DEFAULT '{}'",
+        )
+
+        self._ensure_column(
             "entity_clusters",
             "merged_into_cluster_key",
             "TEXT NOT NULL DEFAULT ''",
@@ -625,9 +632,9 @@ class Database:
                 title, seller, last_price, currency, category, is_relevant,
                 confidence, relevance_score, image_url, description, tags_json,
                 attributes_json, opportunity_notes, extraction_method, evidence,
-                first_seen, last_seen
+                field_evidence_json, first_seen, last_seen
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(project_id, entity_key) DO UPDATE SET
                 entity_type=excluded.entity_type,
                 source_url=excluded.source_url,
@@ -647,6 +654,7 @@ class Database:
                 opportunity_notes=excluded.opportunity_notes,
                 extraction_method=excluded.extraction_method,
                 evidence=excluded.evidence,
+                field_evidence_json=excluded.field_evidence_json,
                 last_seen=excluded.last_seen
             """,
             (
@@ -670,6 +678,13 @@ class Database:
                 entity.opportunity_notes,
                 entity.extraction_method,
                 entity.evidence,
+                json.dumps(
+                    {
+                        key: fact.model_dump()
+                        for key, fact in entity.field_evidence.items()
+                    },
+                    ensure_ascii=False,
+                ),
                 first_seen,
                 now,
             ),
@@ -723,6 +738,7 @@ class Database:
             opportunity_notes=row[16] or "",
             extraction_method=row[17] or "",
             evidence=row[18] or "",
+            field_evidence=json.loads(row[19] or "{}"),
         )
 
     def _resolve_entity_cluster(
@@ -761,7 +777,8 @@ class Database:
                    e.currency, e.seller, e.image_url, e.category,
                    e.is_relevant, e.confidence, e.relevance_score,
                    e.tags_json, e.attributes_json, e.opportunity_notes,
-                   e.extraction_method, e.evidence, m.cluster_key
+                   e.extraction_method, e.evidence, e.field_evidence_json,
+                   m.cluster_key
             FROM entities e
             JOIN entity_cluster_members m
               ON m.project_id=e.project_id
@@ -782,9 +799,9 @@ class Database:
             candidate = self._entity_from_storage_row(row)
             decision = resolve_entities(entity, candidate)
             if decision.outcome == "match":
-                matches_by_cluster.setdefault(row[19], []).append(decision)
+                matches_by_cluster.setdefault(row[20], []).append(decision)
             elif decision.outcome == "conflict":
-                conflicts_by_cluster.setdefault(row[19], []).append(decision)
+                conflicts_by_cluster.setdefault(row[20], []).append(decision)
             else:
                 supporting_signal_set.update(decision.supporting_signals)
 
@@ -1071,7 +1088,7 @@ class Database:
                    e.currency, e.seller, e.image_url, e.category,
                    e.is_relevant, e.confidence, e.relevance_score,
                    e.tags_json, e.attributes_json, e.opportunity_notes,
-                   e.extraction_method, e.evidence
+                   e.extraction_method, e.evidence, e.field_evidence_json
             FROM entity_cluster_members m
             JOIN entities e
               ON e.project_id=m.project_id
@@ -1480,9 +1497,9 @@ class Database:
             """
             SELECT m.entity_key, e.title, e.source_url, e.source_domain,
                    e.last_price, e.currency, e.seller, e.attributes_json,
-                   e.first_seen, e.last_seen, m.match_reason,
-                   m.matched_signals_json, m.supporting_signals_json,
-                   m.linked_at
+                   e.field_evidence_json, e.first_seen, e.last_seen,
+                   m.match_reason, m.matched_signals_json,
+                   m.supporting_signals_json, m.linked_at
             FROM entity_cluster_members m
             JOIN entities e
               ON e.project_id=m.project_id
@@ -1519,12 +1536,13 @@ class Database:
                     "currency": row[5] or "",
                     "seller": row[6] or "",
                     "attributes": json.loads(row[7] or "{}"),
-                    "first_seen": row[8] or "",
-                    "last_seen": row[9] or "",
-                    "match_reason": row[10] or "",
-                    "matched_signals": json.loads(row[11] or "[]"),
-                    "supporting_signals": json.loads(row[12] or "[]"),
-                    "linked_at": row[13] or "",
+                    "field_evidence": json.loads(row[8] or "{}"),
+                    "first_seen": row[9] or "",
+                    "last_seen": row[10] or "",
+                    "match_reason": row[11] or "",
+                    "matched_signals": json.loads(row[12] or "[]"),
+                    "supporting_signals": json.loads(row[13] or "[]"),
+                    "linked_at": row[14] or "",
                     "observations": [
                         {
                             "run_id": int(obs[0]),
