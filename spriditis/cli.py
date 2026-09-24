@@ -414,14 +414,17 @@ def main() -> int:
             print("   Vēl nav query provenance datu.")
         else:
             print(
-                f"{'ACT%':>6} {'ACT':>4} {'DOM':>4} {'EVT':>4} "
-                f"{'RUNS':>4} {'PROVIDER':<10} QUERY"
+                f"{'YIELD%':>7} {'PROD':>4} {'NEW':>4} {'KNOWN':>5} "
+                f"{'DOM':>4} {'EVT':>4} {'RUNS':>4} "
+                f"{'PROVIDER':<10} QUERY"
             )
-            print("-" * 104)
+            print("-" * 122)
             for row in queries:
                 print(
-                    f"{row['activation_rate'] * 100:>5.1f}% "
+                    f"{row['productive_domain_rate'] * 100:>6.1f}% "
+                    f"{row['productive_domains']:>4} "
                     f"{row['activated']:>4} "
+                    f"{row['known']:>5} "
                     f"{row['unique_domains']:>4} "
                     f"{row['result_events']:>4} "
                     f"{row['runs']:>4} "
