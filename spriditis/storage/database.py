@@ -824,6 +824,106 @@ class Database:
             )
         return result
 
+    def search_duplication_memory(
+        self,
+        project_id: str,
+        *,
+        limit: int = 20,
+    ) -> dict:
+        aggregate_row = self.conn.execute(
+            """
+            SELECT
+                COUNT(*) AS runs,
+                COALESCE(SUM(search_queries_issued), 0) AS queries,
+                COALESCE(SUM(search_results_seen), 0) AS raw_results,
+                COALESCE(SUM(search_results_unique), 0) AS unique_results,
+                COALESCE(SUM(search_results_duplicates), 0) AS duplicates,
+                COALESCE(SUM(search_provider_errors), 0) AS provider_errors
+            FROM runs
+            WHERE project_id=?
+              AND (
+                    search_queries_issued > 0
+                 OR search_results_seen > 0
+                 OR search_provider_errors > 0
+              )
+            """,
+            (project_id,),
+        ).fetchone()
+
+        rows = self.conn.execute(
+            """
+            SELECT
+                id,
+                started_at,
+                finished_at,
+                search_queries_issued,
+                search_results_seen,
+                search_results_unique,
+                search_results_duplicates,
+                search_provider_errors
+            FROM runs
+            WHERE project_id=?
+              AND (
+                    search_queries_issued > 0
+                 OR search_results_seen > 0
+                 OR search_provider_errors > 0
+              )
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (
+                project_id,
+                max(1, min(int(limit), 1000)),
+            ),
+        ).fetchall()
+
+        raw_results = int(aggregate_row[2] or 0)
+        unique_results = int(aggregate_row[3] or 0)
+        duplicates = int(aggregate_row[4] or 0)
+        filtered_results = max(
+            0,
+            raw_results - unique_results - duplicates,
+        )
+
+        recent_runs = []
+        for row in rows:
+            raw = int(row[4] or 0)
+            unique = int(row[5] or 0)
+            duplicate = int(row[6] or 0)
+            filtered = max(0, raw - unique - duplicate)
+            recent_runs.append(
+                {
+                    "run_id": int(row[0]),
+                    "started_at": row[1] or "",
+                    "finished_at": row[2] or "",
+                    "queries": int(row[3] or 0),
+                    "raw_results": raw,
+                    "unique_results": unique,
+                    "duplicates": duplicate,
+                    "filtered_results": filtered,
+                    "duplicate_rate": (
+                        duplicate / raw if raw else 0.0
+                    ),
+                    "provider_errors": int(row[7] or 0),
+                }
+            )
+
+        return {
+            "scope": "normalized_search_url_across_run",
+            "runs": int(aggregate_row[0] or 0),
+            "queries": int(aggregate_row[1] or 0),
+            "raw_results": raw_results,
+            "unique_results": unique_results,
+            "duplicates": duplicates,
+            "filtered_results": filtered_results,
+            "duplicate_rate": (
+                duplicates / raw_results if raw_results else 0.0
+            ),
+            "provider_errors": int(aggregate_row[5] or 0),
+            "recent_runs": recent_runs,
+        }
+
+
     def source_profiles(
         self,
         project_id: str,
