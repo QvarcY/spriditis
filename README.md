@@ -25,8 +25,8 @@
 
 | | Status |
 |---|---|
-| **Publiskā versija / Public baseline** | ✅ `v3.3.0-alpha.7` — Fallback Extraction + Evidence Confidence |
-| **Šobrīd / Current work** | 🧪 `3.3.0-alpha.8` — Change Detection validation |
+| **Publiskā versija / Public baseline** | ✅ `v3.3.0-alpha.8` — Change Detection |
+| **Šobrīd / Current work** | 🚧 `3.3.0-alpha.9` — Watch mode |
 | **Galvenais virziens / North star** | 🧠 **Research Memory + Adaptive Discovery** |
 | **Pamatprincips / Core principle** | 🔎 **source-backed facts > AI guesses** |
 | **Izmaksu princips / Cost direction** | 🌱 Priekšroka lokāliem, atvērtiem, pašhostējamiem un bezmaksas risinājumiem / Prefer local, open, self-hostable and zero-cost building blocks |
@@ -54,8 +54,8 @@
 | ✅ | **3.3.0-alpha.5** | Adaptive Expedition | Research Memory-driven query/source priority, local BM25, adaptive stopping, multi-hop budgets, source diversity, persisted Decision Trace |
 | ✅ | **3.3.0-alpha.6** | Entity Resolution | deterministic cross-source identity, canonical clusters, resolution audit, guarded merge, review queue, cluster explain |
 | ✅ | **3.3.0-alpha.7** | Fallback Extraction + Evidence Confidence | JSON-LD → microdata → OpenGraph → conservative DOM fallback, field provenance/confidence, schema v11, evidence-quality inspection |
-| 🧪 | **3.3.0-alpha.8** | Change Detection | entity/price/field/source/domain/feed lifecycle events, historical provenance, `diff` between runs |
-| 🧭 | **3.3.0-alpha.9** | Watch mode | incremental repeated research, scheduling hooks, change-only output, JSONL export |
+| ✅ | **3.3.0-alpha.8** | Change Detection | entity/price/field/source/domain/feed lifecycle events, historical provenance, `diff` between runs, schema v12 |
+| 🚧 | **3.3.0-alpha.9** | Watch mode | incremental repeated research, scheduling hooks, change-only output, JSONL export |
 | 🧭 | **3.3.0-alpha.10** | Async crawler | bounded concurrency, adaptive politeness, faster crawling without abandoning safety |
 
 <details>
@@ -246,6 +246,9 @@ Sprīdītis nav piesaistīts vienai nozarei. Ideja ir vienu un to pašu kodolu p
 - DB schema v11 ar `field_evidence_json` current entity provenance un nemainīgiem historical observation snapshots
 - `evidence-quality` CLI ar high/medium/low, missing, mismatched/stale un default/inferred lauku auditu bez opaque score
 - target-cluster-aware GTIN hard veto automātiskajā Entity Resolution, saglabājot matched + conflicting signālus
+- `diff` CLI divu research run jēgpilnu izmaiņu salīdzināšanai ar before/after/evidence detaļām
+- Change Detection entity, price, seller/description/image, source, domain un feed lifecycle izmaiņām
+- DB schema v12 ar vēsturiskiem run-scoped `feed_snapshots` un trace sasaisti
 - search duplicate rate ar atsevišķiem raw / unique / duplicate / filtered skaitītājiem
 - freshness/staleness signāli ar skaidru `last_useful_at → last_crawled → last_seen` pamatu un konfigurējamu stale slieksni
 - page lineage `page_visits` audita dati ar source type, source URL, depth, outcome un HTTP statusu
@@ -269,7 +272,7 @@ Sprīdītis nav piesaistīts vienai nozarei. Ideja ir vienu un to pašu kodolu p
 
 ### Kas vēl nav gatavs?
 
-Pieņemtais attīstības virziens ir redzams README sākumā sadaļā **Development journey / Attīstības ceļš**. Publiskā bāze ir `3.3.0-alpha.7`; `3.3.0-alpha.8` Change Detection funkcionālais scope ir ieviests un pašlaik tiek validēts pirms publicēšanas. Pēc tam seko Watch mode → kontrolēts async crawleris.
+Pieņemtais attīstības virziens ir redzams README sākumā sadaļā **Development journey / Attīstības ceļš**. Publiskā bāze ir `3.3.0-alpha.8` Change Detection; nākamais aktīvais posms ir `3.3.0-alpha.9` Watch mode, pēc tam seko kontrolēts async crawleris.
 
 Detalizēti skatīt [ROADMAP.md](ROADMAP.md).
 
@@ -559,7 +562,7 @@ Sprīdītis is not tied to one industry. The same core is intended to support ve
 
 The public alpha deliberately does not pretend unfinished features are complete.
 
-The accepted direction is shown in the **Development journey** above. The public baseline is `3.3.0-alpha.7`; the functional `3.3.0-alpha.8` Change Detection scope is implemented and currently under release validation. The next planned sequence is Watch mode → bounded async crawling.
+The accepted direction is shown in the **Development journey** above. The public baseline is `3.3.0-alpha.8` Change Detection; the next active milestone is `3.3.0-alpha.9` Watch mode, followed by bounded async crawling.
 
 See the detailed [ROADMAP.md](ROADMAP.md).
 
@@ -752,11 +755,11 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ### Project status
 
-The current public baseline is **Sprīdītis 3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence**.
+The current public baseline is **Sprīdītis 3.3.0-alpha.8 — Change Detection**.
 
-**3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence** is released and fully validated. It adds schema.org microdata, conservative DOM fallback extraction, field-level extraction provenance/confidence, database schema v11 current-evidence persistence, `evidence-quality` inspection, and target-cluster-aware identity-conflict hard veto behavior.
+**3.3.0-alpha.8 — Change Detection** is released and fully validated. It turns historical observations, page visits and feed snapshots into auditable entity, price, field, source, domain and feed-lifecycle events, with explicit comparison basis and provenance through `diff` and `trace`.
 
-The complete alpha7 regression gate passed: **43/43 deterministic tests**, including Adaptive Expedition, Research Memory, Search/Discovery/Feed, Entity Resolution, extraction-evidence and schema-v11 regression layers.
+The complete alpha8 regression gate passed: **48/48 deterministic tests**, including Adaptive Expedition, Research Memory, Search/Discovery/Feed, Entity Resolution, extraction evidence, schema-v12 persistence and all Change Detection safety regressions.
 
 This is alpha software. Expect breaking changes before a stable release.
 
