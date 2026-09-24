@@ -2,8 +2,6 @@
 
 ## [3.3.0-alpha.4]
 
-> Release candidate branchā / On the release-candidate branch. Vēl nav mergeots `main` un tagots / Not yet merged into `main` or tagged.
-
 ### Pievienots / Added
 
 - DB schema v6 ar `page_visits` tabulu page lineage auditam / database schema v6 with a `page_visits` table for page-lineage auditing
