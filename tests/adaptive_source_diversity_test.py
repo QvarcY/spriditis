@@ -194,6 +194,17 @@ assert adaptive.diversity_penalties_applied == 1
 assert adaptive.diversity_domains_penalized == {"seed.example"}
 assert adaptive.domains["other.example"].status == "active"
 
+diversity_decisions = [
+    item
+    for item in adaptive.adaptive_decisions
+    if item.stage == "source_diversity"
+]
+assert len(diversity_decisions) == 1
+assert diversity_decisions[0].decision == "priority_penalty"
+assert diversity_decisions[0].signals["domain"] == "seed.example"
+assert diversity_decisions[0].signals["soft_cap"] == 1
+assert diversity_decisions[0].signals["penalty"] == 30
+
 print("ADAPTIVE SOURCE DIVERSITY TEST OK")
 print("baseline_second=seed.example")
 print("adaptive_second=other.example")
