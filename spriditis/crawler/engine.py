@@ -18,6 +18,7 @@ from spriditis.core.run import ResearchRunResult
 from spriditis.extraction.engine import extract_entities
 from spriditis.search.base import SearchProvider, SearchProviderError
 from spriditis.search.query import build_search_queries
+from spriditis.search.relevance import LocalRelevance, local_relevance_signals
 
 from .discovery import DomainRegistry, SitemapDiscovery
 from .feed_discovery import FeedDiscovery
@@ -604,6 +605,79 @@ class ResearchCrawler:
 
         return [hit for _, hit in sorted(ranked, key=lambda item: item[0])]
 
+    def _rank_search_hits(
+        self,
+        hits,
+        query_text: str,
+    ) -> list[LocalRelevance]:
+        local_signals = local_relevance_signals(
+            self.project,
+            query_text,
+            list(hits),
+        )
+
+        band_order = {
+            "productive_fresh": 0,
+            "untested": 1,
+            "productive_stale": 2,
+            "nonproductive": 3,
+            "blocked": 4,
+            "rejected": 4,
+        }
+
+        ranked = []
+        for signal in local_signals:
+            normalized = normalize_url(signal.hit.url)
+            domain = host_key(normalized) if normalized else ""
+            profile = self.source_profiles.get(domain)
+            state = self._source_memory_state(domain)
+
+            if profile is None:
+                productive_rate = 0.0
+                entity_yield = 0.0
+                success_rate = 0.0
+            else:
+                productive_rate = float(
+                    profile.get("productive_run_rate", 0.0) or 0.0
+                )
+                entity_yield = float(
+                    profile.get("entity_yield", 0.0) or 0.0
+                )
+                success_rate = float(
+                    profile.get("success_rate", 0.0) or 0.0
+                )
+
+            has_productive_history = state in {
+                "productive_fresh",
+                "productive_stale",
+            }
+
+            ranked.append(
+                (
+                    (
+                        band_order[state],
+                        -productive_rate if has_productive_history else 0.0,
+                        -entity_yield if has_productive_history else 0.0,
+                        -success_rate if has_productive_history else 0.0,
+                        1 if signal.negative_matches else 0,
+                        -signal.bm25,
+                        -signal.title_matches,
+                        -signal.path_matches,
+                        -signal.domain_matches,
+                        signal.provider_index,
+                    ),
+                    signal,
+                )
+            )
+
+        return [
+            signal
+            for _, signal in sorted(
+                ranked,
+                key=lambda item: item[0],
+            )
+        ]
+
     def _seed_from_search(
         self,
         frontier: URLFrontier,
@@ -658,7 +732,10 @@ class ResearchCrawler:
                     limit=self.project.search.results_per_query,
                     safesearch=self.project.search.safesearch,
                 )
-                hits = self._rank_search_hits_by_source_memory(hits)
+                ranked_hits = self._rank_search_hits(
+                    hits,
+                    query.query,
+                )
             except SearchProviderError as exc:
                 result.search_provider_errors += 1
                 detail = f"kind={exc.kind}, attempts={exc.attempts}"
@@ -667,7 +744,8 @@ class ResearchCrawler:
                 print(f"   ⚠️ SearchProvider kļūda: {exc} [{detail}]")
                 continue
 
-            for hit in hits:
+            for ranked_hit in ranked_hits:
+                hit = ranked_hit.hit
                 result.search_results_seen += 1
                 normalized = normalize_url(hit.url)
                 if not normalized:
@@ -713,6 +791,7 @@ class ResearchCrawler:
                         f"      🧭 Search domēns aktivizēts: "
                         f"{record.domain} (score={record.relevance_score:.2f})"
                         f"{source_note}"
+                        f" local={ranked_hit.audit_label}"
                     )
 
                 if record.status == "active":
