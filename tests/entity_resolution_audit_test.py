@@ -8,7 +8,7 @@ sys.path.insert(0, str(_BootstrapPath(__file__).resolve().parents[1]))
 
 from spriditis.core.entities import MarketEntity
 from spriditis.core.projects import ResearchProject
-from spriditis.storage.database import Database
+from spriditis.storage.database import CURRENT_SCHEMA_VERSION, Database
 
 
 project = ResearchProject.model_validate({
@@ -74,7 +74,7 @@ conflict_entity = make_entity(
 with TemporaryDirectory() as tmp:
     db = Database(_BootstrapPath(tmp) / "spriditis.db")
     try:
-        assert db.schema_version() == 10
+        assert db.schema_version() == CURRENT_SCHEMA_VERSION
         db.save_project(project)
         run_id = db.start_run(project)
 
