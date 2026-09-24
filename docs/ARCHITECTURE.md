@@ -1,7 +1,7 @@
 # Sprīdītis — arhitektūra / Architecture
 
-Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.5 — Adaptive Expedition**  
-Pilnībā validēts kandidāts / Fully validated candidate: **3.3.0-alpha.6 — Entity Resolution**
+Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.6 — Entity Resolution**  
+Validējamais kandidāts / Validating candidate: **3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence**
 
 > **Latviski pirmajā vietā, angļu valoda zemāk. / Latvian first, English below.**
 
@@ -67,7 +67,7 @@ Provider-neatkarīgs `SearchProvider`, query ģenerēšana, search rezultātu mo
 Search rezultāti nedrīkst apiet Domain Registry vai crawlera drošības politiku.
 
 ### `spriditis/extraction`
-Avota HTML un strukturēto metadatu pārvēršana `MarketEntity`. Strukturēti pierādījumi ir prioritāri pirms MI enrichment.
+Avota HTML un strukturēto metadatu pārvēršana `MarketEntity`. Strukturēti pierādījumi ir prioritāri pirms MI enrichment. Alpha7 prioritizē JSON-LD → schema.org microdata → source adapter/OpenGraph → konservatīvu DOM fallback. Katrs atbalstītais lauks var glabāt atsevišķu `ExtractionEvidence` ar value, source URL, extraction method, confidence, evidence un extracted_at.
 
 ### `spriditis/sources`
 Avotiem specifiski adapteri, izolējot konkrētas vietnes īpatnības no crawlera kodola.
@@ -76,7 +76,7 @@ Avotiem specifiski adapteri, izolējot konkrētas vietnes īpatnības no crawler
 Izvēles MI enrichment. Crawler/extraction plūsmai jāstrādā arī bez MI.
 
 ### `spriditis/storage`
-SQLite persistence un schema evolution. Alpha4 izmanto DB schema v6 un pievieno `page_visits` tabulu Research Memory lineage auditam. Alpha5 pāriet uz DB schema v7 un pievieno `adaptive_decisions` tabulu izskaidrojamai adaptīvo lēmumu secībai. Alpha6 release candidate izmanto DB schema v10 un pievieno canonical `entity_clusters`, `entity_cluster_members`, `entity_resolution_events` un `entity_cluster_merge_events` slāņus, saglabājot source-specific `entities` un `observations` kā pierādījumu avotu. Esošie `runs` search skaitītāji tiek izmantoti arī duplicate-rate atmiņai, tāpēc šim signālam nav vajadzīga paralēla dublējoša tabula.
+SQLite persistence un schema evolution. Alpha4 izmanto DB schema v6 un pievieno `page_visits` tabulu Research Memory lineage auditam. Alpha5 pāriet uz DB schema v7 un pievieno `adaptive_decisions` tabulu izskaidrojamai adaptīvo lēmumu secībai. Alpha6 izmanto DB schema v10 un pievieno canonical `entity_clusters`, `entity_cluster_members`, `entity_resolution_events` un `entity_cluster_merge_events` slāņus, saglabājot source-specific `entities` un `observations` kā pierādījumu avotu. Alpha7 pāriet uz DB schema v11 un pievieno `entities.field_evidence_json` current entity provenance glabāšanai; vēsturiskais provenance paliek katrā `observations.snapshot_json`. Esošie `runs` search skaitītāji tiek izmantoti arī duplicate-rate atmiņai, tāpēc šim signālam nav vajadzīga paralēla dublējoša tabula.
 
 Noklusējuma DB:
 ```text
@@ -186,7 +186,7 @@ Galvenās robežas:
 - katrs nozīmīgais adaptīvais lēmums tiek pievienots `AdaptiveDecision` un persistēts DB schema v7 `adaptive_decisions` tabulā;
 - `trace --run N` parāda lēmumu secību un signālus kopā ar page/discovery/observation provenance.
 
-## Entity Resolution — 3.3.0-alpha.6 validated release candidate
+## Entity Resolution — 3.3.0-alpha.6 released
 
 Alpha6 ievieš atsevišķu identity-resolution slāni **virs** source-specific entity/observation pierādījumiem. Canonical clusteri neaizstāj avota rindas un neizdzēš observations.
 
@@ -234,6 +234,50 @@ Galvenās robežas:
 - `explain-cluster` apkopo members, identity signālus, observations, resolution history, merge history un review items.
 
 DB schema v10 uztur canonical clusterus, resolution auditu un merge auditu, nezaudējot source provenance.
+
+## Fallback Extraction + Evidence Confidence — 3.3.0-alpha.7 release candidate
+
+Alpha7 paplašina deterministisko extraction slāni un padara katra fakta provenance auditējamu.
+
+Extraction plūsma:
+
+```text
+Page HTML
+   ↓
+JSON-LD
+   ↓
+schema.org microdata
+   ↓
+source adapter / OpenGraph
+   ↓
+conservative DOM fallback
+   ↓
+MarketEntity + field_evidence
+   ↓
+current entity persistence (schema v11)
+   ├── entities.field_evidence_json
+   └── observations.snapshot_json (historical)
+   ↓
+Evidence Quality inspection
+```
+
+Galvenās robežas:
+
+- `MarketEntity.confidence` paliek AI/enrichment confidence; extraction confidence ir atsevišķs field-level signāls;
+- direct structured facti saņem augstāku confidence nekā default/fallback vērtības;
+- DOM fallback tiek aktivizēts tikai tad, ja strukturētie ekstraktori nav atraduši entity;
+- DOM fallback prasa title + semantisku cenu + explicit valūtu + produkta konteksta signālu;
+- default `EUR` tiek saglabāts kā explicit `default:EUR` evidence ar zemāku confidence;
+- source adapteri izmanto to pašu `ExtractionEvidence` līgumu;
+- current entity provenance tiek atjaunināts `field_evidence_json`, bet iepriekšējie observation snapshots netiek pārrakstīti;
+- migrētām vecām entity rindām provenance netiek rekonstruēts no minējumiem — lauks paliek `{}`;
+- Evidence Quality lieto auditējamus high/medium/low bandus un atsevišķi uzskaita missing, mismatched/stale un default/inferred laukus;
+- Evidence Quality neveido vienu opaque score vai average confidence;
+- `explain-cluster` rāda current field evidence un quality summary;
+- `evidence-quality --project ... [--details]` dod projekta un entity līmeņa auditu;
+- target-cluster-aware GTIN hard veto nepieļauj automātisku linku, ja vienā kandidāta clusterī vienlaikus ir strong match un GTIN conflict; nesaistīts atšķirīgs GTIN pats par sevi nav conflict.
+
+DB schema v11 papildina alpha6 canonical Entity Resolution slāni, nezaudējot vēsturisko observation provenance.
 
 ## Feed state un HTTP resursu stāvoklis
 
@@ -334,7 +378,7 @@ Provider-neutral `SearchProvider`, query generation, search-result models, FakeS
 Search results must not bypass Domain Registry or crawler safety policy.
 
 ### `spriditis/extraction`
-Converts source HTML and structured metadata into `MarketEntity`. Structured evidence is preferred before AI enrichment.
+Converts source HTML and structured metadata into `MarketEntity`. Structured evidence is preferred before AI enrichment. Alpha7 prioritizes JSON-LD → schema.org microdata → source adapter/OpenGraph → conservative DOM fallback. Each supported field can preserve a separate `ExtractionEvidence` with value, source URL, extraction method, confidence, evidence and extracted_at.
 
 ### `spriditis/sources`
 Source-specific adapters isolate site quirks from crawler core.
@@ -343,7 +387,7 @@ Source-specific adapters isolate site quirks from crawler core.
 Optional AI enrichment. Crawling/extraction must remain usable without AI.
 
 ### `spriditis/storage`
-SQLite persistence and schema evolution. Alpha4 uses database schema v6 and adds a `page_visits` table for Research Memory lineage auditing. Alpha5 moves to database schema v7 and adds an `adaptive_decisions` table for explainable adaptive-decision sequences. The alpha6 release candidate uses database schema v10 and adds canonical `entity_clusters`, `entity_cluster_members`, `entity_resolution_events` and `entity_cluster_merge_events` layers while preserving source-specific `entities` and `observations` as evidence. Existing search counters in `runs` also back duplicate-rate memory, avoiding a parallel duplicate source of truth.
+SQLite persistence and schema evolution. Alpha4 uses database schema v6 and adds a `page_visits` table for Research Memory lineage auditing. Alpha5 moves to database schema v7 and adds an `adaptive_decisions` table for explainable adaptive-decision sequences. Alpha6 uses database schema v10 and adds canonical `entity_clusters`, `entity_cluster_members`, `entity_resolution_events` and `entity_cluster_merge_events` layers while preserving source-specific `entities` and `observations` as evidence. Alpha7 moves to database schema v11 and adds `entities.field_evidence_json` for current entity provenance while historical provenance remains embedded in each `observations.snapshot_json`. Existing search counters in `runs` also back duplicate-rate memory, avoiding a parallel duplicate source of truth.
 
 Default DB:
 ```text
@@ -453,7 +497,7 @@ Key boundaries:
 - every important adaptive decision is appended as an `AdaptiveDecision` and persisted in the schema-v7 `adaptive_decisions` table;
 - `trace --run N` exposes the decision sequence and signals alongside page/discovery/observation provenance.
 
-## Entity Resolution — 3.3.0-alpha.6 validated release candidate
+## Entity Resolution — 3.3.0-alpha.6 released
 
 Alpha6 adds a dedicated identity-resolution layer **above** source-specific entity/observation evidence. Canonical clusters do not replace source rows and do not discard observations.
 
@@ -501,6 +545,50 @@ Key boundaries:
 - `explain-cluster` combines members, identity signals, observations, resolution history, merge history and review items.
 
 Database schema v10 stores canonical clusters, resolution audit and merge audit without losing source provenance.
+
+## Fallback Extraction + Evidence Confidence — 3.3.0-alpha.7 release candidate
+
+Alpha7 extends deterministic extraction and makes field-level provenance auditable.
+
+Extraction flow:
+
+```text
+Page HTML
+   ↓
+JSON-LD
+   ↓
+schema.org microdata
+   ↓
+source adapter / OpenGraph
+   ↓
+conservative DOM fallback
+   ↓
+MarketEntity + field_evidence
+   ↓
+current entity persistence (schema v11)
+   ├── entities.field_evidence_json
+   └── observations.snapshot_json (historical)
+   ↓
+Evidence Quality inspection
+```
+
+Key boundaries:
+
+- `MarketEntity.confidence` remains AI/enrichment confidence; extraction confidence is a separate field-level signal;
+- direct structured facts receive higher confidence than default/fallback values;
+- DOM fallback only runs when structured extractors produced no entity;
+- DOM fallback requires title + semantic price + explicit currency + product-context evidence;
+- default `EUR` is stored as explicit `default:EUR` evidence with lower confidence;
+- source adapters use the same `ExtractionEvidence` contract;
+- current entity provenance is updated in `field_evidence_json`, while prior observation snapshots remain immutable;
+- migrated historical entity rows do not receive invented provenance and remain `{}`;
+- Evidence Quality uses auditable high/medium/low bands and separately reports missing, mismatched/stale and default/inferred fields;
+- Evidence Quality deliberately does not collapse facts into one opaque score or average confidence;
+- `explain-cluster` exposes current field evidence and its quality summary;
+- `evidence-quality --project ... [--details]` provides project/entity inspection;
+- target-cluster-aware GTIN hard veto prevents automatic linking when one candidate cluster contains both a strong match and a GTIN conflict; an unrelated different GTIN alone is not a conflict.
+
+Database schema v11 extends the alpha6 canonical Entity Resolution layer without losing historical observation provenance.
 
 ## Feed state and HTTP resource state
 
