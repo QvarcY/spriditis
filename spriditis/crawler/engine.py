@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 
 from spriditis.ai.base import AIProvider
 from spriditis.config import AppSettings
+from spriditis.core.domains import DomainRecord
 from spriditis.core.feeds import FeedState
 from spriditis.core.projects import ResearchProject
 from spriditis.core.run import ResearchRunResult
@@ -37,12 +38,14 @@ class ResearchCrawler:
         ai: AIProvider,
         search_provider: SearchProvider | None = None,
         feed_states: dict[str, FeedState] | None = None,
+        domain_states: dict[str, DomainRecord] | None = None,
     ):
         self.settings = settings
         self.project = project
         self.ai = ai
         self.search_provider = search_provider
         self.feed_states = dict(feed_states or {})
+        self.domain_states = dict(domain_states or {})
 
         self.session = requests.Session()
         self.session.headers.update(
@@ -75,7 +78,10 @@ class ResearchCrawler:
         sitemap_checked: set[str] = set()
         feed_checked: set[str] = set()
 
-        registry = DomainRegistry(self.project)
+        registry = DomainRegistry(
+            self.project,
+            initial_records=self.domain_states,
+        )
 
         seeds: list[str] = []
 
@@ -423,7 +429,7 @@ class ResearchCrawler:
 
         self._enrich_entities(result)
 
-        result.domains = registry.records
+        result.domains = registry.current_run_records()
         result.domain_discoveries = registry.discoveries
         result.finished_at = datetime.now(timezone.utc).isoformat()
         return result
