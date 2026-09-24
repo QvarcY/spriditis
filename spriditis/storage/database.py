@@ -2762,6 +2762,11 @@ class Database:
             for domain, visits in sorted(visits_by_domain.items())
         }
 
+        feeds = {
+            item["feed_url"]: item
+            for item in self.feed_snapshots(project_id, run_id)
+        }
+
         clusters: dict[str, dict] = {}
         for entity in entities.values():
             cluster_key = entity["cluster_key"]
@@ -2815,6 +2820,7 @@ class Database:
             "entities": entities,
             "clusters": clusters,
             "domains": domains,
+            "feeds": feeds,
         }
 
     def compare_runs(
@@ -2847,6 +2853,9 @@ class Database:
             "SOURCE_CHANGED": 0,
             "DOMAIN_FAILED": 0,
             "DOMAIN_RECOVERED": 0,
+            "FEED_NEW_ENTRIES": 0,
+            "FEED_FAILED": 0,
+            "FEED_RECOVERED": 0,
         }
         for event in events:
             counts[event.change_type] = (
@@ -2858,6 +2867,7 @@ class Database:
             "comparison_basis": {
                 "entity_facts": "historical_observation_snapshots",
                 "domain_health": "historical_page_visits",
+                "feed_state": "historical_feed_snapshots",
                 "identity": "current_canonical_membership",
             },
             "before_run": {
@@ -2867,6 +2877,7 @@ class Database:
                 "entity_count": len(before["entities"]),
                 "cluster_count": len(before["clusters"]),
                 "domain_count": len(before["domains"]),
+                "feed_count": len(before["feeds"]),
             },
             "after_run": {
                 "id": after["run_id"],
@@ -2875,6 +2886,7 @@ class Database:
                 "entity_count": len(after["entities"]),
                 "cluster_count": len(after["clusters"]),
                 "domain_count": len(after["domains"]),
+                "feed_count": len(after["feeds"]),
             },
             "counts": counts,
             "events": [event.model_dump() for event in events],
