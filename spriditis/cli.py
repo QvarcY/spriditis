@@ -688,6 +688,26 @@ def main() -> int:
         )
 
         print("")
+        print(
+            f"ADAPTIVE DECISIONS "
+            f"({len(trace['adaptive_decisions'])})"
+        )
+        for item in trace["adaptive_decisions"]:
+            print(
+                f"   #{item['sequence']:<3} "
+                f"{item['stage']:<24} "
+                f"{item['decision']:<18} "
+                f"{item['target'][:72]}"
+            )
+            signals = item["signals"]
+            if signals:
+                signal_text = " · ".join(
+                    f"{key}={value}"
+                    for key, value in signals.items()
+                )
+                print(f"      {signal_text}")
+
+        print("")
         print(f"PAGE VISITS ({len(trace['page_visits'])})")
         for visit in trace["page_visits"]:
             status = (
@@ -924,6 +944,10 @@ def main() -> int:
             f"   Diversity: {artifacts.diversity_penalties_applied} "
             f"priority penalties / "
             f"{artifacts.diversity_domain_count} domēni"
+        )
+        print(
+            f"   Adaptive decisions: "
+            f"{artifacts.adaptive_decision_count}"
         )
         print(
             f"   Domēni: {artifacts.observed_domain_count} novēroti / "
