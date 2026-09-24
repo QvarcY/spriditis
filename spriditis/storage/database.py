@@ -977,6 +977,88 @@ class Database:
             for row in rows
         ]
 
+    def entity_resolution_review_queue(
+        self,
+        project_id: str,
+        *,
+        kind: str = "all",
+        limit: int = 100,
+    ) -> list[dict]:
+        kind = kind.strip().casefold()
+        if kind not in {"all", "ambiguous", "conflict"}:
+            raise ValueError(
+                "Review queue kind jābūt: all, ambiguous vai conflict."
+            )
+
+        filters = [
+            "r.project_id=?",
+            "("
+            "r.decision='deferred_ambiguous' "
+            "OR (r.decision='created_separate' "
+            "AND r.reason='identity_conflict')"
+            ")",
+            "c.merged_into_cluster_key=''",
+        ]
+        params: list[object] = [project_id]
+
+        if kind == "ambiguous":
+            filters.append("r.decision='deferred_ambiguous'")
+        elif kind == "conflict":
+            filters.append(
+                "r.decision='created_separate' "
+                "AND r.reason='identity_conflict'"
+            )
+
+        params.append(max(1, min(int(limit), 1000)))
+        rows = self.conn.execute(
+            f"""
+            SELECT r.id, r.run_id, r.entity_key, r.decision, r.reason,
+                   r.selected_cluster_key,
+                   r.candidate_cluster_keys_json,
+                   r.conflict_cluster_keys_json,
+                   r.matched_signals_json,
+                   r.supporting_signals_json,
+                   r.conflicting_signals_json,
+                   r.compared_entities, r.resolved_at,
+                   e.title, e.source_url, e.source_domain,
+                   c.canonical_title
+            FROM entity_resolution_events r
+            JOIN entities e
+              ON e.project_id=r.project_id
+             AND e.entity_key=r.entity_key
+            JOIN entity_clusters c
+              ON c.project_id=r.project_id
+             AND c.cluster_key=r.selected_cluster_key
+            WHERE {' AND '.join(filters)}
+            ORDER BY r.id
+            LIMIT ?
+            """,
+            tuple(params),
+        ).fetchall()
+
+        return [
+            {
+                "event_id": int(row[0]),
+                "run_id": int(row[1]),
+                "entity_key": row[2],
+                "decision": row[3],
+                "reason": row[4],
+                "selected_cluster_key": row[5],
+                "candidate_cluster_keys": json.loads(row[6] or "[]"),
+                "conflict_cluster_keys": json.loads(row[7] or "[]"),
+                "matched_signals": json.loads(row[8] or "[]"),
+                "supporting_signals": json.loads(row[9] or "[]"),
+                "conflicting_signals": json.loads(row[10] or "[]"),
+                "compared_entities": int(row[11] or 0),
+                "resolved_at": row[12] or "",
+                "title": row[13] or "",
+                "source_url": row[14] or "",
+                "source_domain": row[15] or "",
+                "canonical_title": row[16] or "",
+            }
+            for row in rows
+        ]
+
     def _cluster_member_rows(
         self,
         project_id: str,
