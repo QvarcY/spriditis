@@ -1,5 +1,48 @@
 # Izmaiņu vēsture / Changelog
 
+## [3.3.0-alpha.4]
+
+> Release candidate branchā / On the release-candidate branch. Vēl nav mergeots `main` un tagots / Not yet merged into `main` or tagged.
+
+### Pievienots / Added
+
+- DB schema v6 ar `page_visits` tabulu page lineage auditam / database schema v6 with a `page_visits` table for page-lineage auditing
+- `PageVisit` modelis ar URL/final URL, domain, source URL/type, depth, priority, outcome, HTTP statusu, content type un timestamp / `PageVisit` model with auditable fetch/discovery lineage metadata
+- `memory` CLI query yield, search duplication, source profiles un freshness signāliem / `memory` CLI for query yield, search duplication, source profiles and freshness signals
+- `explain` CLI viena domēna Research Memory izskaidrošanai / `explain` CLI for one-domain Research Memory evidence
+- `trace` CLI viena run provenance ķēdei, ar grupētu noklusējuma skatu un `--full` raw discovery auditu / `trace` CLI for one-run provenance, grouped by default with `--full` raw discovery audit
+- query `productive_domain_rate`, kas saglabā jēgpilnu yield arī tad, kad atkārtotā run labs domēns ir `known`, nevis atkārtoti `activated` / stable query `productive_domain_rate` across repeated runs
+- source profiles ar entity yield, HTTP success, crawl runs, observations, productive runs un `productive_run_rate` / source profiles with entity yield, HTTP success, crawl runs, observations and productive-run signals
+- search duplicate memory ar raw / unique / duplicate / filtered skaitītājiem un duplicate rate / search duplicate memory with explicit raw / unique / duplicate / filtered counters and duplicate rate
+- freshness/staleness signāli ar `last_useful_at → last_crawled → last_seen` pamatu, konfigurējamu `--stale-days` slieksni un redzamu freshness basis / freshness/staleness signals with explicit basis and configurable threshold
+
+### Uzlabots / Improved
+
+- atkārtotu query vērtība vairs netiek vērtēta tikai pēc first-activation notikumiem / repeated-query value no longer depends only on first-activation events
+- source lietderība tiek atdalīta no tīkla tehniskās stabilitātes: 100% HTTP success var pastāvēt kopā ar 0 productive runs / source usefulness is separated from transport success
+- URL-scoped safety iemesli, piemēram, `blocked_path`, bloķē konkrēto URL, bet vairs nepadara visu domēnu sticky `blocked` / URL-scoped safety reasons no longer poison the whole domain lifecycle
+- Research Memory CLI freshness tabulai pievienots `BASIS`, lai `fresh seen`, `fresh crawl` un `fresh useful` būtu nepārprotami / freshness output exposes its basis explicitly
+- discovery audita raw dati paliek pilni SQLite, kamēr cilvēkam lasāmais `trace` pēc noklusējuma grupē atkārtotus eventus / raw discovery audit remains complete while default trace output groups repeated events
+
+### Dizaina robeža / Milestone boundary
+
+- alpha4 **krāj un izskaidro** Research Memory signālus / alpha4 **records and explains** Research Memory signals
+- alpha4 neveic automātisku query/source prioritizāciju pēc vēsturiskās atmiņas / alpha4 does not automatically prioritize queries or sources from historical memory
+- adaptīva prioritizācija, saturation un stopping lēmumi paliek 3.3.0-alpha.5 Adaptive Expedition uzdevums / adaptive prioritization, saturation and stopping remain alpha5 work
+- netiek ieviests viens opaque source/query “quality score”; pamatā paliek atsevišķi auditējami signāli / no single opaque source/query quality score replaces the underlying signals
+
+### Validācija / Validation
+
+- `research_memory_test.py`
+- `research_memory_repeat_query_test.py`
+- `research_memory_source_profile_test.py`
+- `research_memory_freshness_test.py`
+- `research_memory_duplicate_rate_test.py`
+- pilns regression gate izpildīts pret schema, DB migration, Domain Registry, controlled discovery, sitemap, SearchProvider, SearXNG reliability, Expedition, Feed Discovery un smoke slāņiem / full regression gate passed across schema, DB migration, Domain Registry, controlled discovery, sitemap, SearchProvider, SearXNG reliability, Expedition, Feed Discovery and smoke coverage
+- reālā GitHub Changelog smoke datubāzē `github.blog` saglabā 100% HTTP success ar 0 productive runs un freshness basis=`last_crawled`, demonstrējot tehniskās pieejamības un research lietderības atdalīšanu / real GitHub Changelog smoke data demonstrates separation of transport success, research productivity and freshness
+
+---
+
 ## [3.3.0-alpha.3]
 
 ### Pievienots / Added
