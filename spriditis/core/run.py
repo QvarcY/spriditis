@@ -2,11 +2,23 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from typing import Any
 
 from .domains import DomainDiscovery, DomainRecord
 from .entities import MarketEntity
 from .feeds import FeedState
 from .memory import PageVisit
+
+
+@dataclass(frozen=True)
+class AdaptiveDecision:
+    stage: str
+    decision: str
+    target: str
+    signals: dict[str, Any] = field(default_factory=dict)
+    decided_at: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
 
 
 @dataclass
@@ -19,6 +31,7 @@ class ResearchRunResult:
 
     entities: list[MarketEntity] = field(default_factory=list)
     page_visits: list[PageVisit] = field(default_factory=list)
+    adaptive_decisions: list[AdaptiveDecision] = field(default_factory=list)
 
     visited_pages: int = 0
     failed_pages: int = 0
