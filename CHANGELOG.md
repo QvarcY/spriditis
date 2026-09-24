@@ -1,5 +1,45 @@
 # Izmaiņu vēsture / Changelog
 
+## [3.3.0-alpha.8] — validating
+
+> **Statuss / Status:** funkcionālais Change Detection scope ir ieviests; release baseline vēl tiek validēts.  
+> The functional Change Detection scope is implemented; the release baseline is still under validation.
+
+### Pievienots / Added
+
+- auditējams `ChangeEvent` modelis un deterministisks run-to-run salīdzinājums
+- `NEW_ENTITY`, `ENTITY_DISAPPEARED`, `PRICE_DROP`, `PRICE_INCREASE` un `SOURCE_CHANGED`
+- evidence-gated `SELLER_CHANGED`, `DESCRIPTION_CHANGED` un `IMAGE_CHANGED` ar minimum confidence `0.70`
+- konservatīvs `DOMAIN_FAILED` / `DOMAIN_RECOVERED` no historical page visits
+- DB schema v12 ar run-scoped `feed_snapshots`
+- `FEED_APPEARED`, `FEED_DISAPPEARED`, `FEED_NEW_ENTRIES`, `FEED_FAILED`, `FEED_RECOVERED`
+- feed change evidence linkage uz historical snapshot ID run trace
+- `diff --project ... --run-a ... --run-b ... [--details]` CLI
+
+### Drošības un pierādījumu robežas / Safety and evidence boundaries
+
+- price eventus salīdzina tikai vienam source entity un vienādā valūtā
+- low-confidence, missing un mismatched field evidence tiek apspiests
+- HTTP 4xx pats par sevi nav domain failure
+- robots/safety-only page outcomes paliek `unknown`
+- jaukts successful + 5xx domēna rezultāts paliek reachable
+- feed disappearance tiek emitēts tikai tad, ja vēlākajā runā feed domēns tiešām bija reachable
+- nepārbaudīts domēns nerada viltus feed disappearance
+- canonical identity izmanto current membership, bet vēsturiskie observation/page/feed fakti paliek nemainīti
+
+### Validācija / Validation
+
+- `change_detection_diff_test.py`
+- `change_detection_canonical_merge_test.py`
+- `change_detection_field_changes_test.py`
+- `change_detection_domain_health_test.py`
+- `change_detection_feed_test.py`
+- feed storage/incremental/crawler/parser regressions
+- Entity Resolution, Evidence Quality un Adaptive Decision Trace regresijas paliek zaļas
+- release regression gate vēl jāizpilda pirms statusa maiņas uz released
+
+---
+
 ## [3.3.0-alpha.7]
 
 > **Statuss / Status:** release baseline pilnībā validēts; pilnais regression gate izpildīts ar 43/43 testiem.  
