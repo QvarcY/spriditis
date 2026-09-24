@@ -27,14 +27,14 @@ class FakeSession:
 
         if headers.get("If-None-Match") == '"feed-v1"':
             return FakeResponse(
-                url=url,
+                url="https://example.com/canonical/feed.xml",
                 text="",
                 status_code=304,
                 headers={"ETag": '"feed-v1"'},
             )
 
         return FakeResponse(
-            url=url,
+            url="https://example.com/canonical/feed.xml",
             text="""
             <rss version="2.0"><channel>
               <item>
@@ -91,6 +91,7 @@ def main():
     fetched = first.fetches[0]
     assert fetched.state.feed_type == "rss"
     assert fetched.state.etag == '"feed-v1"'
+    assert fetched.state.feed_url == "https://example.com/feed.xml"
     assert [e.entry_id for e in fetched.new_entries] == ["new-2", "old-1"]
 
     previous = {fetched.state.feed_url: fetched.state}
@@ -106,6 +107,8 @@ def main():
 
     assert len(second.fetches) == 1
     assert second.fetches[0].not_modified is True
+    assert second.fetches[0].state.status == "active"
+    assert second.fetches[0].state.feed_url == "https://example.com/feed.xml"
     assert second.fetches[0].new_entries == []
     assert session.calls[-1][1]["If-None-Match"] == '"feed-v1"'
     assert "If-Modified-Since" in session.calls[-1][1]
