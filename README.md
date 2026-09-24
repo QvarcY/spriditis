@@ -5,56 +5,58 @@
 <h1 align="center">Sprīdītis</h1>
 
 <p align="center">
-  <strong>Configurable market-research crawler and AI-assisted research engine.</strong><br>
-  <strong>Pielāgojams tirgus izpētes crawleris un MI atbalstīts pētniecības dzinējs.</strong>
+  <strong>Pielāgojams tirgus izpētes crawleris un MI atbalstīts pētniecības dzinējs.</strong><br>
+  <strong>Configurable market-research crawler and AI-assisted research engine.</strong>
 </p>
 
 <p align="center">
   <a href="https://buymeacoffee.com/craftin">☕ Support the project</a>
   &nbsp;•&nbsp;
-  <a href="#english">English</a>
-  &nbsp;•&nbsp;
   <a href="#latviski">Latviski</a>
+  &nbsp;•&nbsp;
+  <a href="#english">English</a>
 </p>
 
 ---
-## ✨ Project at a glance / Projekts īsumā
+## ✨ Projekts īsumā / Project at a glance
 
+> **Mazs pētniecības dzinējs ar lielu ceļu priekšā:** tas dodas tīmeklī, seko pierādījumiem, atceras, kā atrada noderīgo, un tiek veidots tā, lai katrs nākamais pētījums būtu gudrāks par iepriekšējo.  
 > **A small research engine with a big journey:** it goes out into the web, follows evidence, remembers how it found things, and is being built to make every next research run smarter than the previous one.
 
 | | Status |
 |---|---|
-| **Public baseline / Publiskā versija** | ✅ `v3.3.0-alpha.1` — SearchProvider + zero-seed Expedition |
-| **Current work / Šobrīd** | 🧪 `3.3.0-alpha.2` — SearchProvider reliability + dedupe; locally validated, preparing publication |
-| **Next / Nākamais** | 🚧 `3.3.0-alpha.3` — Feed Discovery & Incremental Monitoring |
-| **North star / Galvenais virziens** | 🧠 **Research Memory + Adaptive Discovery** |
-| **Core principle / Pamatprincips** | 🔎 **source-backed facts > AI guesses** |
-| **Cost direction / Izmaksu princips** | 🌱 Prefer local, open, self-hostable and zero-cost building blocks where practical |
+| **Publiskā versija / Public baseline** | ✅ `v3.3.0-alpha.1` — SearchProvider + zero-seed Expedition |
+| **Šobrīd / Current work** | 🧪 `3.3.0-alpha.2` — SearchProvider reliability + dedupe; locally validated, preparing publication |
+| **Nākamais / Next** | 🚧 `3.3.0-alpha.3` — Feed Discovery & Incremental Monitoring |
+| **Galvenais virziens / North star** | 🧠 **Research Memory + Adaptive Discovery** |
+| **Pamatprincips / Core principle** | 🔎 **source-backed facts > AI guesses** |
+| **Izmaksu princips / Cost direction** | 🌱 Priekšroka lokāliem, atvērtiem, pašhostējamiem un bezmaksas risinājumiem / Prefer local, open, self-hostable and zero-cost building blocks |
 
-### Status legend / Statusu leģenda
+### Statusu leģenda / Status legend
 
-**✅ Released** — public and implemented  
-**🧪 Validating** — implemented locally / under validation or publication preparation  
-**🚧 In progress next** — next active development step  
-**🧭 Planned** — accepted roadmap direction
+**✅ Publicēts / Released** — publiski pieejams un ieviests / public and implemented  
+**🧪 Validēšana / Validating** — lokāli ieviests, tiek pārbaudīts vai gatavots publicēšanai / implemented locally, under validation or publication preparation  
+**🚧 Nākamais darbā / Next in progress** — nākamais aktīvais izstrādes posms / next active development step  
+**🧭 Plānots / Planned** — apstiprināts attīstības virziens / accepted roadmap direction
 
-## 🧭 Development journey / Attīstības ceļš
+## 🧭 Attīstības ceļš / Development journey
 
+> Šis ir dzīvs attīstības plāns, nevis fiksētu izlaišanas datumu solījums. Versiju robežas var mainīties, ja testēšana atklāj labāku arhitektūras risinājumu.  
 > This is a working roadmap, not a promise of fixed release dates. Version boundaries may move as testing reveals better architecture.
 
-| Status | Version | Milestone | What it adds |
+| Statuss / Status | Versija / Version | Posms / Milestone | Galvenais ieguvums / What it adds |
 |---|---|---|---|
 | ✅ | **3.1** | Configurable research core | `ResearchProject`, generic entities, structured extraction, optional AI enrichment |
 | ✅ | **3.2** | Domain Registry + Discovery Engine | persistent domain memory, sitemap discovery, controlled multi-domain crawling, DB migrations |
 | ✅ | **3.3.0-alpha.1** | SearchProvider + zero-seed Expedition | provider abstraction, query generation, search provenance, search → activation → crawl |
 | 🧪 | **3.3.0-alpha.2** | SearchProvider hardening | retry/backoff, `Retry-After`, structured provider errors, result dedupe, `search-check`, schema v4 |
 | 🚧 | **3.3.0-alpha.3** | Feed Discovery & Incremental Monitoring | RSS 2.0, Atom, JSON Feed, autodiscovery, ETag / Last-Modified, feed provenance |
-| 🧭 | **3.3.0-alpha.4** | Research Memory | query yield, source yield, discovery provenance, source quality metrics |
-| 🧭 | **3.3.0-alpha.5** | Adaptive Expedition | BM25 relevance, query prioritization, coverage saturation, controlled multi-hop discovery |
+| 🧭 | **3.3.0-alpha.4** | Research Memory | query/source yield, source profiles, provenance, `explain` + `trace`, freshness/staleness |
+| 🧭 | **3.3.0-alpha.5** | Adaptive Expedition | BM25, query prioritization, coverage saturation, per-depth budgets, multi-hop, source diversity |
 | 🧭 | **3.3.0-alpha.6** | Entity Resolution | cross-source matching, duplicate clustering, one entity with many source observations |
 | 🧭 | **3.3.0-alpha.7** | Fallback Extraction + Evidence Confidence | schema.org microdata, DOM heuristics, field-level extraction method + confidence |
-| 🧭 | **3.3.0-alpha.8** | Change Detection | price changes, new/disappeared entities, source/domain change events |
-| 🧭 | **3.3.0-alpha.9** | Watch mode | incremental repeated research, scheduling hooks, change-driven notifications |
+| 🧭 | **3.3.0-alpha.8** | Change Detection | price/new/disappeared events, source/domain changes, `diff` between runs |
+| 🧭 | **3.3.0-alpha.9** | Watch mode | incremental repeated research, scheduling hooks, change-only output, JSONL export |
 | 🧭 | **3.3.0-alpha.10** | Async crawler | bounded concurrency, adaptive politeness, faster crawling without abandoning safety |
 
 <details>
@@ -107,18 +109,21 @@
 
 </details>
 
-## 📖 Why the name “Sprīdītis”? / Kāpēc “Sprīdītis”?
+## 📖 Kāpēc “Sprīdītis”? / Why the name “Sprīdītis”?
+
+Nosaukums ir apzināta atsauce uz **Annas Brigaderes “Sprīdīti”** — mazu, apņēmīgu un atjautīgu ceļotāju, kurš dodas pasaulē, sastop pārbaudījumus un katrā nākamajā solī izmanto iepriekš gūto pieredzi. Sprīdīša tēls šajā projektā nav “jautrs dārznieks ar lāpstu”; tas ir **mazs pētnieks, kurš dodas plašajā pasaulē un mācās no ceļa**.
+
+Šis ceļš ir projekta metafora: **mazs pētniecības dzinējs dodas plašajā tīmeklī, krāj noderīgus rīkus un pieredzi, atceras ceļu un atgriežas ar strukturētiem pierādījumiem, nevis minējumiem.**
 
 The project name is inspired by **Anna Brigadere’s “Sprīdītis”**. In the play, Sprīdītis is a small boy who leaves home to search for happiness, meets one trial after another, and grows through the experience gained on the road. His determination and ingenuity matter, and what he learns or receives in earlier encounters helps him in later ones.
 
 That journey is the project metaphor: **a small research engine goes out into the wider web, gathers useful tools and experience, remembers the path, and comes back with structured evidence instead of guesses.**
 
-Nosaukums ir apzināta atsauce uz **Annas Brigaderes “Sprīdīti”** — mazu, apņēmīgu un atjautīgu ceļotāju, kurš dodas pasaulē, sastop pārbaudījumus un katrā nākamajā solī izmanto iepriekš gūto pieredzi. Sprīdīša tēls šajā projektā nav “jautrs dārznieks ar lāpstu”; tas ir **mazs pētnieks, kurš dodas plašajā pasaulē un mācās no ceļa**.
+Avots / Background: [Nacionālā enciklopēdija — “Sprīdītis”](https://enciklopedija.lv/skirklis/128907-%E2%80%9CSpr%C4%ABd%C4%ABtis%E2%80%9D)
 
-Background: [Nacionālā enciklopēdija — “Sprīdītis”](https://enciklopedija.lv/skirklis/128907-%E2%80%9CSpr%C4%ABd%C4%ABtis%E2%80%9D)
+## 🧠 Galvenais virziens: Research Memory / North star: Research Memory
 
-## 🧠 North star: Research Memory
-
+Sprīdītim jāatceras ne tikai **ko** tas atrada, bet arī **kā** tas to atrada.  
 Sprīdītis is intended to remember not only **what** it found, but **how** it found it:
 
 ```text
@@ -147,9 +152,284 @@ Research Memory
 next run becomes more selective
 ```
 
+Tāpēc ilgtermiņa atšķirība nav “pārmeklēt vairāk lapu”, bet:
+
+> **atrast noderīgus avotus, atcerēties, kuri ceļi strādāja, izvairīties no atkārtota darba, pamanīt nozīmīgas izmaiņas un apstāties, kad turpmāka pārmeklēšana vairs nedod pietiekami daudz jaunu pierādījumu.**
+
 The long-term differentiator is therefore not “crawl more pages”. It is:
 
 > **find useful sources, remember which paths worked, avoid repeated work, detect meaningful change, and stop when additional crawling no longer adds enough new evidence.**
+
+**Arhitektūras princips / Architecture principle:** **katram svarīgam lēmumam jābūt izskaidrojamam / every important decision should be explainable.**
+
+---
+
+## Latviski
+
+### Kas ir Sprīdītis?
+
+Sprīdītis ir eksperimentāls tirgus izpētes dzinējs, kas publiski pieejamu tīmekļa informāciju pārvērš strukturētos un pārbaudāmos datos.
+
+Tā vietā, lai vienkārši iedotu MI milzīgu lapas tekstu ar uzdevumu "saproti, kas te notiek", Sprīdītis darbu sadala vairākos slāņos:
+
+```text
+Pētījuma jautājums
+      ↓
+ResearchProject
+      ↓
+Crawler / URL rinda
+      ↓
+Strukturēta datu ieguve
+(JSON-LD / OpenGraph / avotu adapteri)
+      ↓
+MarketEntity
+      ↓
+Izvēles MI analīze
+      ↓
+SQLite novērojumi
+      ↓
+HTML atskaite
+```
+
+Crawleris un ekstraktori iegūst avotā pārbaudāmus faktus — piemēram, URL, nosaukumu vai cenu. MI tiek izmantots klasifikācijai, apkopošanai un papildu pazīmju noteikšanai, nevis kā vienīgais patiesības avots.
+
+### Kur to var izmantot?
+
+Sprīdītis ir noderīgs situācijās, kur desmitiem vai simtiem lapu manuāla pārskatīšana būtu lēna, monotona vai grūti atkārtojama.
+
+Piemēri:
+
+- **Produktu tirgus salīdzināšanai** — savākt produktus, cenas, pārdevējus un kategorijas no publiskiem avotiem.
+- **Cenu izmaiņu novērošanai** — atkārtoti palaist vienu un to pašu pētījumu un uzkrāt vēsturi.
+- **Nišas izpētei pirms jauna produkta vai pakalpojuma ieviešanas** — saprast, kas jau tiek piedāvāts un kādi modeļi atkārtojas.
+- **Hobiju tirgu novērošanai** — piemēram, 3D drukas piederumi, velosipēdu detaļas, elektronika vai kolekcionējami priekšmeti.
+- **Vietējo pakalpojumu salīdzināšanai** — pielāgot modeli pakalpojumu veidiem, cenām un publiski pieejamiem nosacījumiem.
+- **Konkurentu novērošanas pamata izveidei** — atkārtojams process pārlūka grāmatzīmju un manuālu tabulu vietā.
+- **Datu savākšanai atskaitei vai analīzei** — saglabājot avota URL un ieguves metadatus.
+- **Savām pētniecības idejām** — definēt atslēgvārdus, izslēdzamos vārdus, sākuma avotus, crawl limitus un analizējamos laukus.
+
+Sprīdītis nav piesaistīts vienai nozarei. Ideja ir vienu un to pašu kodolu pielāgot dažādiem tirgus izpētes uzdevumiem ar konfigurāciju.
+
+### Pašlaik pieejams
+
+- konfigurējami `ResearchProject` JSON faili
+- universāls `MarketEntity`
+- viena domēna pārmeklēšana
+- kontrolēts vairāku domēnu discovery režīms
+- īsts zero-seed Expedition starts
+- provider-neatkarīgs `SearchProvider` slānis
+- deterministisks Expedition vaicājumu ģenerators
+- SearXNG JSON API provideris un offline fake provideris atkārtojamiem testiem
+- persistējošs Domain Registry ar `candidate`, `active`, `blocked`, `rejected` un `failed` statusiem
+- ārējo domēnu un search rezultātu audita vēsture ar providera/vaicājuma izcelsmi
+- search vaicājumu, rezultātu, aktivizāciju un kļūdu skaitītāji
+- sitemap atklāšana no `robots.txt` un `/sitemap.xml`
+- URL prioritizācija un crawl budžeti katram domēnam
+- `robots.txt` pārbaude
+- drošības filtri crawlerim
+- JSON-LD `Product` datu ieguve
+- OpenGraph produktu datu ieguve
+- avotu adapteru arhitektūra
+- Gemini provideris
+- lokāls fallback klasifikators
+- MI batch analīze
+- retry/backoff Gemini `429` un `503` gadījumiem
+- SQLite projekti, skrējieni, objekti, novērojumi, domēni un discovery vēsture
+- versiju neitrāla `data/spriditis.db` ar migrāciju pamatu
+- HTML atskaites
+- CLI
+- servisa slānis nākotnes UI/API
+
+### Kas vēl nav gatavs?
+
+Pieņemtais attīstības virziens ir redzams README sākumā sadaļā **Development journey / Attīstības ceļš**. Tuvākā secība ir SearchProvider stabilizācija → Feed Discovery → Research Memory → Adaptive Expedition → Entity Resolution → fallback ekstrakcija ar evidence confidence → izmaiņu noteikšana → watch režīms → kontrolēts async crawleris.
+
+Detalizēti skatīt [ROADMAP.md](ROADMAP.md).
+
+### Ātrais sākums
+
+Nepieciešams Python 3.11+.
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+Copy-Item .env.example .env
+```
+
+Apskati pieejamos šablonus:
+
+```powershell
+python main.py templates
+```
+
+Izveido universālu produktu tirgus pētījumu:
+
+```powershell
+python main.py create --preset generic_products --output projects\mans_tirgus.json
+```
+
+Pielāgo failā:
+
+- nosaukumu
+- atslēgvārdus
+- izslēdzamos atslēgvārdus
+- sākuma URL
+- kategorijas
+- analizējamos atribūtus
+- crawl limitus
+
+Pārbaudi konfigurāciju:
+
+```powershell
+python main.py validate --project projects\mans_tirgus.json
+```
+
+Palaid bez MI:
+
+```powershell
+python main.py run --project projects\mans_tirgus.json --max-pages 10 --no-ai --no-email
+```
+
+Palaid ar Gemini:
+
+```powershell
+python main.py run --project projects\mans_tirgus.json --max-pages 10 --no-email
+```
+
+Apskati Domain Registry:
+
+```powershell
+python main.py domains --project projects\mans_tirgus.json
+python main.py domains --project projects\mans_tirgus.json --status candidate
+python main.py domains --project projects\mans_tirgus.json --details
+```
+
+Apskati discovery lēmumu auditu:
+
+```powershell
+python main.py discoveries --project projects\mans_tirgus.json
+python main.py discoveries --project projects\mans_tirgus.json --action activated
+```
+
+Apskati deterministiski ģenerēto Expedition meklēšanas plānu:
+
+```powershell
+python main.py queries --project projects\expedition_example.json
+```
+
+Pilno zero-seed Expedition plūsmu bez ārēja meklētāja var pārbaudīt ar:
+
+```powershell
+python tests\expedition_integration_test.py
+```
+
+Sprīdītis tagad izmanto versiju neitrālu SQLite datubāzi:
+
+```text
+data/spriditis.db
+```
+
+Vecāku datubāzi var droši pārnest ar:
+
+```powershell
+python main.py migrate-db --from-db ..\vecaka_versija\data\spriditis_v31.db
+```
+
+Migrācija izmanto SQLite backup mehānismu un pēc kopēšanas piemēro aktuālo shēmas migrāciju.
+
+### Vienkāršs piemērs
+
+Pieņemsim, ka gribi izpētīt ergonomisko darba krēslu tirgu.
+
+```json
+{
+  "id": "darba_kresli",
+  "name": "Ergonomisko darba krēslu tirgus",
+  "research_type": "product_market",
+  "entity_type": "product",
+  "languages": ["lv"],
+  "countries": ["LV"],
+  "keywords": [
+    "ergonomisks krēsls",
+    "biroja krēsls",
+    "jostasvietas atbalsts",
+    "mesh"
+  ],
+  "negative_keywords": [
+    "remonta instrukcija",
+    "rezerves daļas"
+  ],
+  "seed_urls": [
+    "https://example.com/biroja-kresli"
+  ]
+}
+```
+
+Ar citu konfigurāciju tas pats kodols var pētīt tīkla iekārtas, velosipēdu piederumus, vietējos pakalpojumus, rokdarbu tirgu, programmatūras abonementus vai pavisam citu publiski pieejamu tirgu.
+
+### MI darbība
+
+Gemini nav obligāts.
+
+Sprīdītis vispirms savāc un strukturē tirgus objektus un tikai pēc tam nodod tos batch analīzei.
+
+Ja Gemini pēc atkārtotiem mēģinājumiem nav pieejams, Sprīdītis izmanto lokālo fallback klasifikatoru un pētījumu pabeidz.
+
+```env
+GEMINI_MODEL=gemini-3.8-flash
+GEMINI_BATCH_SIZE=10
+GEMINI_REQUESTS_PER_MINUTE=5
+GEMINI_MAX_RETRIES=3
+GEMINI_RETRY_BASE_SECONDS=5
+```
+
+### Atbildīga pārmeklēšana
+
+Sprīdītis paredzēts likumīgai publiski pieejamas informācijas izpētei.
+
+Crawlerī ir `robots.txt` atbalsts, pauzes starp pieprasījumiem, lapu un domēnu limiti, URL filtrēšana un aizsardzība pret privātiem/localhost mērķiem.
+
+Lietotājs pats ir atbildīgs par vietņu noteikumu, piemērojamo tiesību aktu un datu izmantošanas prasību ievērošanu.
+
+Sprīdīti nevajadzētu izmantot autentifikācijas, piekļuves kontroles, paywall, CAPTCHA vai citu tehnisku ierobežojumu apiešanai.
+
+### Projekta statuss
+
+Pašreizējais publiskais atskaites punkts: **Sprīdītis 3.3.0-alpha.1**.
+
+Šajā pieturas punktā Sprīdītim pirmo reizi ir īsts Expedition starts: projekts var sākties bez neviena seed URL, ģenerēt deterministiskus meklēšanas vaicājumus, saņemt rezultātus caur provider-neatkarīgu SearchProvider, piemērot esošos drošības, relevances un domēnu budžeta noteikumus, aktivizēt derīgu domēnu un to pārmeklēt.
+
+Pašlaik ir pieejams offline fake provideris deterministiskiem testiem un SearXNG JSON API provideris reālai meklēšanas integrācijai. Providera un vaicājuma izcelsme tiek saglabāta auditam un neapiet Domain Registry.
+
+**3.3.0-alpha.2** SearchProvider stabilizācijas darbi ir lokāli pārbaudīti un tiek gatavoti publicēšanai. Nākamais apstiprinātais pieturas punkts ir **3.3.0-alpha.3 — Feed Discovery & Incremental Monitoring**.
+
+Šis ir alpha projekts, tāpēc līdz stabilai versijai iespējamas arī nesavietojamas izmaiņas.
+
+### Open-core virziens
+
+Publiskais repozitorijs paredzēts kā patstāvīgi lietojams pētniecības kodols. Nākotnē hostētas, komerciālas vai operacionālas funkcijas var tikt attīstītas atsevišķi.
+
+Skatīt [docs/OPEN_CORE.md](docs/OPEN_CORE.md).
+
+### Atbalsti projektu
+
+Ja Sprīdītis tev šķiet noderīgs un vēlies atbalstīt tā tālāku attīstību:
+
+☕ **[Buy Me a Coffee](https://buymeacoffee.com/craftin)**
+
+### Drošība un iesaiste
+
+Nekad nepublicē `.env`, API atslēgas, SMTP app paroles, cookies vai citus piekļuves datus.
+
+- [Drošības politika](SECURITY.md)
+- [Iesaisties projektā](CONTRIBUTING.md)
+- [Izmaiņu vēsture](CHANGELOG.md)
+- [Attīstības plāns](ROADMAP.md)
+
+### Licence
+
+Apache License 2.0. Skatīt [LICENSE](LICENSE).
 
 ---
 
@@ -452,270 +732,3 @@ Never commit `.env`, API keys, SMTP app passwords, cookies or other credentials.
 Apache License 2.0. See [LICENSE](LICENSE).
 
 ---
-
-## Latviski
-
-### Kas ir Sprīdītis?
-
-Sprīdītis ir eksperimentāls tirgus izpētes dzinējs, kas publiski pieejamu tīmekļa informāciju pārvērš strukturētos un pārbaudāmos datos.
-
-Tā vietā, lai vienkārši iedotu MI milzīgu lapas tekstu ar uzdevumu "saproti, kas te notiek", Sprīdītis darbu sadala vairākos slāņos:
-
-```text
-Pētījuma jautājums
-      ↓
-ResearchProject
-      ↓
-Crawler / URL rinda
-      ↓
-Strukturēta datu ieguve
-(JSON-LD / OpenGraph / avotu adapteri)
-      ↓
-MarketEntity
-      ↓
-Izvēles MI analīze
-      ↓
-SQLite novērojumi
-      ↓
-HTML atskaite
-```
-
-Crawleris un ekstraktori iegūst avotā pārbaudāmus faktus — piemēram, URL, nosaukumu vai cenu. MI tiek izmantots klasifikācijai, apkopošanai un papildu pazīmju noteikšanai, nevis kā vienīgais patiesības avots.
-
-### Kur to var izmantot?
-
-Sprīdītis ir noderīgs situācijās, kur desmitiem vai simtiem lapu manuāla pārskatīšana būtu lēna, monotona vai grūti atkārtojama.
-
-Piemēri:
-
-- **Produktu tirgus salīdzināšanai** — savākt produktus, cenas, pārdevējus un kategorijas no publiskiem avotiem.
-- **Cenu izmaiņu novērošanai** — atkārtoti palaist vienu un to pašu pētījumu un uzkrāt vēsturi.
-- **Nišas izpētei pirms jauna produkta vai pakalpojuma ieviešanas** — saprast, kas jau tiek piedāvāts un kādi modeļi atkārtojas.
-- **Hobiju tirgu novērošanai** — piemēram, 3D drukas piederumi, velosipēdu detaļas, elektronika vai kolekcionējami priekšmeti.
-- **Vietējo pakalpojumu salīdzināšanai** — pielāgot modeli pakalpojumu veidiem, cenām un publiski pieejamiem nosacījumiem.
-- **Konkurentu novērošanas pamata izveidei** — atkārtojams process pārlūka grāmatzīmju un manuālu tabulu vietā.
-- **Datu savākšanai atskaitei vai analīzei** — saglabājot avota URL un ieguves metadatus.
-- **Savām pētniecības idejām** — definēt atslēgvārdus, izslēdzamos vārdus, sākuma avotus, crawl limitus un analizējamos laukus.
-
-Sprīdītis nav piesaistīts vienai nozarei. Ideja ir vienu un to pašu kodolu pielāgot dažādiem tirgus izpētes uzdevumiem ar konfigurāciju.
-
-### Pašlaik pieejams
-
-- konfigurējami `ResearchProject` JSON faili
-- universāls `MarketEntity`
-- viena domēna pārmeklēšana
-- kontrolēts vairāku domēnu discovery režīms
-- īsts zero-seed Expedition starts
-- provider-neatkarīgs `SearchProvider` slānis
-- deterministisks Expedition vaicājumu ģenerators
-- SearXNG JSON API provideris un offline fake provideris atkārtojamiem testiem
-- persistējošs Domain Registry ar `candidate`, `active`, `blocked`, `rejected` un `failed` statusiem
-- ārējo domēnu un search rezultātu audita vēsture ar providera/vaicājuma izcelsmi
-- search vaicājumu, rezultātu, aktivizāciju un kļūdu skaitītāji
-- sitemap atklāšana no `robots.txt` un `/sitemap.xml`
-- URL prioritizācija un crawl budžeti katram domēnam
-- `robots.txt` pārbaude
-- drošības filtri crawlerim
-- JSON-LD `Product` datu ieguve
-- OpenGraph produktu datu ieguve
-- avotu adapteru arhitektūra
-- Gemini provideris
-- lokāls fallback klasifikators
-- MI batch analīze
-- retry/backoff Gemini `429` un `503` gadījumiem
-- SQLite projekti, skrējieni, objekti, novērojumi, domēni un discovery vēsture
-- versiju neitrāla `data/spriditis.db` ar migrāciju pamatu
-- HTML atskaites
-- CLI
-- servisa slānis nākotnes UI/API
-
-### Kas vēl nav gatavs?
-
-Pieņemtais attīstības virziens ir redzams README sākumā sadaļā **Development journey / Attīstības ceļš**. Tuvākā secība ir SearchProvider stabilizācija → Feed Discovery → Research Memory → Adaptive Expedition → Entity Resolution → fallback ekstrakcija ar evidence confidence → izmaiņu noteikšana → watch režīms → kontrolēts async crawleris.
-
-Detalizēti skatīt [ROADMAP.md](ROADMAP.md).
-
-### Ātrais sākums
-
-Nepieciešams Python 3.11+.
-
-```powershell
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-Copy-Item .env.example .env
-```
-
-Apskati pieejamos šablonus:
-
-```powershell
-python main.py templates
-```
-
-Izveido universālu produktu tirgus pētījumu:
-
-```powershell
-python main.py create --preset generic_products --output projects\mans_tirgus.json
-```
-
-Pielāgo failā:
-
-- nosaukumu
-- atslēgvārdus
-- izslēdzamos atslēgvārdus
-- sākuma URL
-- kategorijas
-- analizējamos atribūtus
-- crawl limitus
-
-Pārbaudi konfigurāciju:
-
-```powershell
-python main.py validate --project projects\mans_tirgus.json
-```
-
-Palaid bez MI:
-
-```powershell
-python main.py run --project projects\mans_tirgus.json --max-pages 10 --no-ai --no-email
-```
-
-Palaid ar Gemini:
-
-```powershell
-python main.py run --project projects\mans_tirgus.json --max-pages 10 --no-email
-```
-
-Apskati Domain Registry:
-
-```powershell
-python main.py domains --project projects\mans_tirgus.json
-python main.py domains --project projects\mans_tirgus.json --status candidate
-python main.py domains --project projects\mans_tirgus.json --details
-```
-
-Apskati discovery lēmumu auditu:
-
-```powershell
-python main.py discoveries --project projects\mans_tirgus.json
-python main.py discoveries --project projects\mans_tirgus.json --action activated
-```
-
-Apskati deterministiski ģenerēto Expedition meklēšanas plānu:
-
-```powershell
-python main.py queries --project projects\expedition_example.json
-```
-
-Pilno zero-seed Expedition plūsmu bez ārēja meklētāja var pārbaudīt ar:
-
-```powershell
-python tests\expedition_integration_test.py
-```
-
-Sprīdītis tagad izmanto versiju neitrālu SQLite datubāzi:
-
-```text
-data/spriditis.db
-```
-
-Vecāku datubāzi var droši pārnest ar:
-
-```powershell
-python main.py migrate-db --from-db ..\vecaka_versija\data\spriditis_v31.db
-```
-
-Migrācija izmanto SQLite backup mehānismu un pēc kopēšanas piemēro aktuālo shēmas migrāciju.
-
-### Vienkāršs piemērs
-
-Pieņemsim, ka gribi izpētīt ergonomisko darba krēslu tirgu.
-
-```json
-{
-  "id": "darba_kresli",
-  "name": "Ergonomisko darba krēslu tirgus",
-  "research_type": "product_market",
-  "entity_type": "product",
-  "languages": ["lv"],
-  "countries": ["LV"],
-  "keywords": [
-    "ergonomisks krēsls",
-    "biroja krēsls",
-    "jostasvietas atbalsts",
-    "mesh"
-  ],
-  "negative_keywords": [
-    "remonta instrukcija",
-    "rezerves daļas"
-  ],
-  "seed_urls": [
-    "https://example.com/biroja-kresli"
-  ]
-}
-```
-
-Ar citu konfigurāciju tas pats kodols var pētīt tīkla iekārtas, velosipēdu piederumus, vietējos pakalpojumus, rokdarbu tirgu, programmatūras abonementus vai pavisam citu publiski pieejamu tirgu.
-
-### MI darbība
-
-Gemini nav obligāts.
-
-Sprīdītis vispirms savāc un strukturē tirgus objektus un tikai pēc tam nodod tos batch analīzei.
-
-Ja Gemini pēc atkārtotiem mēģinājumiem nav pieejams, Sprīdītis izmanto lokālo fallback klasifikatoru un pētījumu pabeidz.
-
-```env
-GEMINI_MODEL=gemini-3.8-flash
-GEMINI_BATCH_SIZE=10
-GEMINI_REQUESTS_PER_MINUTE=5
-GEMINI_MAX_RETRIES=3
-GEMINI_RETRY_BASE_SECONDS=5
-```
-
-### Atbildīga pārmeklēšana
-
-Sprīdītis paredzēts likumīgai publiski pieejamas informācijas izpētei.
-
-Crawlerī ir `robots.txt` atbalsts, pauzes starp pieprasījumiem, lapu un domēnu limiti, URL filtrēšana un aizsardzība pret privātiem/localhost mērķiem.
-
-Lietotājs pats ir atbildīgs par vietņu noteikumu, piemērojamo tiesību aktu un datu izmantošanas prasību ievērošanu.
-
-Sprīdīti nevajadzētu izmantot autentifikācijas, piekļuves kontroles, paywall, CAPTCHA vai citu tehnisku ierobežojumu apiešanai.
-
-### Projekta statuss
-
-Pašreizējais publiskais atskaites punkts: **Sprīdītis 3.3.0-alpha.1**.
-
-Šajā pieturas punktā Sprīdītim pirmo reizi ir īsts Expedition starts: projekts var sākties bez neviena seed URL, ģenerēt deterministiskus meklēšanas vaicājumus, saņemt rezultātus caur provider-neatkarīgu SearchProvider, piemērot esošos drošības, relevances un domēnu budžeta noteikumus, aktivizēt derīgu domēnu un to pārmeklēt.
-
-Pašlaik ir pieejams offline fake provideris deterministiskiem testiem un SearXNG JSON API provideris reālai meklēšanas integrācijai. Providera un vaicājuma izcelsme tiek saglabāta auditam un neapiet Domain Registry.
-
-**3.3.0-alpha.2** SearchProvider stabilizācijas darbi ir lokāli pārbaudīti un tiek gatavoti publicēšanai. Nākamais apstiprinātais pieturas punkts ir **3.3.0-alpha.3 — Feed Discovery & Incremental Monitoring**.
-
-Šis ir alpha projekts, tāpēc līdz stabilai versijai iespējamas arī nesavietojamas izmaiņas.
-
-### Open-core virziens
-
-Publiskais repozitorijs paredzēts kā patstāvīgi lietojams pētniecības kodols. Nākotnē hostētas, komerciālas vai operacionālas funkcijas var tikt attīstītas atsevišķi.
-
-Skatīt [docs/OPEN_CORE.md](docs/OPEN_CORE.md).
-
-### Atbalsti projektu
-
-Ja Sprīdītis tev šķiet noderīgs un vēlies atbalstīt tā tālāku attīstību:
-
-☕ **[Buy Me a Coffee](https://buymeacoffee.com/craftin)**
-
-### Drošība un iesaiste
-
-Nekad nepublicē `.env`, API atslēgas, SMTP app paroles, cookies vai citus piekļuves datus.
-
-- [Drošības politika](SECURITY.md)
-- [Iesaisties projektā](CONTRIBUTING.md)
-- [Izmaiņu vēsture](CHANGELOG.md)
-- [Attīstības plāns](ROADMAP.md)
-
-### Licence
-
-Apache License 2.0. Skatīt [LICENSE](LICENSE).

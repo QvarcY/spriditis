@@ -1,14 +1,18 @@
-# Sprīdītis Architecture
+# Sprīdītis — arhitektūra / Architecture
 
-Current baseline: **3.3.0-alpha.1**
+Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.1**
 
-Sprīdītis is structured as a research engine rather than a single-purpose scraper. The design separates discovery, extraction, analysis, persistence, and presentation so each layer can evolve independently.
+> **Latviski pirmajā vietā, angļu valoda zemāk. / Latvian first, English below.**
 
-## High-level flow
+---
+
+# Latviski
+
+Sprīdītis ir pētniecības dzinējs, nevis viena uzdevuma scraperis. Arhitektūra atdala discovery, crawl, extraction, analīzi, persistence un presentation, lai katru slāni var attīstīt neatkarīgi.
+
+## Augsta līmeņa plūsma
 
 ```text
-Research question
-      ↓
 ResearchProject
       ├── Seed URLs
       └── Expedition
@@ -27,183 +31,273 @@ Crawler
       ├── robots / URL safety
       ├── crawl budgets
       ├── sitemap discovery
-      └── external-link discovery
-              ↓
-        Domain Registry
-              ↓
+      ├── external-link discovery
+      └── nākotnē: RSS / Atom / JSON Feed
+             ↓
 Structured Extraction
-(JSON-LD / OpenGraph / adapters)
-      ↓
+             ↓
 MarketEntity
-      ↓
+             ↓
 Optional AI enrichment
-      ↓
+             ↓
 SQLite persistence
-      ├── projects
-      ├── runs
-      ├── entities
-      ├── observations
-      ├── domains
-      ├── domain_discoveries
-      ├── search_queries
-      └── search_results
-      ↓
-HTML report / service consumers
+             ↓
+Reports / service consumers
+```
+
+## Galvenie slāņi
+
+### `spriditis/core`
+Atkārtoti izmantojamie modeļi: `ResearchProject`, `MarketEntity`, run struktūras, Domain Registry ieraksti un discovery eventi.
+
+### `spriditis/crawler`
+URL frontier, normalizācija, drošības politika, robots, crawl dziļums/budžeti, sitemap discovery, Domain Registry lēmumi un crawl engine.
+
+### `spriditis/search`
+Provider-neatkarīgs `SearchProvider`, query ģenerēšana, search rezultātu modeļi, FakeSearchProvider testiem un SearXNG provideris.
+
+Search rezultāti nedrīkst apiet Domain Registry vai crawlera drošības politiku.
+
+### `spriditis/extraction`
+Avota HTML un strukturēto metadatu pārvēršana `MarketEntity`. Strukturēti pierādījumi ir prioritāri pirms MI enrichment.
+
+### `spriditis/sources`
+Avotiem specifiski adapteri, izolējot konkrētas vietnes īpatnības no crawlera kodola.
+
+### `spriditis/ai`
+Izvēles MI enrichment. Crawler/extraction plūsmai jāstrādā arī bez MI.
+
+### `spriditis/storage`
+SQLite persistence un schema evolution. Noklusējuma DB:
+```text
+data/spriditis.db
+```
+
+### `spriditis/reports`
+Cilvēkam lasāmas atskaites.
+
+### `spriditis/api`
+Servisa robeža nākotnes UI/API klientiem. UI nevajadzētu importēt crawlera internals tieši.
+
+## Domain Registry
+
+Statusi:
+- `candidate`;
+- `active`;
+- `blocked`;
+- `rejected`;
+- `failed`.
+
+Discovery eventiem jāsaglabā provenance: source URL, target URL, relevance signāli, darbība, iemesls un laiks.
+
+## Research Memory virziens
+
+Plānotais lineage:
+
+```text
+query
+ ↓
+provider
+ ↓
+domain
+ ↓
+HTML link / sitemap / feed
+ ↓
+page
+ ↓
+extraction method
+ ↓
+entity
+ ↓
+observation
+ ↓
+change
+```
+
+Svarīgs princips: **katram nozīmīgam lēmumam jābūt izskaidrojamam.** Tāpēc `explain` un `trace` ir dabiska Research Memory saskarne.
+
+## Feed state un HTTP resursu stāvoklis
+
+RSS/Atom/JSON Feed dati netiks glabāti kā nejaušas kolonnas `domains` tabulā. Vienam domēnam var būt vairāki feedi, tāpēc vajadzīgs 1:N feed modelis.
+
+Paredzētais feed state:
+- feed URL;
+- feed type;
+- status;
+- ETag;
+- Last-Modified;
+- last entry id;
+- last published;
+- last checked/success;
+- counters/error.
+
+Ilgtermiņā `ETag`/`Last-Modified` var kļūt par vispārīgu per-resource fetch-state mehānismu arī sitemap un parastām lapām.
+
+## Drošības robežas
+
+- tikai atbalstīti HTTP/HTTPS scheme;
+- localhost/private/link-local aizsardzība;
+- blocked hosts/paths;
+- binary/static filtrēšana;
+- redirect kontrole;
+- robots policy;
+- page/domain/depth budgets.
+
+## Dizaina principi
+
+1. Avotu fakti pirms MI interpretācijas.
+2. MI ir izvēles enrichment, nevis patiesības avots.
+3. Discovery lēmumi ir auditējami un izskaidrojami.
+4. Budžeti un drošības noteikumi ir explicit.
+5. Publiskais kodols paliek generic.
+6. Research Memory tiek būvēta virs SQLite, nevis ieviešot smagu infrastruktūru bez vajadzības.
+7. Ātrums nedrīkst vājināt politeness un drošību.
+
+---
+
+# English
+
+Sprīdītis is a research engine rather than a single-purpose scraper. The architecture separates discovery, crawling, extraction, analysis, persistence, and presentation so each layer can evolve independently.
+
+## High-level flow
+
+```text
+ResearchProject
+      ├── Seed URLs
+      └── Expedition
+             ↓
+       Query Generator
+             ↓
+       SearchProvider
+             ↓
+       candidate URLs/domains
+             ↓
+       Domain Registry
+             ↓
+          URL Frontier
+             ↓
+Crawler
+      ├── robots / URL safety
+      ├── crawl budgets
+      ├── sitemap discovery
+      ├── external-link discovery
+      └── future: RSS / Atom / JSON Feed
+             ↓
+Structured Extraction
+             ↓
+MarketEntity
+             ↓
+Optional AI enrichment
+             ↓
+SQLite persistence
+             ↓
+Reports / service consumers
 ```
 
 ## Core layers
 
 ### `spriditis/core`
-
-Contains reusable domain models such as:
-
-- `ResearchProject`;
-- `MarketEntity`;
-- run result structures;
-- Domain Registry records and discovery events.
-
-The core should not know about a particular private deployment.
+Reusable models: `ResearchProject`, `MarketEntity`, run structures, Domain Registry records and discovery events.
 
 ### `spriditis/crawler`
-
-Owns traversal behavior:
-
-- URL frontier;
-- URL normalization and safety policy;
-- robots handling;
-- crawl depth and page budgets;
-- Domain Registry discovery decisions;
-- sitemap discovery;
-- crawl engine.
+URL frontier, normalization, safety policy, robots handling, crawl depth/budgets, sitemap discovery, Domain Registry decisions and crawl engine.
 
 ### `spriditis/search`
+Provider-neutral `SearchProvider`, query generation, search-result models, FakeSearchProvider for tests and SearXNG provider.
 
-Owns active source discovery for Expedition:
-
-- provider-neutral `SearchProvider` interface;
-- deterministic query generation;
-- search-result models;
-- offline fake provider for repeatable integration tests;
-- SearXNG JSON API provider.
-
-Search results do not bypass crawler policy. They enter through Domain Registry relevance, safety and domain-budget decisions before being added to the crawl frontier.
+Search results must not bypass Domain Registry or crawler safety policy.
 
 ### `spriditis/extraction`
-
-Converts source HTML and structured metadata into generic market entities.
-
-Structured evidence is preferred before AI enrichment.
+Converts source HTML and structured metadata into `MarketEntity`. Structured evidence is preferred before AI enrichment.
 
 ### `spriditis/sources`
-
-Contains source-specific adapters for cases where generic structured extraction is insufficient.
-
-Adapters should remain isolated so source quirks do not spread through the crawler core.
+Source-specific adapters isolate site quirks from crawler core.
 
 ### `spriditis/ai`
-
-Provides optional AI enrichment.
-
-The crawler/extraction pipeline must remain usable when AI is disabled or temporarily unavailable.
-
-The current flow batches already-extracted entities before AI analysis. Provider failure can fall back to local classification.
+Optional AI enrichment. Crawling/extraction must remain usable without AI.
 
 ### `spriditis/storage`
-
-Owns SQLite persistence and schema evolution.
-
-The version-neutral default database is:
-
+SQLite persistence and schema evolution. Default DB:
 ```text
 data/spriditis.db
 ```
 
-Schema migration is explicit, and legacy databases can be copied through SQLite's backup API before applying the current schema.
-
 ### `spriditis/reports`
-
-Turns completed run data into human-readable reports.
+Human-readable reports.
 
 ### `spriditis/api`
-
-Provides a service boundary for future UI/API consumers.
-
-A future UI should call the service layer rather than importing crawler internals directly.
+Service boundary for future UI/API consumers. UI should not import crawler internals directly.
 
 ## Domain Registry
 
-The Domain Registry is the central memory of source discovery.
+States:
+- `candidate`;
+- `active`;
+- `blocked`;
+- `rejected`;
+- `failed`.
 
-Current states:
+Discovery events preserve provenance: source URL, target URL, relevance signals, action, reason and timestamp.
 
-- `candidate` — observed but not activated;
-- `active` — allowed into the crawl process;
-- `blocked` — rejected by a safety/policy rule;
-- `rejected` — explicitly rejected by research logic;
-- `failed` — crawl or source failure.
+## Research Memory direction
 
-Discovery events preserve provenance such as source URL, target URL, relevance score, action, reason, and timestamp.
-
-The controlled discovery baseline validates:
+Planned lineage:
 
 ```text
-external link
-    ↓
-relevance score
-    ↓
-candidate / active / blocked
-    ↓
-domain budget
-    ↓
-frontier
-    ↓
-crawl
+query
+ ↓
+provider
+ ↓
+domain
+ ↓
+HTML link / sitemap / feed
+ ↓
+page
+ ↓
+extraction method
+ ↓
+entity
+ ↓
+observation
+ ↓
+change
 ```
+
+Important principle: **every important decision should be explainable.** This makes `explain` and `trace` natural interfaces over Research Memory.
+
+## Feed state and HTTP resource state
+
+RSS/Atom/JSON Feed data should not become random columns in `domains`. One domain may expose multiple feeds, so a 1:N feed model is preferred.
+
+Expected feed state:
+- feed URL;
+- feed type;
+- status;
+- ETag;
+- Last-Modified;
+- last entry id;
+- last published;
+- last checked/success;
+- counters/error.
+
+Long term, `ETag`/`Last-Modified` can become generic per-resource fetch-state metadata for feeds, sitemaps and ordinary pages.
 
 ## Safety boundaries
 
-Crawler policy should be evaluated before a URL becomes an active crawl target.
-
-Important boundaries include:
-
-- supported HTTP/HTTPS schemes;
-- localhost/private/link-local IP protection;
-- blocked hosts;
-- blocked paths;
-- binary/static-file filtering;
-- redirects;
+- supported HTTP/HTTPS schemes only;
+- localhost/private/link-local protection;
+- blocked hosts/paths;
+- binary/static filtering;
+- redirect controls;
 - robots policy;
-- page/domain budgets.
-
-## 3.3 SearchProvider / Expedition
-
-Provider-neutral active discovery is now part of the current baseline:
-
-```text
-ResearchProject
-      ↓
-Query Generator
-      ↓
-SearchProvider
-      ↓
-candidate results
-      ↓
-Domain Registry
-      ↓
-existing safety + relevance + budgets
-```
-
-A project may now bootstrap Expedition without seed URLs. Search results do not bypass Domain Registry or crawler safety policy; they enter through the same auditable decision path as link-based discoveries.
-
-The deterministic integration path uses a fake provider so tests do not depend on external services. A SearXNG provider supplies the first real-provider implementation. Provider/query provenance and search counters are preserved for auditability.
-
-The next architectural work is stabilization: provider health/error surfaces, query/result quality, repeated-run behavior and real-provider integration coverage.
+- page/domain/depth budgets.
 
 ## Design principles
 
-1. **Source facts before AI interpretation.**
-2. **AI is optional, not the source of truth.**
-3. **Discovery decisions are auditable.**
-4. **Budgets and safety rules are explicit.**
-5. **The public core stays generic.**
-6. **UI/API consumers depend on a service boundary, not crawler internals.**
+1. Source facts before AI interpretation.
+2. AI is optional enrichment, not the source of truth.
+3. Discovery decisions are auditable and explainable.
+4. Budgets and safety rules are explicit.
+5. The public core stays generic.
+6. Research Memory is built on SQLite before adding heavy infrastructure.
+7. Speed must not weaken politeness or safety.

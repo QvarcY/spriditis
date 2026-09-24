@@ -1,78 +1,129 @@
-# Open-Core Direction
+# Sprīdītis — open-core virziens / Open-core direction
 
-Sprīdītis is being developed with an open-core direction.
+---
 
-This document explains the intended project boundary. It does **not** add restrictions to the Apache License 2.0.
+# Latviski
 
-## Public core
+Sprīdītis tiek attīstīts open-core virzienā. Šis dokuments apraksta iecerēto projekta robežu un **neievieš papildu ierobežojumus Apache License 2.0**.
 
-The public repository is intended to remain a useful standalone research engine.
+## Publiskais kodols
 
-The public core currently includes or is intended to include:
+Publiskajam repozitorijam jāpaliek patstāvīgi lietojamam pētniecības dzinējam.
 
-- research project configuration;
-- crawler and crawl frontier;
-- URL-safety and robots policy;
-- Domain Registry and controlled discovery;
-- structured-data extraction;
-- source adapters;
-- AI-provider abstraction and non-AI fallback;
-- SQLite persistence and migrations;
-- research observations;
+Publiskajā kodolā ietilpst vai ir paredzēts ietvert:
+- research project konfigurāciju;
+- crawler un URL frontier;
+- URL drošību un robots policy;
+- Domain Registry un discovery;
+- SearchProvider abstrakciju;
+- Feed Discovery;
+- strukturēto ekstrakciju;
+- avotu adapterus;
+- Research Memory signālus;
+- evidence/provenance;
+- AI provider abstrakciju un non-AI fallback;
+- SQLite persistence/migrations;
+- observations/change events;
 - reports;
 - CLI;
-- service boundary for future API/UI clients;
-- tests for the public behavior.
+- servisa robežu nākotnes API/UI;
+- publiskās uzvedības testus.
 
-The public core should not require a commercial hosted service to perform its basic research workflow.
+Pamata research workflow nedrīkst prasīt komerciālu hostētu servisu vai obligātu maksas API.
 
-## Possible product layer
+## Iespējamais produkta slānis
 
-Future product or hosted capabilities may be developed separately. Examples could include:
-
-- hosted web UI;
-- authentication and organizations;
+Atsevišķi nākotnē var tikt attīstīti:
+- hostēts web UI;
+- autentifikācija/organizācijas;
 - managed job queues;
 - recurring schedules;
-- managed SearchProvider infrastructure;
-- centralized monitoring;
-- team collaboration;
+- managed SearchProvider infrastruktūra;
+- centralizēts monitorings;
+- komandu sadarbība;
 - billing;
-- hosted storage and retention;
-- operational dashboards.
+- hostēta datu glabāšana/retention;
+- operacionālie dashboardi.
 
-These are directions, not promises or a fixed commercial plan.
+Tie ir virzieni, nevis solījums vai fiksēts komerciālais plāns.
 
-## License boundary
+## Licences robeža
 
-Code already released in this repository under Apache License 2.0 remains available under that license.
+Kods, kas jau publicēts ar Apache License 2.0, paliek pieejams ar šo licenci. Nākotnes privāts produkta slānis retroaktīvi nemaina publisko relīžu tiesības.
 
-Moving future product-layer development to a separate private repository does not retroactively change the rights granted for public releases.
+Skatīt [LICENSE](../LICENSE).
 
-See [LICENSE](../LICENSE).
+## Contribution robeža
 
-## Contribution boundary
+Publiskā repozitorija uzlabojumiem parasti jāstiprina reusable research core, nevis jāievieš viena privāta deployment/customer/business pieņēmumi.
 
-Contributions to the public repository should generally improve the reusable research core rather than add assumptions tied to one private deployment, customer, business, or hosted environment.
-
-Where a feature needs both a generic core and a hosted implementation, the preferred design is:
-
+Vēlamais modelis:
 ```text
 public interface / reusable core
             ↓
 optional provider or product implementation
 ```
 
-## Why this split?
-
-The goal is to keep Sprīdītis useful for developers and researchers who want to run it themselves, while leaving room for more operational or hosted capabilities later.
-
 ---
 
-## Latviski
+# English
 
-Sprīdītis tiek veidots open-core virzienā.
+Sprīdītis is being developed with an open-core direction. This document describes the intended project boundary and **does not add restrictions to the Apache License 2.0**.
 
-Publiskais repozitorijs ir paredzēts kā patstāvīgi lietojams pētniecības kodols. Nākotnē hostētas, komandu darba, norēķinu, monitoringa vai citas produkta līmeņa funkcijas var tikt veidotas atsevišķi.
+## Public core
 
-Tas nemaina jau publiskotā koda Apache License 2.0 tiesības. Publiski izlaistais kods paliek pieejams ar licenci, ar kuru tas tika publicēts.
+The public repository should remain a useful standalone research engine.
+
+The public core includes or is intended to include:
+- research project configuration;
+- crawler and URL frontier;
+- URL safety and robots policy;
+- Domain Registry and discovery;
+- SearchProvider abstraction;
+- Feed Discovery;
+- structured extraction;
+- source adapters;
+- Research Memory signals;
+- evidence/provenance;
+- AI-provider abstraction and non-AI fallback;
+- SQLite persistence/migrations;
+- observations/change events;
+- reports;
+- CLI;
+- service boundary for future API/UI;
+- tests for public behavior.
+
+The basic research workflow should not require a commercial hosted service or mandatory paid API.
+
+## Possible product layer
+
+Future separate product/hosted capabilities may include:
+- hosted web UI;
+- authentication/organizations;
+- managed job queues;
+- recurring schedules;
+- managed SearchProvider infrastructure;
+- centralized monitoring;
+- team collaboration;
+- billing;
+- hosted storage/retention;
+- operational dashboards.
+
+These are directions, not promises or a fixed commercial plan.
+
+## License boundary
+
+Code already released under Apache License 2.0 remains available under that license. Future private product-layer work does not retroactively change rights granted for public releases.
+
+See [LICENSE](../LICENSE).
+
+## Contribution boundary
+
+Public-repository contributions should generally improve the reusable research core rather than hard-code one private deployment/customer/business.
+
+Preferred model:
+```text
+public interface / reusable core
+            ↓
+optional provider or product implementation
+```

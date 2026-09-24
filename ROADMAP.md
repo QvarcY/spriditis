@@ -1,182 +1,159 @@
-# Sprīdītis Roadmap
+# Sprīdītis — attīstības plāns / Roadmap
 
-> **Direction, not deadlines.** This roadmap is intentionally iterative. A milestone is only considered complete after the behavior is testable and the previous layers remain stable.
+> **Virziens, nevis termiņu solījums.** Sprīdītis tiek attīstīts iteratīvi. Posms tiek uzskatīts par pabeigtu tikai tad, kad tā uzvedība ir pārbaudāma un iepriekšējie slāņi paliek stabili.  
+> **Direction, not deadlines.** Sprīdītis is developed iteratively. A milestone is complete only when its behavior is testable and previous layers remain stable.
 
-## Status
+## Statusi / Status
 
-- ✅ **Released** — public implementation
-- 🧪 **Validating** — implemented locally / under validation or publication preparation
-- 🚧 **Next in progress** — next active development milestone
-- 🧭 **Planned** — accepted direction, implementation not started
-- 🔭 **Later** — useful future work, deliberately not prioritized yet
+- ✅ **Publicēts / Released** — publiski pieejams un ieviests / public implementation
+- 🧪 **Validēšana / Validating** — lokāli ieviests, tiek pārbaudīts vai gatavots publicēšanai / implemented locally, under validation or publication preparation
+- 🚧 **Nākamais darbā / Next in progress** — nākamais aktīvais posms / next active milestone
+- 🧭 **Plānots / Planned** — apstiprināts attīstības virziens / accepted direction
+- 🔭 **Vēlāk / Later** — noderīgs, bet apzināti atlikts / useful but deliberately deferred
 
-## Guiding principles
+## Pamatprincipi / Guiding principles
 
-1. **Source-backed facts before AI interpretation.**
-2. **Research Memory before brute-force crawling.**
-3. **Safety, provenance and auditability are architectural features.**
-4. **Prefer local, open, self-hostable and zero-cost building blocks where practical.**
-5. **Paid APIs may exist as optional providers, but the public core should not require them.**
-6. **Make the crawler smarter before making it massively distributed.**
-7. **A good research run should know when to stop.**
+1. **Avotos balstīti fakti pirms MI interpretācijas / Source-backed facts before AI interpretation.**
+2. **Research Memory pirms brute-force crawling.**
+3. **Drošība, provenance un auditējamība ir arhitektūras īpašības / Safety, provenance and auditability are architectural features.**
+4. **Katram svarīgam lēmumam jābūt izskaidrojamam / Every important decision should be explainable.**
+5. **Priekšroka lokāliem, atvērtiem, pašhostējamiem un bezmaksas risinājumiem / Prefer local, open, self-hostable and zero-cost building blocks.**
+6. **Maksas API var būt izvēles provideri, bet publiskais kodols nedrīkst būt no tiem atkarīgs / Paid APIs may be optional providers, never mandatory for the public core.**
+7. **Vispirms gudrāks crawleris, tikai pēc tam masīva paralelizācija / Make the crawler smarter before making it massively distributed.**
+8. **Labam pētījumam jāzina, kad apstāties / A good research run should know when to stop.**
 
-## Current public baseline — ✅ 3.3.0-alpha.1
+---
 
-The public baseline establishes the first true zero-seed Expedition bootstrap.
+# Latviski
 
-Implemented:
+## ✅ Pašreizējā publiskā bāze — 3.3.0-alpha.1
 
-- configurable `ResearchProject`;
-- generic `MarketEntity`;
-- structured extraction from JSON-LD and OpenGraph;
-- source adapters;
-- optional batched AI enrichment with local fallback;
-- persistent SQLite observations;
+Ieviests un publiski pieejams:
+
+- konfigurējams `ResearchProject`;
+- universāls `MarketEntity`;
+- JSON-LD un OpenGraph ekstrakcija;
+- avotu adapteri;
+- izvēles batch MI analīze ar lokālu fallback;
+- SQLite observations;
 - Domain Registry;
-- domain lifecycle states;
-- controlled multi-domain discovery;
+- kontrolēts vairāku domēnu discovery;
 - sitemap discovery;
-- URL/SSRF safety policy;
-- `robots.txt` handling;
-- crawl budgets;
-- discovery audit trail;
-- provider-neutral `SearchProvider`;
-- deterministic Expedition query generation;
-- offline fake provider;
-- SearXNG provider;
+- URL/SSRF drošības politika;
+- `robots.txt`;
+- crawl budžeti;
+- discovery audits;
+- provider-neatkarīgs `SearchProvider`;
+- deterministisks Expedition query ģenerators;
+- FakeSearchProvider testiem;
+- SearXNG provideris;
 - zero-seed Expedition;
-- provider/query provenance;
-- search counters;
-- search → activation → crawl integration coverage.
+- query/provider provenance;
+- search skaitītāji;
+- integrācijas tests `search → activation → crawl`.
 
-## 🧪 3.3.0-alpha.2 — SearchProvider hardening
+## 🧪 3.3.0-alpha.2 — SearchProvider stabilizācija
 
-Implemented locally and validated; publication is the next step.
+Lokāli ieviests un validēts; nākamais solis ir publicēšana.
 
-Scope:
-
-- retry/backoff for transient provider failures;
-- `Retry-After` handling;
-- structured SearchProvider errors;
-- retryability and HTTP-status metadata;
-- result deduplication across multiple queries;
-- separate raw / unique / duplicate counters;
-- early rejection of invalid non-HTTP(S) search results;
-- database schema v4;
-- `search-check` CLI command;
-- reliability and dedupe tests.
+- retry/backoff transient kļūdām;
+- `Retry-After`;
+- strukturētas SearchProvider kļūdas;
+- HTTP status/retryability metadata;
+- search rezultātu dedupe starp query;
+- raw / unique / duplicate skaitītāji;
+- nederīgu non-HTTP(S) rezultātu agrīna atmešana;
+- DB schema v4;
+- `search-check`;
+- reliability un dedupe testi.
 
 ## 🚧 3.3.0-alpha.3 — Feed Discovery & Incremental Monitoring
 
-Goal: make every useful domain capable of becoming an efficient recurring discovery source.
-
-Planned:
+Mērķis: pārvērst katru vērtīgu domēnu par iespējamu efektīvu atkārtotas discovery avotu.
 
 - RSS 2.0;
 - Atom;
 - JSON Feed;
 - HTML `<link rel="alternate">` autodiscovery;
-- conservative common-feed-path fallback;
+- konservatīvi biežāko feed URL fallbacki;
+- atsevišķs feed state modelis;
 - feed provenance;
-- feed-to-frontier relevance/safety/dedupe path;
-- `ETag`;
-- `Last-Modified`;
+- feed → safety → relevance → dedupe → frontier plūsma;
+- per-resource `ETag` / `Last-Modified` pamats;
 - `304 Not Modified`;
-- feed state persistence;
-- new-entry counters;
-- incremental repeated-run tests.
+- `last_entry_id`, `last_published`, `last_checked`, `last_success`;
+- incremental repeated-run testi.
 
 ## 🧭 3.3.0-alpha.4 — Research Memory
 
-Goal: remember not only observations, but the effectiveness of the research process itself.
-
-Planned:
+Mērķis: atcerēties ne tikai atrastos datus, bet arī pētījuma procesa efektivitāti.
 
 - query yield;
 - source/domain yield;
 - useful-entity yield;
 - duplicate rate;
 - source success rate;
-- last useful run;
+- freshness/staleness;
 - discovery provenance metrics;
-- source-value score;
-- query-value score;
-- history that can influence later prioritization.
+- source profiles;
+- source/query value signāli;
+- `spriditis explain` — kāpēc domēns/query/entity tika aktivizēts, noraidīts vai iegūts;
+- `spriditis trace` — query → provider → domain → discovery path → page → extraction → entity → observation.
 
-Research Memory should make this possible:
-
-```text
-query → provider → domain → discovery path → page → extraction → entity → observation
-   ↑                                                                  ↓
-   └────────────────────── future prioritization ← metrics ←───────────┘
-```
+Jaunajām metrikām jābūt izskaidrojamām; viens “mistisks score” nedrīkst aizstāt atsevišķos signālus.
 
 ## 🧭 3.3.0-alpha.5 — Adaptive Expedition
 
-Goal: make Expedition choose better paths without requiring a paid AI service.
+Mērķis: izvēlēties labākos pētījuma ceļus bez obligāta maksas MI.
 
-Planned:
-
-- BM25/local text relevance;
-- richer title/path/domain signals;
-- query prioritization from historical yield;
-- source-value weighting;
+- BM25/lokāla teksta relevance;
+- title/path/domain signāli;
+- vēsturiskā query yield prioritizācija;
+- source profile signāli;
 - coverage saturation;
 - diminishing-returns stopping;
-- controlled multi-hop discovery;
-- explicit discovery-depth and domain budgets.
-
-A successful run should be able to stop because **enough useful coverage has been reached**, not only because `max_pages` was exhausted.
+- `STOP_REASON`: `max_pages`, `max_domains`, `diminishing_returns`, `saturation_reached`, `budget_exhausted`;
+- kontrolēts multi-hop discovery;
+- `max_discovery_depth`;
+- per-depth budgets;
+- soft entity diversity limits, lai viens milzu avots neaizēnotu pārējos.
 
 ## 🧭 3.3.0-alpha.6 — Entity Resolution
 
-Goal: represent the same real-world product/service as one entity observed across multiple sources.
+Mērķis: vienu un to pašu reālās pasaules produktu/pakalpojumu attēlot kā vienu entity ar vairākiem avotiem.
 
-Planned signals:
-
+Primārie signāli:
 - GTIN / EAN;
 - manufacturer + model;
-- SKU where meaningful;
-- normalized title;
-- price range;
-- fuzzy title similarity as a supporting signal.
+- SKU, kur tas ir jēgpilni;
+- normalized title.
 
-Expected model:
-
-```text
-MarketEntity
-└── source observations
-    ├── shop A → price / availability
-    ├── shop B → price / availability
-    └── shop C → price / availability
-```
+Papildu signāli:
+- cenu diapazons;
+- fuzzy title similarity, piemēram, ar `rapidfuzz`, tikai kā papildsignāls.
 
 ## 🧭 3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence
 
-Goal: improve coverage while preserving evidence quality.
-
-Extraction priority:
+Ekstrakcijas prioritāte:
 
 1. JSON-LD;
 2. schema.org microdata;
 3. OpenGraph;
-4. source adapter;
-5. deterministic DOM heuristics;
-6. optional AI extractor as a last resort.
+4. avota adapteris;
+5. deterministiskas DOM heuristikas;
+6. izvēles MI ekstraktors tikai kā pēdējais variants.
 
-Every extracted field should be able to preserve:
-
+Katram faktam jāspēj saglabāt:
 - value;
 - source URL;
 - extraction method;
 - confidence;
+- extracted_at;
 - evidence/provenance.
 
 ## 🧭 3.3.0-alpha.8 — Change Detection
 
-Goal: turn observations into meaningful events.
-
-Planned events:
+Mērķis: pārvērst observations jēgpilnos notikumos.
 
 - `PRICE_DROP`;
 - `PRICE_INCREASE`;
@@ -185,138 +162,268 @@ Planned events:
 - `SOURCE_CHANGED`;
 - `DOMAIN_FAILED`;
 - `DOMAIN_RECOVERED`;
-- feed appeared/disappeared.
+- feed parādījās/pazuda;
+- `spriditis diff --run A --run B`.
 
-This becomes the foundation for trend analysis and notifications.
+Secība paliek apzināta: **Entity Resolution → Evidence Confidence → Change Detection**.
 
 ## 🧭 3.3.0-alpha.9 — Watch mode
 
-Goal: make projects capable of living over time.
-
-Planned:
-
 - incremental repeated research;
-- local scheduling hooks;
 - `spriditis watch`;
-- change-only summaries;
+- change-only kopsavilkumi;
+- scheduling hooks;
 - notification hooks;
-- feed/ETag-aware low-cost refresh;
-- reuse of Research Memory.
+- feed/ETag-aware refresh;
+- Research Memory atkārtota izmantošana;
+- JSONL eksports kā vienkāršs integrācijas formāts.
 
 ## 🧭 3.3.0-alpha.10 — Async crawler + adaptive politeness
 
-Goal: improve throughput only after the research logic is selective enough.
-
-Planned:
+Tikai pēc tam, kad research loģika jau prot būt selektīva.
 
 - bounded async requests;
-- per-domain semaphore;
+- per-domain semaphore 1–2 kā konservatīvs sākumpunkts;
 - global concurrency cap;
-- adaptive delay from server behavior;
+- adaptive delay;
+- retry budgets;
+- backpressure;
+- bez drošības/robots/private-network aizsardzības vājināšanas.
+
+## 🔭 Vēlāk / Backlog
+
+- papildu bezmaksas/self-hostable SearchProvider adapteri;
+- papildu price/currency/VAT normalizācija;
+- attēli un specifikāciju tabulas;
+- augstas vērtības avotu adapteri;
+- CSV/Parquet eksports;
+- FastAPI;
+- projektu/run UI;
+- scheduler/background jobs;
+- webhooks/notifikācijas;
+- stricter typing;
+- plašāks testu pārklājums;
+- CI/CD;
+- Docker;
+- projekta JSON Schema;
+- plugin entry points;
+- papildu MI provideri un lokālie modeļi kā izvēles slānis.
+
+## Ko apzināti neprioritizējam
+
+- Redis/RabbitMQ/distributed queue pirms ir reāla vajadzība;
+- PostgreSQL, kamēr SQLite nav izmērīts bottleneck;
+- Playwright kā noklusējuma risinājumu visām lapām;
+- smagus agent framework;
+- hostētus dashboardus pirms research kodola nobriešanas;
+- obligātus maksas search vai AI API.
+
+## Sprīdīša paredzētā atšķirība
+
+> **Iedod man pētījuma mērķi. Es atradīšu avotus, atcerēšos, kuri ceļi bija vērtīgi, izvairīšos no atkārtota darba, pamanīšu nozīmīgas izmaiņas un nākamajā reizē pētīšu selektīvāk.**
+
+Tas ir **Research Memory + Adaptive Discovery + Evidence Confidence + Incremental Monitoring**.
+
+---
+
+# English
+
+## ✅ Current public baseline — 3.3.0-alpha.1
+
+Implemented and public:
+
+- configurable `ResearchProject`;
+- generic `MarketEntity`;
+- JSON-LD and OpenGraph extraction;
+- source adapters;
+- optional batched AI enrichment with local fallback;
+- SQLite observations;
+- Domain Registry;
+- controlled multi-domain discovery;
+- sitemap discovery;
+- URL/SSRF safety policy;
+- `robots.txt`;
+- crawl budgets;
+- discovery audit trail;
+- provider-neutral `SearchProvider`;
+- deterministic Expedition query generation;
+- offline fake provider;
+- SearXNG provider;
+- zero-seed Expedition;
+- query/provider provenance;
+- search counters;
+- `search → activation → crawl` integration coverage.
+
+## 🧪 3.3.0-alpha.2 — SearchProvider hardening
+
+Implemented and validated locally; publication is next.
+
+- retry/backoff for transient provider failures;
+- `Retry-After`;
+- structured SearchProvider errors;
+- HTTP status/retryability metadata;
+- result dedupe across queries;
+- raw / unique / duplicate counters;
+- early rejection of invalid non-HTTP(S) results;
+- database schema v4;
+- `search-check`;
+- reliability and dedupe tests.
+
+## 🚧 3.3.0-alpha.3 — Feed Discovery & Incremental Monitoring
+
+Goal: turn every useful domain into a possible efficient recurring discovery source.
+
+- RSS 2.0;
+- Atom;
+- JSON Feed;
+- HTML `<link rel="alternate">` autodiscovery;
+- conservative common-feed-path fallback;
+- dedicated feed-state model;
+- feed provenance;
+- feed → safety → relevance → dedupe → frontier;
+- per-resource `ETag` / `Last-Modified` foundation;
+- `304 Not Modified`;
+- `last_entry_id`, `last_published`, `last_checked`, `last_success`;
+- incremental repeated-run tests.
+
+## 🧭 3.3.0-alpha.4 — Research Memory
+
+Goal: remember not only collected data, but the effectiveness of the research process itself.
+
+- query yield;
+- source/domain yield;
+- useful-entity yield;
+- duplicate rate;
+- source success rate;
+- freshness/staleness;
+- discovery provenance metrics;
+- source profiles;
+- source/query value signals;
+- `spriditis explain`;
+- `spriditis trace` for query → provider → domain → discovery path → page → extraction → entity → observation.
+
+Metrics should stay explainable; one opaque “magic score” must not replace the underlying signals.
+
+## 🧭 3.3.0-alpha.5 — Adaptive Expedition
+
+Goal: choose better research paths without requiring paid AI.
+
+- BM25/local text relevance;
+- title/path/domain signals;
+- historical query-yield prioritization;
+- source-profile signals;
+- coverage saturation;
+- diminishing-returns stopping;
+- `STOP_REASON`: `max_pages`, `max_domains`, `diminishing_returns`, `saturation_reached`, `budget_exhausted`;
+- controlled multi-hop discovery;
+- `max_discovery_depth`;
+- per-depth budgets;
+- soft entity-diversity limits so one giant source does not dominate coverage.
+
+## 🧭 3.3.0-alpha.6 — Entity Resolution
+
+Goal: represent the same real-world product/service as one entity with multiple source observations.
+
+Primary signals:
+- GTIN / EAN;
+- manufacturer + model;
+- SKU where meaningful;
+- normalized title.
+
+Supporting signals:
+- price range;
+- fuzzy title similarity, e.g. `rapidfuzz`, only as a supporting signal.
+
+## 🧭 3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence
+
+Extraction priority:
+
+1. JSON-LD;
+2. schema.org microdata;
+3. OpenGraph;
+4. source adapter;
+5. deterministic DOM heuristics;
+6. optional AI extractor only as a last resort.
+
+Each fact should be able to preserve:
+- value;
+- source URL;
+- extraction method;
+- confidence;
+- extracted_at;
+- evidence/provenance.
+
+## 🧭 3.3.0-alpha.8 — Change Detection
+
+Goal: turn observations into meaningful events.
+
+- `PRICE_DROP`;
+- `PRICE_INCREASE`;
+- `NEW_ENTITY`;
+- `ENTITY_DISAPPEARED`;
+- `SOURCE_CHANGED`;
+- `DOMAIN_FAILED`;
+- `DOMAIN_RECOVERED`;
+- feed appeared/disappeared;
+- `spriditis diff --run A --run B`.
+
+The sequence is intentional: **Entity Resolution → Evidence Confidence → Change Detection**.
+
+## 🧭 3.3.0-alpha.9 — Watch mode
+
+- incremental repeated research;
+- `spriditis watch`;
+- change-only summaries;
+- scheduling hooks;
+- notification hooks;
+- feed/ETag-aware refresh;
+- reuse of Research Memory;
+- JSONL export as a simple integration format.
+
+## 🧭 3.3.0-alpha.10 — Async crawler + adaptive politeness
+
+Only after the research logic is selective enough.
+
+- bounded async requests;
+- per-domain semaphore 1–2 as a conservative starting point;
+- global concurrency cap;
+- adaptive delay;
 - retry budgets;
 - backpressure;
 - no weakening of robots/URL/private-network protections.
 
-## 🔭 Longer-term backlog
+## 🔭 Later backlog
 
-### Discovery
-- additional SearchProvider adapters;
-- prioritize zero-cost/self-hostable integrations;
-- optional paid providers only as plugins;
-- richer research templates.
-
-### Extraction
-- price/currency/VAT normalization;
-- images;
-- specification tables;
-- carefully isolated source adapters.
-
-### Analytics
-- weekly/monthly category trends;
-- cross-project comparisons;
-- market-entry/disappearance analysis;
-- confidence-weighted summaries.
-
-### Export
-- CSV;
-- JSONL;
-- Parquet;
-- future BI integrations.
-
-### API / UI / automation
-- FastAPI layer;
-- project/run dashboard;
-- Domain Registry explorer;
-- report viewer;
+- additional free/self-hostable SearchProvider adapters;
+- stronger price/currency/VAT normalization;
+- images and specification tables;
+- carefully isolated high-value source adapters;
+- CSV/Parquet exports;
+- FastAPI;
+- project/run UI;
 - scheduler/background jobs;
-- webhooks/notifications.
-
-### Engineering
+- webhooks/notifications;
 - stricter typing;
-- larger automated test suite;
+- broader test coverage;
 - CI/CD;
 - Docker;
 - project JSON Schema;
-- plugin entry points for providers/adapters.
+- plugin entry points;
+- additional AI providers and local models as optional layers.
 
-### Optional AI
-- additional provider adapters;
-- local models such as Ollama where useful;
-- structured model outputs;
-- cost tracking;
-- evaluation framework;
-- RAG over collected observations after the deterministic data model is mature.
+## Deliberately not near-term priorities
 
-## What is deliberately not a near-term priority?
-
-These may become useful later, but they should not distract from the research engine:
-
-- distributed queues;
-- Redis/RabbitMQ infrastructure;
-- PostgreSQL migration before SQLite becomes a measured bottleneck;
-- Playwright as a default for every page;
+- Redis/RabbitMQ/distributed queues before measured need;
+- PostgreSQL before SQLite becomes a measured bottleneck;
+- Playwright as the default for every page;
 - heavy agent frameworks;
 - hosted dashboards before the research core is mature;
 - mandatory paid search or AI APIs.
 
-## The intended differentiator
-
-Sprīdītis should not compete by being “another HTML crawler”.
-
-The target behavior is:
+## Intended differentiator
 
 > **Give me a research goal. I will find sources, remember which paths were useful, avoid repeated work, detect meaningful change, and make the next run more selective than the previous one.**
 
-That is the long-term combination of **Research Memory + Adaptive Discovery + Evidence Confidence + Incremental Monitoring**.
-
----
-
-## Latviski
-
-Sprīdīša attīstības virziens ir apzināti veidots tā, lai publiskais kodols varētu būt praktiski lietojams arī bez obligātiem maksas API.
-
-Tuvākā secība:
-
-```text
-3.3.0-alpha.2  SearchProvider stabilizācija
-        ↓
-3.3.0-alpha.3  RSS / Atom / JSON Feed + incremental monitoring
-        ↓
-3.3.0-alpha.4  Research Memory
-        ↓
-3.3.0-alpha.5  Adaptive Expedition + BM25 + coverage saturation
-        ↓
-3.3.0-alpha.6  Entity Resolution
-        ↓
-3.3.0-alpha.7  Fallback Extraction + Evidence Confidence
-        ↓
-3.3.0-alpha.8  Change Detection
-        ↓
-3.3.0-alpha.9  Watch mode
-        ↓
-3.3.0-alpha.10 Async crawler + adaptive politeness
-```
-
-Mērķis nav panākt, lai Sprīdītis vienkārši pārmeklē pēc iespējas vairāk lapu. Mērķis ir, lai viņš ar laiku **atceras, kā atrada vērtīgus avotus, saprot, kuri ceļi dod rezultātus, pamana izmaiņas un netērē resursus tur, kur jaunā informācija vairs nerodas**.
+That is **Research Memory + Adaptive Discovery + Evidence Confidence + Incremental Monitoring**.
 
 See also [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/OPEN_CORE.md](docs/OPEN_CORE.md).
