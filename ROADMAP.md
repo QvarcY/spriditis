@@ -26,7 +26,7 @@
 
 # Latviski
 
-## ✅ Pašreizējā publiskā bāze — 3.3.0-alpha.3
+## ✅ Pašreizējā publiskā bāze — 3.3.0-alpha.4
 
 Ieviests un publiski pieejams:
 
@@ -243,7 +243,7 @@ Tas ir **Research Memory + Adaptive Discovery + Evidence Confidence + Incrementa
 
 # English
 
-## ✅ Current public baseline — 3.3.0-alpha.3
+## ✅ Current public baseline — 3.3.0-alpha.4
 
 Implemented and public:
 
