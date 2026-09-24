@@ -219,6 +219,50 @@ with TemporaryDirectory() as tmp:
         assert feed_reset not in event_urls
         assert feed_old_only not in event_urls
         assert feed_new_only not in event_urls
+
+        trace_a = db.trace_run(project.id, run_a)
+        trace_b = db.trace_run(project.id, run_b)
+        assert trace_a is not None
+        assert trace_b is not None
+        assert len(trace_a["feed_snapshots"]) == 6
+        assert len(trace_b["feed_snapshots"]) == 6
+
+        trace_a_by_id = {
+            item["id"]: item
+            for item in trace_a["feed_snapshots"]
+        }
+        trace_b_by_id = {
+            item["id"]: item
+            for item in trace_b["feed_snapshots"]
+        }
+
+        for event in diff["events"]:
+            before_snapshot_id = event["evidence"]["before_snapshot_id"]
+            after_snapshot_id = event["evidence"]["after_snapshot_id"]
+
+            assert before_snapshot_id in trace_a_by_id
+            assert after_snapshot_id in trace_b_by_id
+            assert (
+                trace_a_by_id[before_snapshot_id]["feed_url"]
+                == event["source_url"]
+            )
+            assert (
+                trace_b_by_id[after_snapshot_id]["feed_url"]
+                == event["source_url"]
+            )
+
+        assert (
+            trace_b_by_id[
+                new_event["evidence"]["after_snapshot_id"]
+            ]["new_entries"]
+            == 5
+        )
+        assert (
+            trace_b_by_id[
+                failed["evidence"]["after_snapshot_id"]
+            ]["last_error"]
+            == "http_error:ConnectTimeout"
+        )
     finally:
         db.close()
 
@@ -228,4 +272,5 @@ print("new_entries=cumulative_positive_delta")
 print("counter_reset=no_event")
 print("one_run_only=no_transition_event")
 print("feed_evidence=historical_feed_snapshots")
+print("trace_links=event_snapshot_ids_resolve")
 print(f"schema_version={CURRENT_SCHEMA_VERSION}")
