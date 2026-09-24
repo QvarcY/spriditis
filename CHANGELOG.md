@@ -1,9 +1,9 @@
 # Izmaiņu vēsture / Changelog
 
-## [3.3.0-alpha.6] — release candidate
+## [3.3.0-alpha.6]
 
-> **Statuss / Status:** feature-complete kandidāts stabilizācijai; fokusētie Entity Resolution testi ir zaļi, pilnais 38 testu regression gate vēl jāizpilda pirms merge/tag.  
-> Feature-complete candidate under stabilization; focused Entity Resolution tests are green, while the full 38-test regression gate still has to pass before merge/tag.
+> **Statuss / Status:** release baseline pilnībā validēts; pilnais regression gate izpildīts ar 38/38 testiem.  
+> Release baseline fully validated; the complete regression gate passed 38/38 tests.
 
 ### Pievienots / Added
 
@@ -41,7 +41,7 @@
 - DB migration v10 testi
 - Adaptive Decision Trace schema-version regression salabots uz `CURRENT_SCHEMA_VERSION`
 - fokusētie alpha6 un alpha5/core regression testi paliek zaļi
-- pilnais 38 testu regression gate vēl jāizpilda pirms merge/tag
+- pilnais **38/38** testu regression gate izpildīts sekmīgi / complete **38/38** regression gate passed
 
 ---
 
