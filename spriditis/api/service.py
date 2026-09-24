@@ -93,7 +93,7 @@ def run_project(
             db.upsert_entity(project, run_id, entity)
 
         db.save_domain_registry(project, run_id, result)
-        db.save_feed_states(project, result)
+        db.save_feed_states(project, run_id, result)
         db.save_page_visits(project, run_id, result)
         db.save_adaptive_decisions(project, run_id, result)
         db.finish_run(run_id, result)
