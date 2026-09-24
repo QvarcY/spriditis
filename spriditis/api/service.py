@@ -70,6 +70,7 @@ def run_project(
         feed_states = db.load_feed_states(project.id)
         domain_states = db.load_domain_states(project.id)
         query_memory = db.query_memory(project.id, limit=1000)
+        source_profiles = db.source_profiles(project.id, limit=1000)
         crawler = ResearchCrawler(
             settings,
             project,
@@ -78,6 +79,7 @@ def run_project(
             feed_states=feed_states,
             domain_states=domain_states,
             query_memory=query_memory,
+            source_profiles=source_profiles,
         )
         result = crawler.crawl()
 
