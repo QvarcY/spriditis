@@ -26,7 +26,7 @@
 
 # Latviski
 
-## ✅ Pašreizējā publiskā bāze — 3.3.0-alpha.4
+## ✅ Pašreizējā publiskā bāze — 3.3.0-alpha.5
 
 Ieviests un publiski pieejams:
 
@@ -117,7 +117,7 @@ Alpha4 **krāj un izskaidro** pieredzi. Tā vēl neveic automātisku source/quer
 
 Jaunajām metrikām jābūt izskaidrojamām; viens “mistisks score” nedrīkst aizstāt atsevišķos signālus.
 
-## 🧪 3.3.0-alpha.5 — Adaptive Expedition
+## ✅ 3.3.0-alpha.5 — Adaptive Expedition
 
 Mērķis: izvēlēties labākos pētījuma ceļus bez obligāta maksas MI.
 
@@ -134,9 +134,9 @@ Mērķis: izvēlēties labākos pētījuma ceļus bez obligāta maksas MI.
 - soft entity diversity limits, lai viens milzu avots neaizēnotu pārējos;
 - persistēts Adaptive Decision Trace ar query priority, search-result priority, source-diversity, discovery-depth un stop lēmumiem;
 - DB schema v7 ar `adaptive_decisions` audita tabulu;
-- alpha5 funkcionalitāte ir feature-complete un atrodas pilna regression gate validācijā.
+- pilnais alpha5 regression gate izpildīts: 32/32 deterministiskie testi iziet.
 
-## 🧭 3.3.0-alpha.6 — Entity Resolution
+## 🚧 3.3.0-alpha.6 — Entity Resolution
 
 Mērķis: vienu un to pašu reālās pasaules produktu/pakalpojumu attēlot kā vienu entity ar vairākiem avotiem.
 
@@ -246,7 +246,7 @@ Tas ir **Research Memory + Adaptive Discovery + Evidence Confidence + Incrementa
 
 # English
 
-## ✅ Current public baseline — 3.3.0-alpha.4
+## ✅ Current public baseline — 3.3.0-alpha.5
 
 Implemented and public:
 
@@ -354,7 +354,7 @@ Goal: choose better research paths without requiring paid AI.
 - soft entity-diversity limits so one giant source does not dominate coverage;
 - persisted Adaptive Decision Trace for query priority, search-result priority, source-diversity, discovery-depth and stop decisions;
 - database schema v7 with an `adaptive_decisions` audit table;
-- alpha5 functionality is feature-complete and undergoing the full regression gate.
+- the full alpha5 regression gate passed: 32/32 deterministic tests.
 
 ## 🧭 3.3.0-alpha.6 — Entity Resolution
 
