@@ -2,9 +2,9 @@
 
 This roadmap describes direction, not delivery dates. Sprīdītis is developed iteratively and each stage should remain testable before the next layer is added.
 
-## Current baseline — 3.2.0-alpha.3
+## Current baseline — 3.3.0-alpha.1
 
-The current public checkpoint establishes the Discovery Engine foundation.
+The current public checkpoint establishes the first true SearchProvider-backed Expedition bootstrap.
 
 Completed or validated:
 
@@ -25,40 +25,29 @@ Completed or validated:
 - SQLite observations and schema migration foundation;
 - HTML reports;
 - CLI and service boundary;
-- controlled integration test for `candidate → active → crawled`.
-
-## 3.3 — SearchProvider + true Expedition mode
-
-Goal: allow Sprīdītis to discover relevant sources that are not linked from existing seed pages.
-
-Planned architecture:
-
-```text
-ResearchProject
-      ↓
-Query Generator
-      ↓
-SearchProvider
-      ↓
-candidate URLs / domains
-      ↓
-Domain Registry
-      ↓
-relevance + safety + budgets
-      ↓
-crawl frontier
-```
-
-Planned work:
-
+- controlled integration test for `candidate → active → crawled`;
 - provider-neutral `SearchProvider` interface;
 - deterministic query generation from project intent;
 - offline/fake provider for repeatable tests;
-- one practical provider implementation;
-- deduplication between search results and existing Domain Registry entries;
-- explicit discovery provenance;
-- search budgets and provider request limits;
-- true `expedition` mode.
+- SearXNG JSON API provider;
+- zero-seed Expedition bootstrap;
+- provider/query provenance for search discoveries;
+- search query/result/activation/error counters;
+- database schema v3;
+- integration coverage proving search → activation → crawl.
+
+## 3.3 stabilization
+
+Near-term work stays inside the 3.3 line and focuses on making active search dependable outside the deterministic test harness.
+
+Planned direction:
+
+- validate and harden real SearXNG execution;
+- improve provider error/health reporting;
+- refine query construction and result relevance;
+- strengthen deduplication and repeated-run behavior;
+- keep search budgets explicit and auditable;
+- expand integration coverage without weakening URL/SSRF protections.
 
 ## Later research capabilities
 
@@ -105,8 +94,8 @@ Sprīdītis is not intended to become a mechanism for bypassing authentication, 
 
 ## Latviski
 
-Pašreizējais pieturas punkts ir **3.2.0-alpha.3** ar pārbaudītu Domain Registry un kontrolētu vairāku domēnu discovery plūsmu.
+Pašreizējais pieturas punkts ir **3.3.0-alpha.1**. Ir pārbaudīts zero-seed Expedition starts: Sprīdītis ģenerē meklēšanas vaicājumu, saņem SearchProvider rezultātus, izlaiž tos caur Domain Registry drošības un relevances noteikumiem, aktivizē derīgu avotu un to pārmeklē.
 
-Nākamais lielais posms ir **3.3 — SearchProvider + īsts Expedition režīms**, lai Sprīdītis spētu pats atrast jaunus avotus arī tad, ja uz tiem nav saišu jau zināmajās lapās.
+Tuvākais darbs ir reālā SearXNG providera stabilizācija, kvalitatīvāka vaicājumu/rezultātu atlase un atkārtotu Expedition skrējienu uzvedības nostiprināšana.
 
 Pēc tam var sekot konkurentu un pakalpojumu tirgus ekstraktori, cenu/tendenču analīze, atkārtoti darbi, API un UI slānis.

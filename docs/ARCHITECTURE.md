@@ -1,6 +1,6 @@
 # Sprīdītis Architecture
 
-Current baseline: **3.2.0-alpha.3**
+Current baseline: **3.3.0-alpha.1**
 
 Sprīdītis is structured as a research engine rather than a single-purpose scraper. The design separates discovery, extraction, analysis, persistence, and presentation so each layer can evolve independently.
 
@@ -10,11 +10,19 @@ Sprīdītis is structured as a research engine rather than a single-purpose scra
 Research question
       ↓
 ResearchProject
-      ↓
-Seed URLs
-      ↓
-URL Frontier
-      ↓
+      ├── Seed URLs
+      └── Expedition
+             ↓
+       Query Generator
+             ↓
+       SearchProvider
+             ↓
+       candidate URLs/domains
+             ↓
+       Domain Registry
+             ↓
+          URL Frontier
+             ↓
 Crawler
       ├── robots / URL safety
       ├── crawl budgets
@@ -36,7 +44,9 @@ SQLite persistence
       ├── entities
       ├── observations
       ├── domains
-      └── domain_discoveries
+      ├── domain_discoveries
+      ├── search_queries
+      └── search_results
       ↓
 HTML report / service consumers
 ```
@@ -65,6 +75,18 @@ Owns traversal behavior:
 - Domain Registry discovery decisions;
 - sitemap discovery;
 - crawl engine.
+
+### `spriditis/search`
+
+Owns active source discovery for Expedition:
+
+- provider-neutral `SearchProvider` interface;
+- deterministic query generation;
+- search-result models;
+- offline fake provider for repeatable integration tests;
+- SearXNG JSON API provider.
+
+Search results do not bypass crawler policy. They enter through Domain Registry relevance, safety and domain-budget decisions before being added to the crawl frontier.
 
 ### `spriditis/extraction`
 
@@ -153,9 +175,9 @@ Important boundaries include:
 - robots policy;
 - page/domain budgets.
 
-## 3.3 direction: SearchProvider
+## 3.3 SearchProvider / Expedition
 
-The next architectural layer is provider-neutral active discovery:
+Provider-neutral active discovery is now part of the current baseline:
 
 ```text
 ResearchProject
@@ -171,7 +193,11 @@ Domain Registry
 existing safety + relevance + budgets
 ```
 
-Search results should not bypass Domain Registry or crawler safety policy. They should enter through the same auditable decision path as link-based discoveries.
+A project may now bootstrap Expedition without seed URLs. Search results do not bypass Domain Registry or crawler safety policy; they enter through the same auditable decision path as link-based discoveries.
+
+The deterministic integration path uses a fake provider so tests do not depend on external services. A SearXNG provider supplies the first real-provider implementation. Provider/query provenance and search counters are preserved for auditability.
+
+The next architectural work is stabilization: provider health/error surfaces, query/result quality, repeated-run behavior and real-provider integration coverage.
 
 ## Design principles
 

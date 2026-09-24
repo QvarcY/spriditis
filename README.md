@@ -71,8 +71,13 @@ Sprīdītis is not tied to one industry. The same core is intended to support ve
 - generic `MarketEntity` model
 - single-domain crawling
 - controlled multi-domain discovery mode
+- true zero-seed Expedition bootstrap
+- provider-neutral `SearchProvider` abstraction
+- deterministic Expedition query generator
+- SearXNG JSON API provider plus offline fake provider for repeatable tests
 - persistent Domain Registry with `candidate`, `active`, `blocked`, `rejected` and `failed` states
-- external-domain discovery audit trail with activation reasons
+- external-domain and search-result discovery audit trail with provider/query provenance
+- search query/result/activation/error run counters
 - sitemap discovery from `robots.txt` and `/sitemap.xml`
 - URL prioritization and per-domain crawl budgets
 - `robots.txt` checks
@@ -96,8 +101,8 @@ The public alpha deliberately does not pretend unfinished features are complete.
 
 Planned directions include:
 
-- active SearchProvider integrations
-- true Expedition mode that can discover new seed domains without existing links
+- additional SearchProvider integrations and real-provider hardening
+- stronger query/result quality controls for Expedition
 - competitor-research extractors
 - service-market extractors
 - longitudinal price/trend analysis
@@ -173,6 +178,18 @@ Inspect discovery decisions:
 ```powershell
 python main.py discoveries --project projects\my_market.json
 python main.py discoveries --project projects\my_market.json --action activated
+```
+
+Preview deterministic Expedition search queries:
+
+```powershell
+python main.py queries --project projects\expedition_example.json
+```
+
+The included Expedition integration test validates a complete zero-seed bootstrap without depending on a live search service:
+
+```powershell
+python tests\expedition_integration_test.py
 ```
 
 Sprīdītis now uses a version-neutral SQLite database:
@@ -262,6 +279,7 @@ spriditis/
 ├── crawler/      # frontier, policies, robots, crawl engine
 ├── extraction/   # structured-data extractors
 ├── reports/      # report generation
+├── search/       # SearchProvider, query generation, SearXNG/fake providers
 ├── sources/      # source-specific adapters
 └── storage/      # persistence layer
 
@@ -273,11 +291,13 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ### Project status
 
-Current public baseline: **Sprīdītis 3.2.0-alpha.3**.
+Current public baseline: **Sprīdītis 3.3.0-alpha.1**.
 
-This checkpoint validates the Discovery Engine foundation: a relevant external domain can be observed, activated, added to the crawl frontier and crawled within configured safety and domain budgets. Domains that exceed the budget remain candidates, while blocked domains stay blocked even when their textual relevance is high.
+This checkpoint adds the first true Expedition bootstrap. A project can start with zero seed URLs, generate deterministic search queries, receive results through a provider-neutral SearchProvider, apply the existing safety/relevance/domain-budget rules, activate an eligible domain and crawl it.
 
-The next major development direction is **3.3 — SearchProvider + true Expedition mode**, where Sprīdītis will be able to discover new seed domains proactively instead of depending only on links found during crawling.
+The current implementation includes an offline fake provider for deterministic validation and a SearXNG JSON API provider for real search integration. Search-provider and query provenance are kept auditable instead of bypassing the Domain Registry.
+
+The next development work is focused on hardening real-provider execution and improving Expedition query/result quality before moving further up the research stack.
 
 This is alpha software. Expect breaking changes before a stable release.
 
@@ -360,8 +380,13 @@ Sprīdītis nav piesaistīts vienai nozarei. Ideja ir vienu un to pašu kodolu p
 - universāls `MarketEntity`
 - viena domēna pārmeklēšana
 - kontrolēts vairāku domēnu discovery režīms
+- īsts zero-seed Expedition starts
+- provider-neatkarīgs `SearchProvider` slānis
+- deterministisks Expedition vaicājumu ģenerators
+- SearXNG JSON API provideris un offline fake provideris atkārtojamiem testiem
 - persistējošs Domain Registry ar `candidate`, `active`, `blocked`, `rejected` un `failed` statusiem
-- ārējo domēnu discovery audita vēsture ar aktivizācijas iemesliem
+- ārējo domēnu un search rezultātu audita vēsture ar providera/vaicājuma izcelsmi
+- search vaicājumu, rezultātu, aktivizāciju un kļūdu skaitītāji
 - sitemap atklāšana no `robots.txt` un `/sitemap.xml`
 - URL prioritizācija un crawl budžeti katram domēnam
 - `robots.txt` pārbaude
@@ -383,8 +408,8 @@ Sprīdītis nav piesaistīts vienai nozarei. Ideja ir vienu un to pašu kodolu p
 
 Plānotie attīstības virzieni:
 
-- SearchProvider integrācijas
-- īsts Expedition režīms, kas pats atrod jaunus seed domēnus arī bez saitēm no jau zināmiem avotiem
+- papildu SearchProvider integrācijas un reālo provideru stabilizācija
+- kvalitatīvāka Expedition vaicājumu un rezultātu atlase
 - konkurentu izpētes ekstraktori
 - pakalpojumu tirgus ekstraktori
 - cenu un tendenču analīze laikā
@@ -460,6 +485,18 @@ python main.py discoveries --project projects\mans_tirgus.json
 python main.py discoveries --project projects\mans_tirgus.json --action activated
 ```
 
+Apskati deterministiski ģenerēto Expedition meklēšanas plānu:
+
+```powershell
+python main.py queries --project projects\expedition_example.json
+```
+
+Pilno zero-seed Expedition plūsmu bez ārēja meklētāja var pārbaudīt ar:
+
+```powershell
+python tests\expedition_integration_test.py
+```
+
 Sprīdītis tagad izmanto versiju neitrālu SQLite datubāzi:
 
 ```text
@@ -532,11 +569,13 @@ Sprīdīti nevajadzētu izmantot autentifikācijas, piekļuves kontroles, paywal
 
 ### Projekta statuss
 
-Pašreizējais publiskais atskaites punkts: **Sprīdītis 3.2.0-alpha.3**.
+Pašreizējais publiskais atskaites punkts: **Sprīdītis 3.3.0-alpha.1**.
 
-Šajā pieturas punktā ir pārbaudīts Discovery Engine pamats: relevants ārējais domēns var tikt pamanīts, aktivizēts, ielikts crawl rindā un reāli pārmeklēts, ievērojot drošības un domēnu limitus. Domēni, kas pārsniedz budžetu, paliek `candidate`, bet bloķētie domēni netiek aktivizēti pat pie augstas teksta relevances.
+Šajā pieturas punktā Sprīdītim pirmo reizi ir īsts Expedition starts: projekts var sākties bez neviena seed URL, ģenerēt deterministiskus meklēšanas vaicājumus, saņemt rezultātus caur provider-neatkarīgu SearchProvider, piemērot esošos drošības, relevances un domēnu budžeta noteikumus, aktivizēt derīgu domēnu un to pārmeklēt.
 
-Nākamais lielais attīstības virziens ir **3.3 — SearchProvider + īsts Expedition režīms**, kur Sprīdītis spēs pats atrast jaunus seed domēnus, nepaļaujoties tikai uz saitēm jau zināmajās lapās.
+Pašlaik ir pieejams offline fake provideris deterministiskiem testiem un SearXNG JSON API provideris reālai meklēšanas integrācijai. Providera un vaicājuma izcelsme tiek saglabāta auditam un neapiet Domain Registry.
+
+Nākamais darbs ir reālo provideru izpildes stabilizācija un Expedition vaicājumu/rezultātu kvalitātes uzlabošana.
 
 Šis ir alpha projekts, tāpēc līdz stabilai versijai iespējamas arī nesavietojamas izmaiņas.
 
