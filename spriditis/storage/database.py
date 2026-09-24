@@ -2779,6 +2779,10 @@ class Database:
 
         return {
             "project_id": project_id,
+            "comparison_basis": {
+                "facts": "historical_observation_snapshots",
+                "identity": "current_canonical_membership",
+            },
             "before_run": {
                 "id": before["run_id"],
                 "started_at": before["started_at"],
