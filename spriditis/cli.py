@@ -921,6 +921,11 @@ def main() -> int:
             f"saturation={artifacts.saturation_streak})"
         )
         print(
+            f"   Diversity: {artifacts.diversity_penalties_applied} "
+            f"priority penalties / "
+            f"{artifacts.diversity_domain_count} domēni"
+        )
+        print(
             f"   Domēni: {artifacts.observed_domain_count} novēroti / "
             f"{artifacts.activated_domain_count} aktivizēti / "
             f"{artifacts.crawled_domain_count} crawlēti"
