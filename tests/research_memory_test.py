@@ -142,7 +142,12 @@ def main():
             assert market["entities_found"] == 1
             assert market["entity_yield"] == 1.0
             assert market["visit_count"] == 1
+            assert market["crawl_runs"] == 1
             assert market["success_rate"] == 1.0
+            assert market["observation_count"] == 1
+            assert market["productive_runs"] == 1
+            assert market["productive_run_rate"] == 1.0
+            assert market["last_useful_at"]
 
             explanation = db.explain_domain(
                 project.id,
