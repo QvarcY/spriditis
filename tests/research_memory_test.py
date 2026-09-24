@@ -14,6 +14,7 @@ from spriditis.core.memory import PageVisit
 from spriditis.core.projects import ResearchProject
 from spriditis.core.run import ResearchRunResult
 from spriditis.storage.database import Database
+from spriditis.cli import _group_trace_discoveries
 
 
 def main():
@@ -156,6 +157,13 @@ def main():
             assert len(trace["discoveries"]) == 2
             assert len(trace["observations"]) == 1
             assert trace["observations"][0]["title"] == "Ergonomic office chair"
+
+            grouped = _group_trace_discoveries(
+                trace["discoveries"] + trace["discoveries"]
+            )
+            assert len(grouped) == 2
+            assert sum(row["count"] for row in grouped) == 4
+            assert max(row["count"] for row in grouped) == 2
         finally:
             db.close()
 
