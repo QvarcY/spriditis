@@ -25,8 +25,8 @@
 
 | | Status |
 |---|---|
-| **Publiskā versija / Public baseline** | ✅ `v3.3.0-alpha.6` — Entity Resolution |
-| **Šobrīd / Current work** | 🧪 `3.3.0-alpha.7` — Fallback Extraction + Evidence Confidence fully validated; publication preparation |
+| **Publiskā versija / Public baseline** | ✅ `v3.3.0-alpha.7` — Fallback Extraction + Evidence Confidence |
+| **Šobrīd / Current work** | 🚧 `3.3.0-alpha.8` — Change Detection |
 | **Galvenais virziens / North star** | 🧠 **Research Memory + Adaptive Discovery** |
 | **Pamatprincips / Core principle** | 🔎 **source-backed facts > AI guesses** |
 | **Izmaksu princips / Cost direction** | 🌱 Priekšroka lokāliem, atvērtiem, pašhostējamiem un bezmaksas risinājumiem / Prefer local, open, self-hostable and zero-cost building blocks |
@@ -53,8 +53,8 @@
 | ✅ | **3.3.0-alpha.4** | Research Memory | query/source yield, source profiles, search duplication, provenance, `memory` + `explain` + `trace`, freshness/staleness |
 | ✅ | **3.3.0-alpha.5** | Adaptive Expedition | Research Memory-driven query/source priority, local BM25, adaptive stopping, multi-hop budgets, source diversity, persisted Decision Trace |
 | ✅ | **3.3.0-alpha.6** | Entity Resolution | deterministic cross-source identity, canonical clusters, resolution audit, guarded merge, review queue, cluster explain |
-| 🧪 | **3.3.0-alpha.7** | Fallback Extraction + Evidence Confidence | JSON-LD → microdata → OpenGraph → conservative DOM fallback, field provenance/confidence, schema v11, evidence-quality inspection |
-| 🧭 | **3.3.0-alpha.8** | Change Detection | price/new/disappeared events, source/domain changes, `diff` between runs |
+| ✅ | **3.3.0-alpha.7** | Fallback Extraction + Evidence Confidence | JSON-LD → microdata → OpenGraph → conservative DOM fallback, field provenance/confidence, schema v11, evidence-quality inspection |
+| 🚧 | **3.3.0-alpha.8** | Change Detection | price/new/disappeared events, source/domain changes, `diff` between runs |
 | 🧭 | **3.3.0-alpha.9** | Watch mode | incremental repeated research, scheduling hooks, change-only output, JSONL export |
 | 🧭 | **3.3.0-alpha.10** | Async crawler | bounded concurrency, adaptive politeness, faster crawling without abandoning safety |
 
@@ -269,7 +269,7 @@ Sprīdītis nav piesaistīts vienai nozarei. Ideja ir vienu un to pašu kodolu p
 
 ### Kas vēl nav gatavs?
 
-Pieņemtais attīstības virziens ir redzams README sākumā sadaļā **Development journey / Attīstības ceļš**. Publiskā bāze ir `3.3.0-alpha.6`; `3.3.0-alpha.7` Fallback Extraction + Evidence Confidence ir pilnībā validēts publicēšanas kandidāts, pēc tam seko Change Detection → Watch mode → kontrolēts async crawleris.
+Pieņemtais attīstības virziens ir redzams README sākumā sadaļā **Development journey / Attīstības ceļš**. Publiskā bāze ir `3.3.0-alpha.7`; nākamais aktīvais posms ir `3.3.0-alpha.8` Change Detection, pēc tam seko Watch mode → kontrolēts async crawleris.
 
 Detalizēti skatīt [ROADMAP.md](ROADMAP.md).
 
@@ -433,9 +433,9 @@ Sprīdīti nevajadzētu izmantot autentifikācijas, piekļuves kontroles, paywal
 
 ### Projekta statuss
 
-Pašreizējais publiskais atskaites punkts ir **Sprīdītis 3.3.0-alpha.6 — Entity Resolution**.
+Pašreizējais publiskais atskaites punkts ir **Sprīdītis 3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence**.
 
-**3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence** ir feature-complete un pilnībā validēts publicēšanas kandidāts. Tas pievieno schema.org microdata, konservatīvu DOM fallback, field-level extraction provenance/confidence, DB schema v11 current evidence persistence, `evidence-quality` inspekciju un target-cluster-aware identity conflict hard veto.
+**3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence** ir publicēts un pilnībā validēts. Tas pievieno schema.org microdata, konservatīvu DOM fallback, field-level extraction provenance/confidence, DB schema v11 current evidence persistence, `evidence-quality` inspekciju un target-cluster-aware identity conflict hard veto.
 
 Pilnais alpha7 regression gate ir izpildīts: **43/43 deterministiskie testi iziet**, ieskaitot Adaptive Expedition, Research Memory, Search/Discovery/Feed, Entity Resolution, extraction evidence un schema v11 regresijas.
 
@@ -752,9 +752,9 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ### Project status
 
-The current public baseline is **Sprīdītis 3.3.0-alpha.6 — Entity Resolution**.
+The current public baseline is **Sprīdītis 3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence**.
 
-**3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence** is feature-complete and fully validated for publication preparation. It adds schema.org microdata, conservative DOM fallback extraction, field-level extraction provenance/confidence, database schema v11 current-evidence persistence, `evidence-quality` inspection, and target-cluster-aware identity-conflict hard veto behavior.
+**3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence** is released and fully validated. It adds schema.org microdata, conservative DOM fallback extraction, field-level extraction provenance/confidence, database schema v11 current-evidence persistence, `evidence-quality` inspection, and target-cluster-aware identity-conflict hard veto behavior.
 
 The complete alpha7 regression gate passed: **43/43 deterministic tests**, including Adaptive Expedition, Research Memory, Search/Discovery/Feed, Entity Resolution, extraction-evidence and schema-v11 regression layers.
 
