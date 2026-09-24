@@ -2685,6 +2685,7 @@ class Database:
                 "source_domain": snapshot.get("source_domain") or "",
                 "price": snapshot.get("price"),
                 "currency": snapshot.get("currency") or "",
+                "field_evidence": snapshot.get("field_evidence") or {},
             }
             observation_ids_by_cluster.setdefault(
                 cluster_key,
