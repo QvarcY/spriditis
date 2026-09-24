@@ -14,7 +14,7 @@ from spriditis.core.run import ResearchRunResult
 from spriditis.resolution.identity import resolve_entities
 
 
-CURRENT_SCHEMA_VERSION = 8
+CURRENT_SCHEMA_VERSION = 9
 DEFAULT_STALE_AFTER_DAYS = 30.0
 
 
@@ -258,6 +258,32 @@ CREATE TABLE IF NOT EXISTS entity_cluster_members (
 
 CREATE INDEX IF NOT EXISTS idx_entity_cluster_members_cluster
 ON entity_cluster_members(project_id, cluster_key, linked_at);
+
+CREATE TABLE IF NOT EXISTS entity_resolution_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id TEXT NOT NULL,
+    run_id INTEGER NOT NULL,
+    entity_key TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    selected_cluster_key TEXT NOT NULL,
+    candidate_cluster_keys_json TEXT NOT NULL DEFAULT '[]',
+    conflict_cluster_keys_json TEXT NOT NULL DEFAULT '[]',
+    matched_signals_json TEXT NOT NULL DEFAULT '[]',
+    supporting_signals_json TEXT NOT NULL DEFAULT '[]',
+    conflicting_signals_json TEXT NOT NULL DEFAULT '[]',
+    compared_entities INTEGER NOT NULL DEFAULT 0,
+    resolved_at TEXT NOT NULL,
+    FOREIGN KEY(run_id) REFERENCES runs(id),
+    FOREIGN KEY(project_id, entity_key)
+        REFERENCES entities(project_id, entity_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_entity_resolution_events_run
+ON entity_resolution_events(project_id, run_id, id);
+
+CREATE INDEX IF NOT EXISTS idx_entity_resolution_events_entity
+ON entity_resolution_events(project_id, entity_key, id);
 
 CREATE TABLE IF NOT EXISTS schema_meta (
     key TEXT PRIMARY KEY,
@@ -639,6 +665,7 @@ class Database:
 
         self._resolve_entity_cluster(
             project.id,
+            run_id,
             key,
             entity,
             now,
@@ -670,6 +697,7 @@ class Database:
     def _resolve_entity_cluster(
         self,
         project_id: str,
+        run_id: int,
         entity_key: str,
         entity: MarketEntity,
         linked_at: str,
@@ -716,26 +744,69 @@ class Database:
         ).fetchall()
 
         matches_by_cluster: dict[str, list] = {}
+        conflicts_by_cluster: dict[str, list] = {}
+        supporting_signal_set: set[str] = set()
+
         for row in rows:
             candidate = self._entity_from_storage_row(row)
             decision = resolve_entities(entity, candidate)
-            if decision.outcome != "match":
-                continue
-            matches_by_cluster.setdefault(row[19], []).append(decision)
+            if decision.outcome == "match":
+                matches_by_cluster.setdefault(row[19], []).append(decision)
+            elif decision.outcome == "conflict":
+                conflicts_by_cluster.setdefault(row[19], []).append(decision)
+            else:
+                supporting_signal_set.update(decision.supporting_signals)
 
         cluster_key = entity_key
         match_reason = "new_cluster"
+        resolution_decision = "new_cluster"
+        resolution_reason = (
+            "no_candidates" if not rows else "no_strong_match"
+        )
         matched_signals: tuple[str, ...] = ()
-        supporting_signals: tuple[str, ...] = ()
+        supporting_signals: tuple[str, ...] = tuple(
+            sorted(supporting_signal_set)
+        )
 
         if len(matches_by_cluster) == 1:
             cluster_key, decisions = next(iter(matches_by_cluster.items()))
             selected = decisions[0]
             match_reason = selected.reason
+            resolution_decision = "linked"
+            resolution_reason = selected.reason
             matched_signals = selected.matched_signals
             supporting_signals = selected.supporting_signals
         elif len(matches_by_cluster) > 1:
             match_reason = "ambiguous_multiple_clusters"
+            resolution_decision = "deferred_ambiguous"
+            resolution_reason = "ambiguous_multiple_clusters"
+            matched_signals = tuple(
+                sorted(
+                    {
+                        signal
+                        for decisions in matches_by_cluster.values()
+                        for decision in decisions
+                        for signal in decision.matched_signals
+                    }
+                )
+            )
+            supporting_signals = tuple(
+                sorted(
+                    {
+                        *supporting_signal_set,
+                        *(
+                            signal
+                            for decisions in matches_by_cluster.values()
+                            for decision in decisions
+                            for signal in decision.supporting_signals
+                        ),
+                    }
+                )
+            )
+        elif conflicts_by_cluster:
+            match_reason = "identity_conflict"
+            resolution_decision = "created_separate"
+            resolution_reason = "identity_conflict"
 
         self.conn.execute(
             """
@@ -780,7 +851,100 @@ class Database:
             """,
             (linked_at, project_id, cluster_key),
         )
+
+        conflicting_signals = tuple(
+            sorted(
+                {
+                    signal
+                    for decisions in conflicts_by_cluster.values()
+                    for decision in decisions
+                    for signal in decision.conflicting_signals
+                }
+            )
+        )
+        self.conn.execute(
+            """
+            INSERT INTO entity_resolution_events(
+                project_id, run_id, entity_key, decision, reason,
+                selected_cluster_key, candidate_cluster_keys_json,
+                conflict_cluster_keys_json, matched_signals_json,
+                supporting_signals_json, conflicting_signals_json,
+                compared_entities, resolved_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                project_id,
+                run_id,
+                entity_key,
+                resolution_decision,
+                resolution_reason,
+                cluster_key,
+                json.dumps(
+                    sorted(matches_by_cluster),
+                    ensure_ascii=False,
+                ),
+                json.dumps(
+                    sorted(conflicts_by_cluster),
+                    ensure_ascii=False,
+                ),
+                json.dumps(matched_signals, ensure_ascii=False),
+                json.dumps(supporting_signals, ensure_ascii=False),
+                json.dumps(conflicting_signals, ensure_ascii=False),
+                len(rows),
+                linked_at,
+            ),
+        )
         return cluster_key
+
+    def entity_resolution_events(
+        self,
+        project_id: str,
+        *,
+        run_id: int | None = None,
+        limit: int = 100,
+    ) -> list[dict]:
+        clauses = ["project_id=?"]
+        params: list[object] = [project_id]
+
+        if run_id is not None:
+            clauses.append("run_id=?")
+            params.append(run_id)
+
+        params.append(max(1, min(int(limit), 1000)))
+        rows = self.conn.execute(
+            f"""
+            SELECT id, run_id, entity_key, decision, reason,
+                   selected_cluster_key, candidate_cluster_keys_json,
+                   conflict_cluster_keys_json, matched_signals_json,
+                   supporting_signals_json, conflicting_signals_json,
+                   compared_entities, resolved_at
+            FROM entity_resolution_events
+            WHERE {' AND '.join(clauses)}
+            ORDER BY id
+            LIMIT ?
+            """,
+            tuple(params),
+        ).fetchall()
+
+        return [
+            {
+                "id": int(row[0]),
+                "run_id": int(row[1]),
+                "entity_key": row[2],
+                "decision": row[3],
+                "reason": row[4],
+                "selected_cluster_key": row[5],
+                "candidate_cluster_keys": json.loads(row[6] or "[]"),
+                "conflict_cluster_keys": json.loads(row[7] or "[]"),
+                "matched_signals": json.loads(row[8] or "[]"),
+                "supporting_signals": json.loads(row[9] or "[]"),
+                "conflicting_signals": json.loads(row[10] or "[]"),
+                "compared_entities": int(row[11] or 0),
+                "resolved_at": row[12] or "",
+            }
+            for row in rows
+        ]
 
     def entity_clusters(
         self,
@@ -1637,6 +1801,20 @@ class Database:
             (project_id, run_id),
         ).fetchall()
 
+        resolution_rows = self.conn.execute(
+            """
+            SELECT id, entity_key, decision, reason,
+                   selected_cluster_key, candidate_cluster_keys_json,
+                   conflict_cluster_keys_json, matched_signals_json,
+                   supporting_signals_json, conflicting_signals_json,
+                   compared_entities, resolved_at
+            FROM entity_resolution_events
+            WHERE project_id=? AND run_id=?
+            ORDER BY id
+            """,
+            (project_id, run_id),
+        ).fetchall()
+
         observation_rows = self.conn.execute(
             """
             SELECT o.entity_key, e.title, e.entity_type, e.source_url,
@@ -1722,6 +1900,23 @@ class Database:
                     "decided_at": row[5] or "",
                 }
                 for row in adaptive_rows
+            ],
+            "entity_resolution_events": [
+                {
+                    "id": int(row[0]),
+                    "entity_key": row[1],
+                    "decision": row[2],
+                    "reason": row[3],
+                    "selected_cluster_key": row[4],
+                    "candidate_cluster_keys": json.loads(row[5] or "[]"),
+                    "conflict_cluster_keys": json.loads(row[6] or "[]"),
+                    "matched_signals": json.loads(row[7] or "[]"),
+                    "supporting_signals": json.loads(row[8] or "[]"),
+                    "conflicting_signals": json.loads(row[9] or "[]"),
+                    "compared_entities": int(row[10] or 0),
+                    "resolved_at": row[11] or "",
+                }
+                for row in resolution_rows
             ],
             "observations": [
                 {
