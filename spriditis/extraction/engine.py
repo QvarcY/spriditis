@@ -6,6 +6,7 @@ from spriditis.core.entities import MarketEntity
 from spriditis.core.projects import ResearchProject
 from spriditis.sources import meistardarbs
 
+from .dom_fallback import extract_dom_fallback_product
 from .jsonld import extract_jsonld_products
 from .microdata import extract_microdata_products
 from .opengraph import extract_opengraph_product
@@ -79,6 +80,11 @@ def extract_entities(
     og = extract_opengraph_product(soup, page_url)
     if og:
         candidates.append(og)
+
+    if not candidates:
+        fallback = extract_dom_fallback_product(soup, page_url)
+        if fallback:
+            candidates.append(fallback)
 
     by_title: dict[str, MarketEntity] = {}
     for entity in candidates:
