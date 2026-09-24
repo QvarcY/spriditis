@@ -2828,7 +2828,8 @@ class Database:
         return {
             "project_id": project_id,
             "comparison_basis": {
-                "facts": "historical_observation_snapshots",
+                "entity_facts": "historical_observation_snapshots",
+                "domain_health": "historical_page_visits",
                 "identity": "current_canonical_membership",
             },
             "before_run": {
