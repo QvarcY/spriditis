@@ -23,6 +23,7 @@ def _richness(entity: MarketEntity) -> int:
 def _merge(a: MarketEntity, b: MarketEntity) -> MarketEntity:
     primary, secondary = (a, b) if _richness(a) >= _richness(b) else (b, a)
     data = primary.model_dump()
+    field_evidence = dict(data.get("field_evidence") or {})
 
     for field in (
         "seller",
@@ -33,10 +34,19 @@ def _merge(a: MarketEntity, b: MarketEntity) -> MarketEntity:
     ):
         if not data.get(field) and getattr(secondary, field):
             data[field] = getattr(secondary, field)
+            if field in secondary.field_evidence:
+                field_evidence[field] = (
+                    secondary.field_evidence[field].model_dump()
+                )
 
     if data.get("price") is None and secondary.price is not None:
         data["price"] = secondary.price
+        if "price" in secondary.field_evidence:
+            field_evidence["price"] = (
+                secondary.field_evidence["price"].model_dump()
+            )
 
+    data["field_evidence"] = field_evidence
     return MarketEntity(**data)
 
 
