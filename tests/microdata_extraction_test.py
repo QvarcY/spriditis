@@ -22,8 +22,12 @@ microdata_html = """
   <div itemprop="description">Ergonomic microdata chair</div>
   <link itemprop="url" href="/product/acme-x1">
   <img itemprop="image" src="/images/acme-x1.jpg">
-  <span itemprop="brand">Acme</span>
-  <span itemprop="manufacturer">Acme Manufacturing</span>
+  <div itemprop="brand" itemscope itemtype="https://schema.org/Brand">
+    <meta itemprop="name" content="Acme">
+  </div>
+  <div itemprop="manufacturer" itemscope itemtype="https://schema.org/Organization">
+    <span itemprop="name">Acme Manufacturing</span>
+  </div>
   <span itemprop="model">X1</span>
   <span itemprop="mpn">ACME-X1</span>
   <span itemprop="sku">SKU-X1</span>
@@ -31,7 +35,10 @@ microdata_html = """
   <div itemprop="offers" itemscope itemtype="https://schema.org/Offer">
     <meta itemprop="price" content="179.90">
     <meta itemprop="priceCurrency" content="USD">
-    <span itemprop="seller">Micro Shop</span>
+    <link itemprop="url" href="/offer/acme-x1">
+    <div itemprop="seller" itemscope itemtype="https://schema.org/Organization">
+      <meta itemprop="name" content="Micro Shop">
+    </div>
   </div>
 </div>
 </body>
@@ -168,3 +175,4 @@ print("priority=json-ld > microdata > opengraph")
 print("microdata_direct=0.93 seller=0.90")
 print("microdata_default_currency=0.52")
 print("identity_fields=brand+manufacturer+model+mpn+sku+gtin")
+print("nested_scopes=brand+manufacturer+seller")
