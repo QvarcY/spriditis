@@ -202,6 +202,9 @@ with TemporaryDirectory() as tmp:
             "ENTITY_DISAPPEARED": 1,
             "PRICE_DROP": 1,
             "PRICE_INCREASE": 1,
+            "SELLER_CHANGED": 0,
+            "DESCRIPTION_CHANGED": 0,
+            "IMAGE_CHANGED": 0,
             "SOURCE_CHANGED": 1,
         }
 
