@@ -26,7 +26,7 @@
 | | Status |
 |---|---|
 | **Publiskā versija / Public baseline** | ✅ `v3.3.0-alpha.5` — Adaptive Expedition |
-| **Šobrīd / Current work** | 🧪 `3.3.0-alpha.6` — Entity Resolution release candidate |
+| **Šobrīd / Current work** | 🧪 `3.3.0-alpha.6` — Entity Resolution fully validated; publication preparation |
 | **Galvenais virziens / North star** | 🧠 **Research Memory + Adaptive Discovery** |
 | **Pamatprincips / Core principle** | 🔎 **source-backed facts > AI guesses** |
 | **Izmaksu princips / Cost direction** | 🌱 Priekšroka lokāliem, atvērtiem, pašhostējamiem un bezmaksas risinājumiem / Prefer local, open, self-hostable and zero-cost building blocks |
@@ -429,9 +429,9 @@ Sprīdīti nevajadzētu izmantot autentifikācijas, piekļuves kontroles, paywal
 
 Pašreizējais publiskais atskaites punkts ir **Sprīdītis 3.3.0-alpha.5 — Adaptive Expedition**.
 
-**3.3.0-alpha.6 — Entity Resolution** ir feature-complete release candidate stabilizācijas posmā. Tas pievieno deterministisku cross-source identity resolution, canonical clusterus, ambiguity/conflict auditu, guarded explicit merge, unresolved review queue un `explain-cluster` inspekciju. DB schema ir v10.
+**3.3.0-alpha.6 — Entity Resolution** ir feature-complete un pilnībā validēts publicēšanas kandidāts. Tas pievieno deterministisku cross-source identity resolution, canonical clusterus, ambiguity/conflict auditu, guarded explicit merge, unresolved review queue un `explain-cluster` inspekciju. DB schema ir v10.
 
-Alpha6 jaunie fokusētie testi ir zaļi; pirms merge/tag vēl jāizpilda pilnais **38 testu regression gate**.
+Pilnais alpha6 regression gate ir izpildīts: **38/38 deterministiskie testi iziet**, ieskaitot visus alpha5 Research Memory/Adaptive Expedition, Search/Discovery/Feed/core regresijas slāņus.
 
 Šis ir alpha projekts, tāpēc līdz stabilai versijai iespējamas arī nesavietojamas izmaiņas.
 
@@ -746,11 +746,11 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ### Project status
 
-The current public baseline is **Sprīdītis 3.3.0-alpha.4 — Research Memory**.
+The current public baseline is **Sprīdītis 3.3.0-alpha.5 — Adaptive Expedition**.
 
-Alpha4 adds database schema v6 `page_visits` lineage auditing, stable productive-domain query yield across repeated runs, source profiles, HTTP-success and productive-run signals, search duplicate rate, freshness/staleness, plus the `memory`, `explain` and `trace` CLI commands. Signals remain separate and auditable rather than being collapsed into one opaque “quality score”.
+**3.3.0-alpha.6 — Entity Resolution** is feature-complete and fully validated for publication preparation. It adds deterministic cross-source identity resolution, canonical clusters, ambiguity/conflict auditing, guarded explicit merge, an unresolved review queue and `explain-cluster` inspection. Database schema is v10.
 
-The milestone boundary is deliberate: alpha4 **records and explains** research experience. The next milestone, **3.3.0-alpha.5 — Adaptive Expedition**, begins using that memory for automatic query/source prioritization, saturation and stopping decisions.
+The complete alpha6 regression gate passed: **38/38 deterministic tests**, including the existing alpha5 Research Memory/Adaptive Expedition, Search/Discovery/Feed/core regression layers.
 
 This is alpha software. Expect breaking changes before a stable release.
 
