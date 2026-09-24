@@ -26,7 +26,7 @@
 | | Status |
 |---|---|
 | **Publiskā versija / Public baseline** | ✅ `v3.3.0-alpha.3` — Feed Discovery + incremental monitoring |
-| **Šobrīd / Current work** | 🚧 `3.3.0-alpha.4` — Research Memory |
+| **Šobrīd / Current work** | 🧪 `3.3.0-alpha.4` — Research Memory release candidate |
 | **Nākamais / Next** | 🧭 `3.3.0-alpha.5` — Adaptive Expedition |
 | **Galvenais virziens / North star** | 🧠 **Research Memory + Adaptive Discovery** |
 | **Pamatprincips / Core principle** | 🔎 **source-backed facts > AI guesses** |
@@ -51,7 +51,7 @@
 | ✅ | **3.3.0-alpha.1** | SearchProvider + zero-seed Expedition | provider abstraction, query generation, search provenance, search → activation → crawl |
 | ✅ | **3.3.0-alpha.2** | SearchProvider hardening | retry/backoff, `Retry-After`, structured provider errors, result dedupe, `search-check`, schema v4 |
 | ✅ | **3.3.0-alpha.3** | Feed Discovery & Incremental Monitoring | RSS 2.0, Atom, JSON Feed, autodiscovery, ETag / Last-Modified, feed provenance, repeat-run domain persistence |
-| 🧭 | **3.3.0-alpha.4** | Research Memory | query/source yield, source profiles, provenance, `explain` + `trace`, freshness/staleness |
+| 🧪 | **3.3.0-alpha.4** | Research Memory | query/source yield, source profiles, search duplication, provenance, `memory` + `explain` + `trace`, freshness/staleness |
 | 🧭 | **3.3.0-alpha.5** | Adaptive Expedition | BM25, query prioritization, coverage saturation, per-depth budgets, multi-hop, source diversity |
 | 🧭 | **3.3.0-alpha.6** | Entity Resolution | cross-source matching, duplicate clustering, one entity with many source observations |
 | 🧭 | **3.3.0-alpha.7** | Fallback Extraction + Evidence Confidence | schema.org microdata, DOM heuristics, field-level extraction method + confidence |
@@ -229,6 +229,12 @@ Sprīdītis nav piesaistīts vienai nozarei. Ideja ir vienu un to pašu kodolu p
 - persistējošs feed state ar `ETag`, `Last-Modified`, `304 Not Modified`, `last_entry_id` un `last_published`
 - `feeds` CLI komanda feed stāvokļa pārbaudei
 - Domain Registry stāvokļa hidratācija pirms atkārtota run; `blocked`/`rejected` dzīves cikla stāvokļi paliek sticky
+- Research Memory ar query yield, source profiles, HTTP success un productive-run signāliem
+- search duplicate rate ar atsevišķiem raw / unique / duplicate / filtered skaitītājiem
+- freshness/staleness signāli ar skaidru `last_useful_at → last_crawled → last_seen` pamatu un konfigurējamu stale slieksni
+- page lineage `page_visits` audita dati ar source type, source URL, depth, outcome un HTTP statusu
+- `memory`, `explain` un `trace` CLI komandas Research Memory inspekcijai
+- URL līmeņa safety bloķēšana vairs nepārvērš visu domēnu par sticky `blocked`
 - URL prioritizācija un crawl budžeti katram domēnam
 - `robots.txt` pārbaude
 - drošības filtri crawlerim
@@ -247,7 +253,7 @@ Sprīdītis nav piesaistīts vienai nozarei. Ideja ir vienu un to pašu kodolu p
 
 ### Kas vēl nav gatavs?
 
-Pieņemtais attīstības virziens ir redzams README sākumā sadaļā **Development journey / Attīstības ceļš**. Tuvākā secība ir SearchProvider stabilizācija → Feed Discovery → Research Memory → Adaptive Expedition → Entity Resolution → fallback ekstrakcija ar evidence confidence → izmaiņu noteikšana → watch režīms → kontrolēts async crawleris.
+Pieņemtais attīstības virziens ir redzams README sākumā sadaļā **Development journey / Attīstības ceļš**. Research Memory ir implementēta un pilnībā regresijas testēta `3.3.0-alpha.4` release candidate branchā; pēc tās publicēšanas nākamais aktīvais posms būs Adaptive Expedition → Entity Resolution → fallback ekstrakcija ar evidence confidence → izmaiņu noteikšana → watch režīms → kontrolēts async crawleris.
 
 Detalizēti skatīt [ROADMAP.md](ROADMAP.md).
 
@@ -322,6 +328,16 @@ Apskati deterministiski ģenerēto Expedition meklēšanas plānu:
 ```powershell
 python main.py queries --project projects\expedition_example.json
 ```
+
+Apskati Research Memory:
+
+```powershell
+python main.py memory --project projects\mans_tirgus.json
+python main.py explain --project projects\mans_tirgus.json --domain example.com
+python main.py trace --project projects\mans_tirgus.json --run 1
+```
+
+`memory` rāda query yield, search deduplikāciju, source profiles un freshness signālus. `explain` apkopo viena domēna auditējamo vēsturi, bet `trace` sasaista viena run page lineage, discovery eventus un observations. Alpha4 šos signālus **krāj un izskaidro**; automātiska prioritizācija pēc atmiņas ir atstāta alpha5.
 
 Pilno zero-seed Expedition plūsmu bez ārēja meklētāja var pārbaudīt ar:
 
@@ -401,13 +417,11 @@ Sprīdīti nevajadzētu izmantot autentifikācijas, piekļuves kontroles, paywal
 
 ### Projekta statuss
 
-Pašreizējais publiskais atskaites punkts: **Sprīdītis 3.3.0-alpha.3**.
+Pašreizējais publiskais atskaites punkts joprojām ir **Sprīdītis 3.3.0-alpha.3**. Aktīvajā development branchā **3.3.0-alpha.4 — Research Memory** ir sasniegusi release-candidate stāvokli: funkcionalitāte ir implementēta un pilnais regression gate ir zaļš, bet versija vēl nav mergeota `main` un nav tagota.
 
-3.3.0-alpha.3 papildina SearchProvider/HTML/sitemap discovery ar **RSS 2.0, Atom un JSON Feed**. Feed resursi tiek atrasti no HTML `rel="alternate"`, prioritizēti pēc lapas konteksta un apstrādāti caur to pašu safety, relevance, Domain Registry un frontier plūsmu.
+Alpha4 pievieno DB schema v6 `page_visits` lineage auditu, stabilu query productive-domain yield pāri atkārtotiem runiem, source profiles, HTTP success un productive-run signālus, search duplicate rate, freshness/staleness, kā arī `memory`, `explain` un `trace` CLI. Signāli paliek atsevišķi un auditējami; tie netiek sapludināti vienā opaque “quality score”.
 
-Feed state tiek glabāts SQLite atsevišķā 1:N modelī. Atkārtotos pētījumos Sprīdītis izmanto `ETag` un `Last-Modified`; reālā publiskā feed testā tika validēts arī `304 Not Modified`, neielādējot un nepārparsējot nemainītu feed saturu.
-
-Šis posms nostiprina arī atkārtotu run Domain Registry semantiku: vēsturiskie `blocked` un `rejected` stāvokļi tiek hidratēti pirms discovery lēmumiem, `active` domēni tiek atpazīti kā zināmi, bet vēsturiskie lapu/entity skaitītāji netiek atkārtoti pieskaitīti. Nākamais aktīvais pieturas punkts ir **3.3.0-alpha.4 — Research Memory**.
+Svarīga versiju robeža: alpha4 **krāj un izskaidro** pētniecības pieredzi. Nākamais **3.3.0-alpha.5 — Adaptive Expedition** drīkst sākt šo atmiņu izmantot automātiskai query/source prioritizācijai, saturation un stopping lēmumiem.
 
 Šis ir alpha projekts, tāpēc līdz stabilai versijai iespējamas arī nesavietojamas izmaiņas.
 
@@ -503,6 +517,12 @@ Sprīdītis is not tied to one industry. The same core is intended to support ve
 - persistent feed state with `ETag`, `Last-Modified`, `304 Not Modified`, `last_entry_id` and `last_published`
 - `feeds` CLI inspection
 - Domain Registry hydration before repeated runs, preserving sticky `blocked`/`rejected` lifecycle states
+- Research Memory with query yield, source profiles, HTTP success and productive-run signals
+- search duplicate rate with separate raw / unique / duplicate / filtered counters
+- freshness/staleness signals with an explicit `last_useful_at → last_crawled → last_seen` basis and configurable stale threshold
+- auditable `page_visits` lineage with source type, source URL, depth, outcome and HTTP status
+- `memory`, `explain` and `trace` CLI inspection
+- URL-scoped safety blocks no longer make the whole domain sticky `blocked`
 - URL prioritization and per-domain crawl budgets
 - `robots.txt` checks
 - crawler safety filters
@@ -523,7 +543,7 @@ Sprīdītis is not tied to one industry. The same core is intended to support ve
 
 The public alpha deliberately does not pretend unfinished features are complete.
 
-The accepted direction is shown in the **Development journey** above. The immediate sequence is SearchProvider hardening → Feed Discovery → Research Memory → Adaptive Expedition → Entity Resolution → evidence-aware fallback extraction → change detection → watch mode → bounded async crawling.
+The accepted direction is shown in the **Development journey** above. Research Memory is implemented and fully regression-tested on the `3.3.0-alpha.4` release-candidate branch; after publication, the next active sequence is Adaptive Expedition → Entity Resolution → evidence-aware fallback extraction → change detection → watch mode → bounded async crawling.
 
 See the detailed [ROADMAP.md](ROADMAP.md).
 
@@ -600,6 +620,16 @@ Preview deterministic Expedition search queries:
 ```powershell
 python main.py queries --project projects\expedition_example.json
 ```
+
+Inspect Research Memory:
+
+```powershell
+python main.py memory --project projects\my_market.json
+python main.py explain --project projects\my_market.json --domain example.com
+python main.py trace --project projects\my_market.json --run 1
+```
+
+`memory` exposes query yield, search deduplication, source profiles and freshness signals. `explain` summarizes auditable history for one domain, while `trace` connects page lineage, discovery events and observations for one run. Alpha4 **records and explains** these signals; adaptive prioritization based on memory is deliberately deferred to alpha5.
 
 The included Expedition integration test validates a complete zero-seed bootstrap without depending on a live search service:
 
@@ -706,13 +736,11 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ### Project status
 
-Current public baseline: **Sprīdītis 3.3.0-alpha.3**.
+The current public baseline remains **Sprīdītis 3.3.0-alpha.3**. On the active development branch, **3.3.0-alpha.4 — Research Memory** has reached release-candidate status: the functionality is implemented and the full regression gate is green, but the version has not yet been merged into `main` or tagged.
 
-3.3.0-alpha.3 extends SearchProvider/HTML/sitemap discovery with **RSS 2.0, Atom and JSON Feed**. Feed resources are discovered from HTML `rel="alternate"`, prioritized by page context, and routed through the same safety, relevance, Domain Registry and frontier controls.
+Alpha4 adds database schema v6 `page_visits` lineage auditing, stable productive-domain query yield across repeated runs, source profiles, HTTP-success and productive-run signals, search duplicate rate, freshness/staleness, plus the `memory`, `explain` and `trace` CLI commands. Signals remain separate and auditable rather than being collapsed into one opaque “quality score”.
 
-Feed state is stored in a dedicated SQLite 1:N model. Repeated research uses `ETag` and `Last-Modified`; a real public-feed validation also confirmed `304 Not Modified`, avoiding unnecessary feed download/parsing when content has not changed.
-
-This milestone also hardens repeated-run Domain Registry semantics: historical `blocked` and `rejected` lifecycle states are hydrated before discovery decisions, known active domains are recognized, and historical page/entity counters are not replayed into the new run. The next active milestone is **3.3.0-alpha.4 — Research Memory**.
+The milestone boundary is deliberate: alpha4 **records and explains** research experience. The next milestone, **3.3.0-alpha.5 — Adaptive Expedition**, may begin using that memory for automatic query/source prioritization, saturation and stopping decisions.
 
 This is alpha software. Expect breaking changes before a stable release.
 
