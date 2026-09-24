@@ -209,12 +209,12 @@ query = "ergonomic chair"
 provider = FakeSearchProvider({
     query: [
         SearchHit(
-            url="https://untested.example/item",
+            url="https://untested.example/product/ergonomic-chair/item",
             title="Ergonomic chair",
             snippet="chair",
         ),
         SearchHit(
-            url="https://productive.example/item",
+            url="https://productive.example/product/ergonomic-chair/item",
             title="Ergonomic chair",
             snippet="chair",
         ),
@@ -240,7 +240,7 @@ crawler = ResearchCrawler(
     source_profiles=profiles,
 )
 crawler.session = FakeSession({
-    "https://productive.example/item": "<html><body>known source</body></html>",
+    "https://productive.example/product/ergonomic-chair/item": "<html><body>known source</body></html>",
 })
 
 result = crawler.crawl()
@@ -260,7 +260,9 @@ assert result.domains["productive.example"].status == "active"
 assert result.domains["untested.example"].status == "candidate"
 assert result.domains["untested.example"].reason == "domain_budget_reached"
 assert result.visited_pages == 1
-assert crawler.session.calls == ["https://productive.example/item"]
+assert crawler.session.calls == [
+    "https://productive.example/product/ergonomic-chair/item"
+]
 
 print("ADAPTIVE SOURCE PRIORITY TEST OK")
 print(
