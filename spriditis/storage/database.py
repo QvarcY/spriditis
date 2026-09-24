@@ -13,7 +13,7 @@ from spriditis.core.projects import ResearchProject
 from spriditis.core.run import ResearchRunResult
 
 
-CURRENT_SCHEMA_VERSION = 5
+CURRENT_SCHEMA_VERSION = 6
 
 
 SCHEMA = """
@@ -142,6 +142,31 @@ CREATE TABLE IF NOT EXISTS domain_discoveries (
 CREATE INDEX IF NOT EXISTS idx_domain_discoveries_target
 ON domain_discoveries(project_id, target_domain, discovered_at);
 
+
+
+CREATE TABLE IF NOT EXISTS page_visits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id TEXT NOT NULL,
+    run_id INTEGER NOT NULL,
+    url TEXT NOT NULL,
+    final_url TEXT NOT NULL,
+    domain TEXT NOT NULL,
+    source_url TEXT DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'unknown',
+    depth INTEGER NOT NULL DEFAULT 0,
+    priority INTEGER NOT NULL DEFAULT 0,
+    outcome TEXT NOT NULL DEFAULT 'unknown',
+    http_status INTEGER,
+    content_type TEXT DEFAULT '',
+    visited_at TEXT NOT NULL,
+    FOREIGN KEY(run_id) REFERENCES runs(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_page_visits_project_run
+ON page_visits(project_id, run_id, id);
+
+CREATE INDEX IF NOT EXISTS idx_page_visits_project_domain
+ON page_visits(project_id, domain, visited_at);
 
 CREATE TABLE IF NOT EXISTS feeds (
     project_id TEXT NOT NULL,
@@ -644,6 +669,474 @@ class Database:
         self.conn.commit()
 
 
+
+
+    def save_page_visits(
+        self,
+        project: ResearchProject,
+        run_id: int,
+        result: ResearchRunResult,
+    ):
+        if not result.page_visits:
+            return
+
+        self.conn.executemany(
+            """
+            INSERT INTO page_visits(
+                project_id, run_id, url, final_url, domain,
+                source_url, source_type, depth, priority, outcome,
+                http_status, content_type, visited_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    project.id,
+                    run_id,
+                    visit.url,
+                    visit.final_url,
+                    visit.domain,
+                    visit.source_url,
+                    visit.source_type,
+                    visit.depth,
+                    visit.priority,
+                    visit.outcome,
+                    visit.http_status,
+                    visit.content_type,
+                    visit.visited_at,
+                )
+                for visit in result.page_visits
+            ],
+        )
+        self.conn.commit()
+
+    def query_memory(
+        self,
+        project_id: str,
+        *,
+        limit: int = 20,
+    ) -> list[dict]:
+        rows = self.conn.execute(
+            """
+            SELECT
+                provider,
+                query_text,
+                COUNT(*) AS result_events,
+                COUNT(DISTINCT target_domain) AS unique_domains,
+                SUM(CASE WHEN action='activated' THEN 1 ELSE 0 END) AS activated,
+                SUM(CASE WHEN action='known' THEN 1 ELSE 0 END) AS known,
+                SUM(CASE WHEN action='blocked' THEN 1 ELSE 0 END) AS blocked,
+                SUM(CASE WHEN action='recorded' THEN 1 ELSE 0 END) AS recorded,
+                COUNT(DISTINCT run_id) AS runs,
+                MAX(discovered_at) AS last_used
+            FROM domain_discoveries
+            WHERE project_id=?
+              AND query_text IS NOT NULL
+              AND query_text<>''
+            GROUP BY provider, query_text
+            ORDER BY activated DESC, unique_domains DESC, result_events DESC,
+                     query_text ASC
+            LIMIT ?
+            """,
+            (project_id, max(1, min(int(limit), 1000))),
+        ).fetchall()
+
+        result = []
+        for row in rows:
+            total = int(row[2] or 0)
+            activated = int(row[4] or 0)
+            result.append(
+                {
+                    "provider": row[0] or "",
+                    "query_text": row[1] or "",
+                    "result_events": total,
+                    "unique_domains": int(row[3] or 0),
+                    "activated": activated,
+                    "known": int(row[5] or 0),
+                    "blocked": int(row[6] or 0),
+                    "recorded": int(row[7] or 0),
+                    "runs": int(row[8] or 0),
+                    "last_used": row[9] or "",
+                    "activation_rate": (
+                        activated / total if total else 0.0
+                    ),
+                }
+            )
+        return result
+
+    def source_profiles(
+        self,
+        project_id: str,
+        *,
+        limit: int = 50,
+    ) -> list[dict]:
+        rows = self.conn.execute(
+            """
+            WITH visit_stats AS (
+                SELECT
+                    domain,
+                    COUNT(*) AS visits,
+                    SUM(CASE WHEN outcome='html_ok' THEN 1 ELSE 0 END) AS html_ok,
+                    SUM(CASE
+                        WHEN outcome LIKE 'http_error:%'
+                          OR outcome='unsafe_redirect'
+                          OR outcome='http_status'
+                        THEN 1 ELSE 0
+                    END) AS failures,
+                    MAX(visited_at) AS last_visit
+                FROM page_visits
+                WHERE project_id=?
+                GROUP BY domain
+            ),
+            feed_stats AS (
+                SELECT
+                    domain,
+                    COUNT(*) AS feed_count,
+                    MAX(last_success) AS last_feed_success
+                FROM feeds
+                WHERE project_id=?
+                GROUP BY domain
+            ),
+            discovery_stats AS (
+                SELECT
+                    target_domain AS domain,
+                    COUNT(*) AS discovery_events,
+                    SUM(CASE WHEN action='activated' THEN 1 ELSE 0 END) AS activated_events,
+                    SUM(CASE WHEN action='blocked' THEN 1 ELSE 0 END) AS blocked_events,
+                    MAX(discovered_at) AS last_discovered
+                FROM domain_discoveries
+                WHERE project_id=?
+                GROUP BY target_domain
+            )
+            SELECT
+                d.domain,
+                d.status,
+                d.relevance_score,
+                d.pages_seen,
+                d.entities_found,
+                d.robots_status,
+                d.sitemap_status,
+                d.sitemap_urls_found,
+                d.discovered_via,
+                d.reason,
+                d.first_seen,
+                d.last_seen,
+                d.last_crawled,
+                COALESCE(v.visits, 0),
+                COALESCE(v.html_ok, 0),
+                COALESCE(v.failures, 0),
+                COALESCE(v.last_visit, ''),
+                COALESCE(f.feed_count, 0),
+                COALESCE(f.last_feed_success, ''),
+                COALESCE(x.discovery_events, 0),
+                COALESCE(x.activated_events, 0),
+                COALESCE(x.blocked_events, 0),
+                COALESCE(x.last_discovered, '')
+            FROM domains d
+            LEFT JOIN visit_stats v ON v.domain=d.domain
+            LEFT JOIN feed_stats f ON f.domain=d.domain
+            LEFT JOIN discovery_stats x ON x.domain=d.domain
+            WHERE d.project_id=?
+            ORDER BY d.entities_found DESC, d.pages_seen DESC,
+                     d.relevance_score DESC, d.domain ASC
+            LIMIT ?
+            """,
+            (
+                project_id,
+                project_id,
+                project_id,
+                project_id,
+                max(1, min(int(limit), 1000)),
+            ),
+        ).fetchall()
+
+        profiles = []
+        for row in rows:
+            pages_seen = int(row[3] or 0)
+            entities_found = int(row[4] or 0)
+            visits = int(row[13] or 0)
+            html_ok = int(row[14] or 0)
+            profiles.append(
+                {
+                    "domain": row[0],
+                    "status": row[1],
+                    "relevance_score": float(row[2] or 0.0),
+                    "pages_seen": pages_seen,
+                    "entities_found": entities_found,
+                    "entity_yield": (
+                        entities_found / pages_seen
+                        if pages_seen else 0.0
+                    ),
+                    "robots_status": row[5] or "unknown",
+                    "sitemap_status": row[6] or "unknown",
+                    "sitemap_urls_found": int(row[7] or 0),
+                    "discovered_via": row[8] or "",
+                    "reason": row[9] or "",
+                    "first_seen": row[10] or "",
+                    "last_seen": row[11] or "",
+                    "last_crawled": row[12] or "",
+                    "visit_count": visits,
+                    "successful_visits": html_ok,
+                    "failed_visits": int(row[15] or 0),
+                    "success_rate": (
+                        html_ok / visits if visits else 0.0
+                    ),
+                    "last_visit": row[16] or "",
+                    "feed_count": int(row[17] or 0),
+                    "last_feed_success": row[18] or "",
+                    "discovery_events": int(row[19] or 0),
+                    "activated_events": int(row[20] or 0),
+                    "blocked_events": int(row[21] or 0),
+                    "last_discovered": row[22] or "",
+                }
+            )
+        return profiles
+
+    def explain_domain(
+        self,
+        project_id: str,
+        domain: str,
+        *,
+        event_limit: int = 10,
+    ) -> dict | None:
+        profile = next(
+            (
+                item
+                for item in self.source_profiles(project_id, limit=1000)
+                if item["domain"] == domain
+            ),
+            None,
+        )
+        if profile is None:
+            return None
+
+        discoveries = self.conn.execute(
+            """
+            SELECT run_id, source_domain, source_url, target_url,
+                   relevance_score, action, reason, discovered_via,
+                   provider, query_text, discovered_at
+            FROM domain_discoveries
+            WHERE project_id=? AND target_domain=?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (
+                project_id,
+                domain,
+                max(1, min(int(event_limit), 100)),
+            ),
+        ).fetchall()
+
+        visits = self.conn.execute(
+            """
+            SELECT run_id, url, final_url, source_url, source_type,
+                   depth, priority, outcome, http_status, content_type,
+                   visited_at
+            FROM page_visits
+            WHERE project_id=? AND domain=?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (
+                project_id,
+                domain,
+                max(1, min(int(event_limit), 100)),
+            ),
+        ).fetchall()
+
+        feeds = self.conn.execute(
+            """
+            SELECT feed_url, feed_type, status, last_checked,
+                   last_success, entries_seen, new_entries, last_error
+            FROM feeds
+            WHERE project_id=? AND domain=?
+            ORDER BY feed_url
+            """,
+            (project_id, domain),
+        ).fetchall()
+
+        profile["recent_discoveries"] = [
+            {
+                "run_id": row[0],
+                "source_domain": row[1] or "",
+                "source_url": row[2] or "",
+                "target_url": row[3] or "",
+                "relevance_score": float(row[4] or 0.0),
+                "action": row[5] or "",
+                "reason": row[6] or "",
+                "discovered_via": row[7] or "",
+                "provider": row[8] or "",
+                "query_text": row[9] or "",
+                "discovered_at": row[10] or "",
+            }
+            for row in discoveries
+        ]
+        profile["recent_visits"] = [
+            {
+                "run_id": row[0],
+                "url": row[1],
+                "final_url": row[2],
+                "source_url": row[3] or "",
+                "source_type": row[4] or "",
+                "depth": int(row[5] or 0),
+                "priority": int(row[6] or 0),
+                "outcome": row[7] or "",
+                "http_status": row[8],
+                "content_type": row[9] or "",
+                "visited_at": row[10] or "",
+            }
+            for row in visits
+        ]
+        profile["feeds"] = [
+            {
+                "feed_url": row[0],
+                "feed_type": row[1],
+                "status": row[2],
+                "last_checked": row[3] or "",
+                "last_success": row[4] or "",
+                "entries_seen": int(row[5] or 0),
+                "new_entries": int(row[6] or 0),
+                "last_error": row[7] or "",
+            }
+            for row in feeds
+        ]
+        return profile
+
+    def trace_run(
+        self,
+        project_id: str,
+        run_id: int,
+    ) -> dict | None:
+        run = self.conn.execute(
+            """
+            SELECT id, project_id, started_at, finished_at,
+                   visited_pages, failed_pages, skipped_by_robots,
+                   entities_found, domains_found,
+                   search_queries_issued, search_results_seen,
+                   search_results_unique, search_results_duplicates,
+                   search_domains_activated, search_provider_errors,
+                   feed_candidates_seen, feeds_found, feed_entries_seen,
+                   feed_entries_new, feed_not_modified, feed_errors
+            FROM runs
+            WHERE id=? AND project_id=?
+            """,
+            (run_id, project_id),
+        ).fetchone()
+
+        if run is None:
+            return None
+
+        page_rows = self.conn.execute(
+            """
+            SELECT url, final_url, domain, source_url, source_type,
+                   depth, priority, outcome, http_status, content_type,
+                   visited_at
+            FROM page_visits
+            WHERE project_id=? AND run_id=?
+            ORDER BY id
+            """,
+            (project_id, run_id),
+        ).fetchall()
+
+        discovery_rows = self.conn.execute(
+            """
+            SELECT source_domain, target_domain, source_url, target_url,
+                   relevance_score, action, reason, discovered_via,
+                   provider, query_text, discovered_at
+            FROM domain_discoveries
+            WHERE project_id=? AND run_id=?
+            ORDER BY id
+            """,
+            (project_id, run_id),
+        ).fetchall()
+
+        observation_rows = self.conn.execute(
+            """
+            SELECT o.entity_key, e.title, e.entity_type, e.source_url,
+                   e.source_domain, o.observed_at, o.price, o.currency,
+                   e.extraction_method, e.relevance_score
+            FROM observations o
+            LEFT JOIN entities e
+              ON e.project_id=o.project_id
+             AND e.entity_key=o.entity_key
+            WHERE o.project_id=? AND o.run_id=?
+            ORDER BY o.id
+            """,
+            (project_id, run_id),
+        ).fetchall()
+
+        return {
+            "run": {
+                "id": run[0],
+                "project_id": run[1],
+                "started_at": run[2],
+                "finished_at": run[3] or "",
+                "visited_pages": int(run[4] or 0),
+                "failed_pages": int(run[5] or 0),
+                "skipped_by_robots": int(run[6] or 0),
+                "entities_found": int(run[7] or 0),
+                "domains_found": int(run[8] or 0),
+                "search_queries_issued": int(run[9] or 0),
+                "search_results_seen": int(run[10] or 0),
+                "search_results_unique": int(run[11] or 0),
+                "search_results_duplicates": int(run[12] or 0),
+                "search_domains_activated": int(run[13] or 0),
+                "search_provider_errors": int(run[14] or 0),
+                "feed_candidates_seen": int(run[15] or 0),
+                "feeds_found": int(run[16] or 0),
+                "feed_entries_seen": int(run[17] or 0),
+                "feed_entries_new": int(run[18] or 0),
+                "feed_not_modified": int(run[19] or 0),
+                "feed_errors": int(run[20] or 0),
+            },
+            "page_visits": [
+                {
+                    "url": row[0],
+                    "final_url": row[1],
+                    "domain": row[2],
+                    "source_url": row[3] or "",
+                    "source_type": row[4] or "",
+                    "depth": int(row[5] or 0),
+                    "priority": int(row[6] or 0),
+                    "outcome": row[7] or "",
+                    "http_status": row[8],
+                    "content_type": row[9] or "",
+                    "visited_at": row[10] or "",
+                }
+                for row in page_rows
+            ],
+            "discoveries": [
+                {
+                    "source_domain": row[0] or "",
+                    "target_domain": row[1],
+                    "source_url": row[2] or "",
+                    "target_url": row[3],
+                    "relevance_score": float(row[4] or 0.0),
+                    "action": row[5] or "",
+                    "reason": row[6] or "",
+                    "discovered_via": row[7] or "",
+                    "provider": row[8] or "",
+                    "query_text": row[9] or "",
+                    "discovered_at": row[10] or "",
+                }
+                for row in discovery_rows
+            ],
+            "observations": [
+                {
+                    "entity_key": row[0],
+                    "title": row[1] or "",
+                    "entity_type": row[2] or "",
+                    "source_url": row[3] or "",
+                    "source_domain": row[4] or "",
+                    "observed_at": row[5] or "",
+                    "price": row[6],
+                    "currency": row[7] or "",
+                    "extraction_method": row[8] or "",
+                    "relevance_score": float(row[9] or 0.0),
+                }
+                for row in observation_rows
+            ],
+        }
 
     def load_domain_states(
         self,
