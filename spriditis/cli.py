@@ -8,6 +8,7 @@ from spriditis.config import load_settings
 from spriditis.search.base import SearchProviderError
 from spriditis.search.factory import build_search_provider
 from spriditis.search.query import build_search_queries
+from spriditis.storage.database import DEFAULT_STALE_AFTER_DAYS
 
 from spriditis.core.projects import (
     PRESETS,
@@ -138,6 +139,12 @@ def _parser() -> argparse.ArgumentParser:
     )
     memory.add_argument("--project", required=True)
     memory.add_argument("--limit", type=int, default=10)
+    memory.add_argument(
+        "--stale-days",
+        type=float,
+        default=DEFAULT_STALE_AFTER_DAYS,
+        help="Stale slieksnis dienās Research Memory freshness signālam",
+    )
 
     explain = sub.add_parser(
         "explain",
@@ -146,6 +153,12 @@ def _parser() -> argparse.ArgumentParser:
     explain.add_argument("--project", required=True)
     explain.add_argument("--domain", required=True)
     explain.add_argument("--limit", type=int, default=8)
+    explain.add_argument(
+        "--stale-days",
+        type=float,
+        default=DEFAULT_STALE_AFTER_DAYS,
+        help="Stale slieksnis dienās Research Memory freshness signālam",
+    )
 
     trace = sub.add_parser(
         "trace",
@@ -402,7 +415,11 @@ def main() -> int:
 
         try:
             queries = db.query_memory(project.id, limit=args.limit)
-            sources = db.source_profiles(project.id, limit=args.limit)
+            sources = db.source_profiles(
+                project.id,
+                limit=args.limit,
+                stale_after_days=args.stale_days,
+            )
         finally:
             db.close()
 
@@ -434,16 +451,23 @@ def main() -> int:
 
         print("")
         print("SOURCE PROFILES")
+        print(
+            f"   stale > {args.stale_days:g}d; "
+            "basis=last_useful_at -> last_crawled -> last_seen"
+        )
         if not sources:
             print("   Vēl nav avotu profilu.")
         else:
             print(
                 f"{'DOMAIN':<30} {'STATE':<10} {'REL':>5} "
                 f"{'RUNS':>4} {'PROD%':>6} {'PAGES':>5} "
-                f"{'ENT':>4} {'YIELD':>7} {'OK%':>6} {'FEED':>4}"
+                f"{'ENT':>4} {'YIELD':>7} {'OK%':>6} {'FEED':>4} "
+                f"{'AGE':>7} {'FRESH':<6}"
             )
-            print("-" * 106)
+            print("-" * 123)
             for row in sources:
+                age = row["stale_age_days"]
+                age_text = "-" if age is None else f"{age:.1f}d"
                 print(
                     f"{row['domain'][:30]:<30} "
                     f"{row['status']:<10} "
@@ -454,7 +478,9 @@ def main() -> int:
                     f"{row['entities_found']:>4} "
                     f"{row['entity_yield']:>7.2f} "
                     f"{row['success_rate'] * 100:>5.1f}% "
-                    f"{row['feed_count']:>4}"
+                    f"{row['feed_count']:>4} "
+                    f"{age_text:>7} "
+                    f"{row['freshness']:<6}"
                 )
         return 0
 
@@ -475,6 +501,7 @@ def main() -> int:
                 project.id,
                 domain,
                 event_limit=args.limit,
+                stale_after_days=args.stale_days,
             )
         finally:
             db.close()
@@ -517,6 +544,18 @@ def main() -> int:
             f"   first={row['first_seen']} "
             f"last={row['last_seen']} "
             f"crawled={row['last_crawled'] or '-'}"
+        )
+        stale_age = row["stale_age_days"]
+        stale_age_text = "-" if stale_age is None else f"{stale_age:.1f}d"
+        print(
+            f"   freshness={row['freshness']} "
+            f"age={stale_age_text} "
+            f"threshold={row['stale_after_days']:g}d "
+            f"basis={row['stale_reference']}"
+        )
+        print(
+            f"   last_useful={row['last_useful_at'] or '-'} "
+            f"last_feed_success={row['last_feed_success'] or '-'}"
         )
 
         if row["recent_discoveries"]:
