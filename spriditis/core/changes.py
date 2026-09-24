@@ -15,6 +15,8 @@ CHANGE_TYPES = (
     "DESCRIPTION_CHANGED",
     "IMAGE_CHANGED",
     "SOURCE_CHANGED",
+    "DOMAIN_FAILED",
+    "DOMAIN_RECOVERED",
 )
 
 FIELD_CHANGE_MIN_CONFIDENCE = 0.70
@@ -70,6 +72,72 @@ def _supported_field_fact(
         return None
 
     return fact
+
+
+def classify_domain_visits(
+    visits: list[dict[str, Any]],
+) -> dict[str, Any]:
+    reachable_visit_ids: list[int] = []
+    failure_visit_ids: list[int] = []
+    ignored_visit_ids: list[int] = []
+    outcomes: list[dict[str, Any]] = []
+
+    for visit in visits:
+        visit_id = int(visit["id"])
+        outcome = str(visit.get("outcome") or "unknown")
+        status = visit.get("http_status")
+
+        outcomes.append(
+            {
+                "visit_id": visit_id,
+                "outcome": outcome,
+                "http_status": status,
+                "url": visit.get("final_url") or visit.get("url") or "",
+            }
+        )
+
+        if outcome in {"html_ok", "non_html"}:
+            reachable_visit_ids.append(visit_id)
+            continue
+
+        if outcome == "http_status" and status is not None:
+            try:
+                numeric_status = int(status)
+            except (TypeError, ValueError):
+                ignored_visit_ids.append(visit_id)
+                continue
+
+            if numeric_status >= 500:
+                failure_visit_ids.append(visit_id)
+            else:
+                reachable_visit_ids.append(visit_id)
+            continue
+
+        if outcome.startswith("http_error:"):
+            failure_visit_ids.append(visit_id)
+            continue
+
+        ignored_visit_ids.append(visit_id)
+
+    if reachable_visit_ids:
+        state = "reachable"
+    elif failure_visit_ids:
+        state = "failed"
+    else:
+        state = "unknown"
+
+    return {
+        "state": state,
+        "visit_ids": sorted(
+            reachable_visit_ids
+            + failure_visit_ids
+            + ignored_visit_ids
+        ),
+        "reachable_visit_ids": sorted(reachable_visit_ids),
+        "failure_visit_ids": sorted(failure_visit_ids),
+        "ignored_visit_ids": sorted(ignored_visit_ids),
+        "outcomes": outcomes,
+    }
 
 
 def compare_run_snapshots(
@@ -177,6 +245,53 @@ def compare_run_snapshots(
                     },
                 )
             )
+
+    before_domains = before.get("domains", {})
+    after_domains = after.get("domains", {})
+
+    for domain in sorted(set(before_domains) & set(after_domains)):
+        old_domain = before_domains[domain]
+        new_domain = after_domains[domain]
+        old_state = old_domain["state"]
+        new_state = new_domain["state"]
+
+        if old_state == "reachable" and new_state == "failed":
+            change_type = "DOMAIN_FAILED"
+        elif old_state == "failed" and new_state == "reachable":
+            change_type = "DOMAIN_RECOVERED"
+        else:
+            continue
+
+        events.append(
+            ChangeEvent(
+                change_type=change_type,
+                cluster_key="",
+                title=domain,
+                source_domain=domain,
+                before={"state": old_state},
+                after={"state": new_state},
+                evidence={
+                    "before_run_id": before["run_id"],
+                    "after_run_id": after["run_id"],
+                    "before_visit_ids": old_domain["visit_ids"],
+                    "after_visit_ids": new_domain["visit_ids"],
+                    "before_reachable_visit_ids": old_domain[
+                        "reachable_visit_ids"
+                    ],
+                    "after_reachable_visit_ids": new_domain[
+                        "reachable_visit_ids"
+                    ],
+                    "before_failure_visit_ids": old_domain[
+                        "failure_visit_ids"
+                    ],
+                    "after_failure_visit_ids": new_domain[
+                        "failure_visit_ids"
+                    ],
+                    "before_outcomes": old_domain["outcomes"],
+                    "after_outcomes": new_domain["outcomes"],
+                },
+            )
+        )
 
     before_entities = before["entities"]
     after_entities = after["entities"]
