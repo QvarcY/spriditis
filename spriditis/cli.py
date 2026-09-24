@@ -830,6 +830,22 @@ def main() -> int:
                         identity.append(f"{key}={value}")
                 if identity:
                     print("      identity=" + " · ".join(identity))
+
+            if member["field_evidence"]:
+                print("      FIELD EVIDENCE")
+                for field, fact in sorted(
+                    member["field_evidence"].items()
+                ):
+                    method = fact.get("extraction_method") or "-"
+                    confidence = float(fact.get("confidence") or 0.0)
+                    evidence = fact.get("evidence") or "-"
+                    print(
+                        f"         {field}: "
+                        f"method={method} "
+                        f"confidence={confidence:.2f} "
+                        f"evidence={evidence}"
+                    )
+
             print(
                 f"      observations="
                 f"{len(member['observations'])}"
