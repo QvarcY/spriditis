@@ -439,7 +439,7 @@ def main() -> int:
         else:
             print(
                 f"{'DOMAIN':<30} {'STATE':<10} {'REL':>5} "
-                f"{'RUNS':>4} {'USE%':>6} {'PAGES':>5} "
+                f"{'RUNS':>4} {'PROD%':>6} {'PAGES':>5} "
                 f"{'ENT':>4} {'YIELD':>7} {'OK%':>6} {'FEED':>4}"
             )
             print("-" * 106)
