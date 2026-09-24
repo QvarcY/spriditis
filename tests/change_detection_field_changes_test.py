@@ -272,6 +272,8 @@ with TemporaryDirectory() as tmp:
             "DESCRIPTION_CHANGED": 1,
             "IMAGE_CHANGED": 1,
             "SOURCE_CHANGED": 0,
+            "DOMAIN_FAILED": 0,
+            "DOMAIN_RECOVERED": 0,
         }
         assert len(diff["events"]) == 3
 
