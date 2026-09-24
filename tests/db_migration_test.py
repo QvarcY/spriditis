@@ -99,11 +99,24 @@ def main():
             assert "sitemap_urls_found" in columns
             assert db.schema_version() == CURRENT_SCHEMA_VERSION
 
+            assert CURRENT_SCHEMA_VERSION == 12
+
             feed_table = db.conn.execute(
                 "SELECT name FROM sqlite_master "
                 "WHERE type='table' AND name='feeds'"
             ).fetchone()
             assert feed_table == ("feeds",)
+
+            feed_snapshot_table = db.conn.execute(
+                "SELECT name FROM sqlite_master "
+                "WHERE type='table' AND name='feed_snapshots'"
+            ).fetchone()
+            assert feed_snapshot_table == ("feed_snapshots",)
+
+            legacy_feed_snapshots = db.conn.execute(
+                "SELECT COUNT(*) FROM feed_snapshots"
+            ).fetchone()
+            assert legacy_feed_snapshots == (0,)
 
             page_visit_table = db.conn.execute(
                 "SELECT name FROM sqlite_master "
