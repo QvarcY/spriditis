@@ -68,7 +68,7 @@ unrelated_gtin = make_entity(
     title="Unrelated GTIN product",
     url="https://unrelated.example/product/u",
     domain="unrelated.example",
-    attributes={"gtin": "036000291452"},
+    attributes={"gtin": "5901234123457"},
 )
 
 cluster_seed = make_entity(
