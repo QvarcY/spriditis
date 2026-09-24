@@ -1277,12 +1277,15 @@ def main() -> int:
             f"clusters={before_run['cluster_count']}→"
             f"{after_run['cluster_count']} · "
             f"domains={before_run['domain_count']}→"
-            f"{after_run['domain_count']}"
+            f"{after_run['domain_count']} · "
+            f"feeds={before_run['feed_count']}→"
+            f"{after_run['feed_count']}"
         )
         basis = diff["comparison_basis"]
         print(
             f"   basis=entities:{basis['entity_facts']} + "
             f"domains:{basis['domain_health']} + "
+            f"feeds:{basis['feed_state']} + "
             f"identity:{basis['identity']}"
         )
         print(
@@ -1299,6 +1302,9 @@ def main() -> int:
                     f"source_changed={counts['SOURCE_CHANGED']}",
                     f"domain_failed={counts['DOMAIN_FAILED']}",
                     f"domain_recovered={counts['DOMAIN_RECOVERED']}",
+                    f"feed_new={counts['FEED_NEW_ENTRIES']}",
+                    f"feed_failed={counts['FEED_FAILED']}",
+                    f"feed_recovered={counts['FEED_RECOVERED']}",
                 )
             )
         )
@@ -1350,6 +1356,20 @@ def main() -> int:
                     f"      domain={event['source_domain']} "
                     f"{event['before']['state']} → "
                     f"{event['after']['state']}"
+                )
+            elif event["change_type"] == "FEED_NEW_ENTRIES":
+                print(
+                    f"      +{event['evidence']['new_entries_delta']} "
+                    f"new feed entries"
+                )
+            elif event["change_type"] in (
+                "FEED_FAILED",
+                "FEED_RECOVERED",
+            ):
+                print(
+                    f"      feed={event['source_url']} "
+                    f"{event['before']['status']} → "
+                    f"{event['after']['status']}"
                 )
             if args.details:
                 print(
