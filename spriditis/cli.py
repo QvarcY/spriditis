@@ -415,6 +415,10 @@ def main() -> int:
 
         try:
             queries = db.query_memory(project.id, limit=args.limit)
+            duplication = db.search_duplication_memory(
+                project.id,
+                limit=args.limit,
+            )
             sources = db.source_profiles(
                 project.id,
                 limit=args.limit,
@@ -447,6 +451,41 @@ def main() -> int:
                     f"{row['runs']:>4} "
                     f"{(row['provider'] or '-')[:10]:<10} "
                     f"{row['query_text']}"
+                )
+
+        print("")
+        print("SEARCH DUPLICATION")
+        print(
+            "   scope=normalized search URL across all queries in one run"
+        )
+        if duplication["runs"] == 0:
+            print("   Vēl nav search run datu.")
+        else:
+            print(
+                f"   TOTAL runs={duplication['runs']} "
+                f"queries={duplication['queries']} "
+                f"raw={duplication['raw_results']} "
+                f"unique={duplication['unique_results']} "
+                f"duplicates={duplication['duplicates']} "
+                f"filtered={duplication['filtered_results']} "
+                f"duplicate_rate={duplication['duplicate_rate']:.1%} "
+                f"errors={duplication['provider_errors']}"
+            )
+            print(
+                f"{'RUN':>5} {'RAW':>6} {'UNIQUE':>7} {'DUP':>5} "
+                f"{'FILTER':>6} {'DUP%':>7} {'QUERY':>5} {'ERR':>4}"
+            )
+            print("-" * 57)
+            for row in duplication["recent_runs"]:
+                print(
+                    f"{row['run_id']:>5} "
+                    f"{row['raw_results']:>6} "
+                    f"{row['unique_results']:>7} "
+                    f"{row['duplicates']:>5} "
+                    f"{row['filtered_results']:>6} "
+                    f"{row['duplicate_rate'] * 100:>6.1f}% "
+                    f"{row['queries']:>5} "
+                    f"{row['provider_errors']:>4}"
                 )
 
         print("")
