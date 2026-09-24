@@ -1,8 +1,7 @@
 # Sprīdītis — arhitektūra / Architecture
 
-Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence**  
-Validējamais izstrādes baseline / Development baseline under validation: **3.3.0-alpha.8 — Change Detection**  
-Nākamais plānotais posms / Next planned milestone: **3.3.0-alpha.9 — Watch mode**
+Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.8 — Change Detection**  
+Nākamais aktīvais posms / Next active milestone: **3.3.0-alpha.9 — Watch mode**
 
 > **Latviski pirmajā vietā, angļu valoda zemāk. / Latvian first, English below.**
 
@@ -282,6 +281,34 @@ DB schema v11 papildina alpha6 canonical Entity Resolution slāni, nezaudējot v
 
 Pilnais alpha7 regression gate ir izpildīts: **43/43 deterministiskie testi iziet**.
 
+## Change Detection — 3.3.0-alpha.8 released
+
+Alpha8 pārvērš vēsturiskos observation, page-visit un feed snapshot datus auditējamos notikumos.
+
+Salīdzināšanas pamats:
+
+```text
+historical observation snapshots
+        + historical page visits
+        + historical feed snapshots
+        + current canonical membership
+                    ↓
+              ChangeEvent
+```
+
+Galvenās robežas:
+
+- entity un source izmaiņas tiek vērtētas canonical identity kontekstā, nepārrakstot vēsturiskos observation faktus;
+- cenu izmaiņas tiek salīdzinātas tikai vienam un tam pašam source entity ar vienādu valūtu;
+- seller/description/image izmaiņām nepieciešams atbilstošs field evidence ar confidence vismaz `0.70`;
+- domain health izmanto reachable/failed/unknown semantiku, kur HTTP 4xx ir reachable, bet robots/safety-only nav failure;
+- feed lifecycle tiek auditēts caur schema v12 `feed_snapshots`;
+- `FEED_DISAPPEARED` rodas tikai tad, ja vēlākajā runā attiecīgais domēns patiešām bija reachable;
+- feed change evidence glabā historical snapshot ID, ko var atrisināt caur `trace`;
+- `diff --project ... --run-a ... --run-b ... [--details]` rāda before/after/evidence un explicit comparison basis.
+
+Pilnais alpha8 regression gate ir izpildīts: **48/48 deterministiskie testi iziet**.
+
 ## Feed state un HTTP resursu stāvoklis
 
 RSS/Atom/JSON Feed dati netiek glabāti kā nejaušas kolonnas `domains` tabulā. Vienam domēnam var būt vairāki feedi, tāpēc 3.3.0-alpha.3 izmanto atsevišķu 1:N `feeds` tabulu (DB schema v5).
@@ -390,7 +417,7 @@ Source-specific adapters isolate site quirks from crawler core.
 Optional AI enrichment. Crawling/extraction must remain usable without AI.
 
 ### `spriditis/storage`
-SQLite persistence and schema evolution. Alpha4 uses database schema v6 and adds a `page_visits` table for Research Memory lineage auditing. Alpha5 moves to database schema v7 and adds an `adaptive_decisions` table for explainable adaptive-decision sequences. Alpha6 uses database schema v10 and adds canonical `entity_clusters`, `entity_cluster_members`, `entity_resolution_events` and `entity_cluster_merge_events` layers while preserving source-specific `entities` and `observations` as evidence. Alpha7 moves to database schema v11 and adds `entities.field_evidence_json` for current entity provenance while historical provenance remains embedded in each `observations.snapshot_json`. Existing search counters in `runs` also back duplicate-rate memory, avoiding a parallel duplicate source of truth.
+SQLite persistence and schema evolution. Alpha4 uses database schema v6 and adds a `page_visits` table for Research Memory lineage auditing. Alpha5 moves to database schema v7 and adds an `adaptive_decisions` table for explainable adaptive-decision sequences. Alpha6 uses database schema v10 and adds canonical `entity_clusters`, `entity_cluster_members`, `entity_resolution_events` and `entity_cluster_merge_events` layers while preserving source-specific `entities` and `observations` as evidence. Alpha7 moves to database schema v11 and adds `entities.field_evidence_json` for current entity provenance while historical provenance remains embedded in each `observations.snapshot_json`. Alpha8 moves to database schema v12 and adds run-scoped `feed_snapshots` for historical feed comparison and traceable change evidence. Existing search counters in `runs` also back duplicate-rate memory, avoiding a parallel duplicate source of truth.
 
 Default DB:
 ```text
@@ -594,6 +621,34 @@ Key boundaries:
 Database schema v11 extends the alpha6 canonical Entity Resolution layer without losing historical observation provenance.
 
 The complete alpha7 regression gate passed: **43/43 deterministic tests**.
+
+## Change Detection — 3.3.0-alpha.8 released
+
+Alpha8 turns historical observation, page-visit and feed-snapshot data into auditable events.
+
+Comparison basis:
+
+```text
+historical observation snapshots
+        + historical page visits
+        + historical feed snapshots
+        + current canonical membership
+                    ↓
+              ChangeEvent
+```
+
+Key boundaries:
+
+- entity and source changes are evaluated in canonical-identity context without rewriting historical observation facts;
+- price changes are compared only for the same source entity and matching currency;
+- seller/description/image changes require matching field evidence with confidence of at least `0.70`;
+- domain health uses reachable/failed/unknown semantics, where HTTP 4xx is reachable while robots/safety-only outcomes are not failures;
+- feed lifecycle is audited through schema-v12 `feed_snapshots`;
+- `FEED_DISAPPEARED` is emitted only when the feed's domain was actually reachable in the later run;
+- feed change evidence retains historical snapshot IDs resolvable through `trace`;
+- `diff --project ... --run-a ... --run-b ... [--details]` exposes before/after/evidence plus the explicit comparison basis.
+
+The complete alpha8 regression gate passed: **48/48 deterministic tests**.
 
 ## Feed state and HTTP resource state
 
