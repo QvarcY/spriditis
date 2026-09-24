@@ -140,7 +140,7 @@ Mērķis: izvēlēties labākos pētījuma ceļus bez obligāta maksas MI.
 
 Mērķis: vienu un to pašu reālās pasaules produktu/pakalpojumu attēlot kā vienu canonical entity ar vairākiem source observations.
 
-**Statuss:** feature-complete release candidate stabilizācijas posmā.
+**Statuss:** feature-complete un pilnībā validēts publicēšanas kandidāts.
 
 Ieviests:
 
@@ -164,7 +164,7 @@ Dizaina robežas:
 - bridge entity, kas strong-matcho vairākus clusterus, tiek atlikta review queue, nevis automātiski sapludina clusterus;
 - rejected explicit merge nemaina membership un paliek auditējams.
 
-Pilnais 38 testu regression gate vēl jāizpilda pirms merge/tag.
+Pilnais regression gate ir izpildīts: **38/38 deterministiskie testi iziet**. Nākamais solis ir PR → merge → tag.
 
 ## 🧭 3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence
 
@@ -376,7 +376,7 @@ Goal: choose better research paths without requiring paid AI.
 
 Goal: represent the same real-world product/service as one canonical entity with multiple source observations.
 
-**Status:** feature-complete release candidate under stabilization.
+**Status:** feature-complete and fully validated for publication.
 
 Implemented:
 
@@ -400,7 +400,7 @@ Design boundaries:
 - a bridge entity matching multiple clusters is deferred to review instead of auto-merging clusters;
 - a rejected explicit merge leaves membership unchanged and remains auditable.
 
-The complete 38-test regression gate still has to pass before merge/tag.
+The complete regression gate passed: **38/38 deterministic tests**. Next step: PR → merge → tag.
 
 ## 🧭 3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence
 
