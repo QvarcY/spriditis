@@ -41,6 +41,7 @@ class RunArtifacts:
     saturation_streak: int = 0
     diversity_penalties_applied: int = 0
     diversity_domain_count: int = 0
+    adaptive_decision_count: int = 0
     database_migrated_from: Path | None = None
 
     @property
@@ -94,6 +95,7 @@ def run_project(
         db.save_domain_registry(project, run_id, result)
         db.save_feed_states(project, result)
         db.save_page_visits(project, run_id, result)
+        db.save_adaptive_decisions(project, run_id, result)
         db.finish_run(run_id, result)
 
         html = generate_html_report(project, result)
@@ -144,6 +146,7 @@ def run_project(
             saturation_streak=result.saturation_streak,
             diversity_penalties_applied=result.diversity_penalties_applied,
             diversity_domain_count=len(result.diversity_domains_penalized),
+            adaptive_decision_count=len(result.adaptive_decisions),
             database_migrated_from=migrated_from,
         )
     finally:
