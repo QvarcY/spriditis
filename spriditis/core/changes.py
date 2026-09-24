@@ -17,6 +17,9 @@ CHANGE_TYPES = (
     "SOURCE_CHANGED",
     "DOMAIN_FAILED",
     "DOMAIN_RECOVERED",
+    "FEED_NEW_ENTRIES",
+    "FEED_FAILED",
+    "FEED_RECOVERED",
 )
 
 FIELD_CHANGE_MIN_CONFIDENCE = 0.70
@@ -289,6 +292,99 @@ def compare_run_snapshots(
                     ],
                     "before_outcomes": old_domain["outcomes"],
                     "after_outcomes": new_domain["outcomes"],
+                },
+            )
+        )
+
+    before_feeds = before.get("feeds", {})
+    after_feeds = after.get("feeds", {})
+
+    for feed_url in sorted(set(before_feeds) & set(after_feeds)):
+        old_feed = before_feeds[feed_url]
+        new_feed = after_feeds[feed_url]
+        old_status = old_feed.get("status") or "unknown"
+        new_status = new_feed.get("status") or "unknown"
+
+        if old_status == "active" and new_status == "error":
+            events.append(
+                ChangeEvent(
+                    change_type="FEED_FAILED",
+                    cluster_key="",
+                    title=feed_url,
+                    source_url=feed_url,
+                    source_domain=new_feed.get("domain") or old_feed.get("domain") or "",
+                    before={
+                        "status": old_status,
+                        "last_error": old_feed.get("last_error") or "",
+                    },
+                    after={
+                        "status": new_status,
+                        "last_error": new_feed.get("last_error") or "",
+                    },
+                    evidence={
+                        "before_run_id": before["run_id"],
+                        "after_run_id": after["run_id"],
+                        "before_snapshot_id": old_feed["id"],
+                        "after_snapshot_id": new_feed["id"],
+                    },
+                )
+            )
+        elif old_status == "error" and new_status == "active":
+            events.append(
+                ChangeEvent(
+                    change_type="FEED_RECOVERED",
+                    cluster_key="",
+                    title=feed_url,
+                    source_url=feed_url,
+                    source_domain=new_feed.get("domain") or old_feed.get("domain") or "",
+                    before={
+                        "status": old_status,
+                        "last_error": old_feed.get("last_error") or "",
+                    },
+                    after={
+                        "status": new_status,
+                        "last_error": new_feed.get("last_error") or "",
+                    },
+                    evidence={
+                        "before_run_id": before["run_id"],
+                        "after_run_id": after["run_id"],
+                        "before_snapshot_id": old_feed["id"],
+                        "after_snapshot_id": new_feed["id"],
+                    },
+                )
+            )
+
+        try:
+            old_new_entries = int(old_feed.get("new_entries") or 0)
+            new_new_entries = int(new_feed.get("new_entries") or 0)
+        except (TypeError, ValueError):
+            continue
+
+        delta = new_new_entries - old_new_entries
+        if new_status != "active" or delta <= 0:
+            continue
+
+        events.append(
+            ChangeEvent(
+                change_type="FEED_NEW_ENTRIES",
+                cluster_key="",
+                title=feed_url,
+                source_url=feed_url,
+                source_domain=new_feed.get("domain") or old_feed.get("domain") or "",
+                before={
+                    "new_entries_total": old_new_entries,
+                    "last_entry_id": old_feed.get("last_entry_id") or "",
+                },
+                after={
+                    "new_entries_total": new_new_entries,
+                    "last_entry_id": new_feed.get("last_entry_id") or "",
+                },
+                evidence={
+                    "new_entries_delta": delta,
+                    "before_run_id": before["run_id"],
+                    "after_run_id": after["run_id"],
+                    "before_snapshot_id": old_feed["id"],
+                    "after_snapshot_id": new_feed["id"],
                 },
             )
         )
