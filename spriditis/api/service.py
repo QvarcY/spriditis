@@ -84,6 +84,7 @@ def run_project(
 
         db.save_domain_registry(project, run_id, result)
         db.save_feed_states(project, result)
+        db.save_page_visits(project, run_id, result)
         db.finish_run(run_id, result)
 
         html = generate_html_report(project, result)
