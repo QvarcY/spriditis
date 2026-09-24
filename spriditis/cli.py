@@ -20,6 +20,10 @@ from spriditis.core.projects import (
     project_from_preset,
     save_project,
 )
+from spriditis.core.watch import (
+    WatchCycleResult,
+    dispatch_watch_hooks,
+)
 
 
 DOMAIN_STATUSES = [
@@ -465,7 +469,9 @@ def _run_watch_cycle(
     no_ai: bool,
     details: bool,
     jsonl_path: Path | None,
-) -> int:
+    cycle_hooks=(),
+    change_hooks=(),
+) -> WatchCycleResult:
     from spriditis.storage.database import Database
 
     artifacts = run_project(
@@ -502,11 +508,30 @@ def _run_watch_cycle(
         )
 
     if diff is None:
+        result = WatchCycleResult(
+            project_id=project.id,
+            cycle_number=cycle_number,
+            run_id=artifacts.run_id,
+            previous_run_id=None,
+            baseline=True,
+            change_count=0,
+        )
+        hook_failures = dispatch_watch_hooks(
+            result,
+            cycle_hooks=cycle_hooks,
+            change_hooks=change_hooks,
+        )
         print(
             "   baseline=created · previous_completed_run=none · "
             "changes=not_applicable"
         )
-        return 0
+        for failure in hook_failures:
+            print(
+                f"   hook_failure={failure.hook_kind}:"
+                f"{failure.hook_name} · "
+                f"{failure.error_type}: {failure.message}"
+            )
+        return result
 
     before_run = diff["before_run"]
     after_run = diff["after_run"]
@@ -541,9 +566,34 @@ def _run_watch_cycle(
             + (f" · {summary}" if summary else "")
         )
 
+    result = WatchCycleResult(
+        project_id=project.id,
+        cycle_number=cycle_number,
+        run_id=after_run["id"],
+        previous_run_id=before_run["id"],
+        baseline=False,
+        change_count=len(events),
+        counts=dict(diff["counts"]),
+        suppressed_uncertain=suppressed_count,
+        suppressed_counts=dict(
+            coverage.get("suppressed_counts") or {}
+        ),
+    )
+    hook_failures = dispatch_watch_hooks(
+        result,
+        cycle_hooks=cycle_hooks,
+        change_hooks=change_hooks,
+    )
+    for failure in hook_failures:
+        print(
+            f"   hook_failure={failure.hook_kind}:"
+            f"{failure.hook_name} · "
+            f"{failure.error_type}: {failure.message}"
+        )
+
     if not events:
         print("   Nozīmīgas izmaiņas nav atrastas.")
-        return 0
+        return result
 
     print("")
     print(f"CHANGES ({len(events)})")
@@ -579,7 +629,7 @@ def _run_watch_cycle(
                     sort_keys=True,
                 )
             )
-    return len(events)
+    return result
 
 
 def main() -> int:
