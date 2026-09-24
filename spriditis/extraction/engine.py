@@ -7,6 +7,7 @@ from spriditis.core.projects import ResearchProject
 from spriditis.sources import meistardarbs
 
 from .jsonld import extract_jsonld_products
+from .microdata import extract_microdata_products
 from .opengraph import extract_opengraph_product
 
 
@@ -16,7 +17,13 @@ def _richness(entity: MarketEntity) -> int:
         + (1 if entity.seller else 0)
         + (2 if entity.description else 0)
         + (1 if entity.image_url else 0)
-        + (2 if entity.extraction_method == "json-ld" else 0)
+        + (
+            2
+            if entity.extraction_method == "json-ld"
+            else 1
+            if entity.extraction_method == "microdata"
+            else 0
+        )
     )
 
 
@@ -62,6 +69,7 @@ def extract_entities(
     candidates: list[MarketEntity] = []
 
     candidates.extend(extract_jsonld_products(soup, page_url))
+    candidates.extend(extract_microdata_products(soup, page_url))
 
     if meistardarbs.matches(page_url):
         special = meistardarbs.extract_product(soup, page_url)
