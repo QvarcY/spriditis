@@ -128,7 +128,10 @@ def main():
             assert queries[0]["result_events"] == 2
             assert queries[0]["activated"] == 1
             assert queries[0]["blocked"] == 1
+            assert queries[0]["productive_domains"] == 1
+            assert queries[0]["blocked_domains"] == 1
             assert queries[0]["activation_rate"] == 0.5
+            assert queries[0]["productive_domain_rate"] == 0.5
 
             profiles = db.source_profiles(project.id)
             market = next(
