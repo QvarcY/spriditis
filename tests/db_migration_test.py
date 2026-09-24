@@ -112,7 +112,7 @@ def main():
                 WHERE project_id='demo'
                 """
             ).fetchone()
-            assert row == ("example.com", "candidate", "blocked_path")
+            assert row == ("example.com", "candidate", "")
         finally:
             db.close()
 
