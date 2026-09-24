@@ -147,7 +147,9 @@ class DomainRegistry:
         record.relevance_score = max(record.relevance_score, ratio)
         record.last_seen = utc_now()
 
-        if not record.reason or status in {"blocked", "active"}:
+        # Keep the lifecycle reason that made the domain active. A later
+        # "known" observation is evidence, not a new activation reason.
+        if not record.reason or action in {"blocked", "activated"}:
             record.reason = reason
 
         discovery = DomainDiscovery(
@@ -223,7 +225,9 @@ class DomainRegistry:
             record.discovered_via = "search_provider"
             record.discovered_from_url = ""
 
-        if not record.reason or status in {"blocked", "active"}:
+        # Keep the lifecycle reason that made the domain active. A later
+        # "known" observation is evidence, not a new activation reason.
+        if not record.reason or action in {"blocked", "activated"}:
             record.reason = reason
 
         evidence_text = " ".join(part for part in [title, snippet] if part).strip()
@@ -302,7 +306,9 @@ class DomainRegistry:
             record.discovered_via = "feed"
             record.discovered_from_url = feed_url
 
-        if not record.reason or status in {"blocked", "active"}:
+        # Keep the lifecycle reason that made the domain active. A later
+        # "known" observation is evidence, not a new activation reason.
+        if not record.reason or action in {"blocked", "activated"}:
             record.reason = reason
 
         evidence = " ".join(
