@@ -73,7 +73,7 @@ with TemporaryDirectory() as tmp:
     db = Database(_BootstrapPath(tmp) / "spriditis.db")
     try:
         assert db.schema_version() == CURRENT_SCHEMA_VERSION
-        assert CURRENT_SCHEMA_VERSION == 11
+        assert CURRENT_SCHEMA_VERSION == 12
 
         db.save_project(project)
 
@@ -87,6 +87,7 @@ with TemporaryDirectory() as tmp:
         assert pre_merge["comparison_basis"] == {
             "entity_facts": "historical_observation_snapshots",
             "domain_health": "historical_page_visits",
+            "feed_state": "historical_feed_snapshots",
             "identity": "current_canonical_membership",
         }
         assert pre_merge["counts"]["NEW_ENTITY"] == 1
@@ -119,6 +120,9 @@ with TemporaryDirectory() as tmp:
             "SOURCE_CHANGED": 1,
             "DOMAIN_FAILED": 0,
             "DOMAIN_RECOVERED": 0,
+            "FEED_NEW_ENTRIES": 0,
+            "FEED_FAILED": 0,
+            "FEED_RECOVERED": 0,
         }
         assert len(post_merge["events"]) == 1
 
@@ -171,4 +175,4 @@ print("pre_merge=new+disappeared")
 print("post_merge=source_changed_only")
 print("facts=historical_observations")
 print("identity=current_canonical_membership")
-print("schema_version=11")
+print(f"schema_version={CURRENT_SCHEMA_VERSION}")
