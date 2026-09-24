@@ -24,6 +24,10 @@ class ResearchRunResult:
     failed_pages: int = 0
     skipped_by_robots: int = 0
 
+    stop_reason: str = ""
+    diminishing_returns_streak: int = 0
+    saturation_streak: int = 0
+
     search_queries_issued: int = 0
     search_results_seen: int = 0
     search_results_unique: int = 0
