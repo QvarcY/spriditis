@@ -26,7 +26,7 @@
 
 # Latviski
 
-## ✅ Pašreizējā publiskā bāze — 3.3.0-alpha.7
+## ✅ Pašreizējā publiskā bāze — 3.3.0-alpha.8
 
 Ieviests un publiski pieejams:
 
@@ -198,9 +198,9 @@ Dizaina robežas:
 
 Pilnais alpha7 regression gate ir izpildīts: **43/43 deterministiskie testi iziet**.
 
-## 🧪 3.3.0-alpha.8 — Change Detection
+## ✅ 3.3.0-alpha.8 — Change Detection
 
-**Statuss:** funkcionālais scope ir ieviests; notiek release validācija.
+**Statuss:** publicēts un pilnībā validēts.
 
 Mērķis: pārvērst vēsturiskos observations, page visits un feed snapshots jēgpilnos, auditējamos notikumos.
 
@@ -227,9 +227,11 @@ Dizaina robežas:
 - domēns/feed netiek pasludināts par pazudušu tikai tāpēc, ka konkrētajā runā tas netika droši pārbaudīts;
 - canonical merge var mainīt identitātes skatu, bet vēsturiskie observation fakti netiek pārrakstīti.
 
+Pilnais alpha8 regression gate ir izpildīts: **48/48 deterministiskie testi iziet**.
+
 Secība paliek apzināta: **Entity Resolution → Evidence Confidence → Change Detection**.
 
-## 🧭 3.3.0-alpha.9 — Watch mode
+## 🚧 3.3.0-alpha.9 — Watch mode
 
 - incremental repeated research;
 - `spriditis watch`;
@@ -290,7 +292,7 @@ Tas ir **Research Memory + Adaptive Discovery + Evidence Confidence + Incrementa
 
 # English
 
-## ✅ Current public baseline — 3.3.0-alpha.7
+## ✅ Current public baseline — 3.3.0-alpha.8
 
 Implemented and public:
 
