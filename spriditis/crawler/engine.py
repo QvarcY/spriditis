@@ -85,6 +85,7 @@ class ResearchCrawler:
         visited: set[str] = set()
         entity_keys: set[str] = set()
         pages_by_domain: Counter[str] = Counter()
+        discovery_depth_activations: Counter[int] = Counter()
         sitemap_checked: set[str] = set()
         feed_checked: set[str] = set()
 
@@ -332,6 +333,7 @@ class ResearchCrawler:
                             normalized,
                             priority=30 + score,
                             depth=min(item.depth + 1, self.project.crawl.max_depth),
+                            discovery_depth=item.discovery_depth,
                             source_url=final_url,
                             source_type="sitemap",
                         )
@@ -402,31 +404,61 @@ class ResearchCrawler:
                             evidence,
                         )
 
+                        feed_target_domain = host_key(normalized)
+                        feed_is_external = feed_target_domain != final_domain
+                        feed_discovery_depth = (
+                            item.discovery_depth + 1
+                            if feed_is_external
+                            else item.discovery_depth
+                        )
+                        feed_block_reason = (
+                            self._discovery_activation_block_reason(
+                                feed_discovery_depth,
+                                discovery_depth_activations,
+                            )
+                            if feed_is_external
+                            else ""
+                        )
+
                         record, feed_event = registry.observe_feed_entry(
                             feed_url=state.feed_url,
                             target_url=normalized,
                             title=entry.title,
                             summary=entry.summary,
                             raw_score=score,
+                            activation_block_reason=feed_block_reason,
                         )
 
                         if (
                             feed_event.action == "activated"
                             and record.status == "active"
                         ):
+                            if feed_is_external:
+                                discovery_depth_activations[
+                                    feed_discovery_depth
+                                ] += 1
                             print(
                                 f"      🧭 Feed aktivizēja domēnu: "
                                 f"{record.domain} "
-                                f"(score={record.relevance_score:.2f})"
+                                f"(score={record.relevance_score:.2f}, "
+                                f"discovery_depth={feed_discovery_depth})"
                             )
 
                         if record.status != "active":
+                            continue
+
+                        if (
+                            feed_is_external
+                            and feed_discovery_depth
+                            > self.project.crawl.max_discovery_depth
+                        ):
                             continue
 
                         frontier.add(
                             normalized,
                             priority=55 + score,
                             depth=item.depth + 1,
+                            discovery_depth=feed_discovery_depth,
                             source_url=state.feed_url,
                             source_type="feed",
                         )
@@ -488,29 +520,47 @@ class ResearchCrawler:
                 is_external = target_domain != final_domain
 
                 if is_external:
+                    next_discovery_depth = item.discovery_depth + 1
+                    activation_block_reason = (
+                        self._discovery_activation_block_reason(
+                            next_discovery_depth,
+                            discovery_depth_activations,
+                        )
+                    )
                     record, discovery = registry.observe_link(
                         source_url=final_url,
                         target_url=absolute,
                         anchor_text=anchor,
                         raw_score=score,
+                        activation_block_reason=activation_block_reason,
                     )
 
                     if (
                         discovery.action == "activated"
                         and record.status == "active"
                     ):
+                        discovery_depth_activations[
+                            next_discovery_depth
+                        ] += 1
                         print(
                             f"   🧭 Jauns domēns aktivizēts: "
                             f"{record.domain} "
-                            f"(score={record.relevance_score:.2f})"
+                            f"(score={record.relevance_score:.2f}, "
+                            f"discovery_depth={next_discovery_depth})"
                         )
 
                     if record.status != "active":
                         continue
 
+                    if (
+                        next_discovery_depth
+                        > self.project.crawl.max_discovery_depth
+                    ):
+                        continue
                 else:
                     if not is_safe_public_url(absolute):
                         continue
+                    next_discovery_depth = item.discovery_depth
 
                 priority = 20 + score
 
@@ -521,6 +571,7 @@ class ResearchCrawler:
                     absolute,
                     priority=priority,
                     depth=item.depth + 1,
+                    discovery_depth=next_discovery_depth,
                     source_url=final_url,
                     source_type="html_link",
                 )
@@ -562,6 +613,22 @@ class ResearchCrawler:
         result.domain_discoveries = registry.discoveries
         result.finished_at = datetime.now(timezone.utc).isoformat()
         return result
+
+    def _discovery_activation_block_reason(
+        self,
+        discovery_depth: int,
+        activations: Counter[int],
+    ) -> str:
+        if discovery_depth > self.project.crawl.max_discovery_depth:
+            return "discovery_depth_limit"
+
+        budget = self.project.crawl.discovery_depth_budgets.get(
+            discovery_depth
+        )
+        if budget is not None and activations[discovery_depth] >= budget:
+            return "discovery_depth_budget_reached"
+
+        return ""
 
     def _update_adaptive_stop(
         self,
@@ -864,6 +931,7 @@ class ResearchCrawler:
                         normalized,
                         priority=80 + score,
                         depth=0,
+                        discovery_depth=0,
                         source_url="",
                         source_type="search_provider",
                     )
