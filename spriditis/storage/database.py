@@ -2853,6 +2853,8 @@ class Database:
             "SOURCE_CHANGED": 0,
             "DOMAIN_FAILED": 0,
             "DOMAIN_RECOVERED": 0,
+            "FEED_APPEARED": 0,
+            "FEED_DISAPPEARED": 0,
             "FEED_NEW_ENTRIES": 0,
             "FEED_FAILED": 0,
             "FEED_RECOVERED": 0,
