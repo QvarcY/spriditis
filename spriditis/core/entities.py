@@ -9,6 +9,17 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
+class ExtractionEvidence(BaseModel):
+    value: Any
+    source_url: str
+    extraction_method: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    evidence: str = ""
+    extracted_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+
+
 class EntityEnrichment(BaseModel):
     is_relevant: bool = True
     category: str = "uncategorized"
@@ -44,6 +55,9 @@ class MarketEntity(BaseModel):
 
     extraction_method: str = ""
     evidence: str = ""
+    field_evidence: dict[str, ExtractionEvidence] = Field(
+        default_factory=dict
+    )
 
     discovered_at: str = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
