@@ -7,7 +7,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from spriditis.core.domains import DomainRecord
-from spriditis.core.entities import MarketEntity
+from spriditis.core.entities import (
+    ExtractionEvidence,
+    MarketEntity,
+    summarize_field_evidence,
+)
 from spriditis.core.feeds import FeedState
 from spriditis.core.projects import ResearchProject
 from spriditis.core.run import ResearchRunResult
@@ -1514,6 +1518,106 @@ class Database:
             )
         return result
 
+    def project_evidence_quality(
+        self,
+        project_id: str,
+    ) -> dict:
+        rows = self.conn.execute(
+            """
+            SELECT entity_key, entity_type, title, source_url,
+                   source_domain, description, last_price,
+                   currency, seller, image_url, category,
+                   is_relevant, confidence, relevance_score,
+                   tags_json, attributes_json, opportunity_notes,
+                   extraction_method, evidence, field_evidence_json
+            FROM entities
+            WHERE project_id=?
+            ORDER BY last_seen, entity_key
+            """,
+            (project_id,),
+        ).fetchall()
+
+        band_counts = {"high": 0, "medium": 0, "low": 0}
+        method_counts: dict[str, int] = {}
+        low_field_counts: dict[str, int] = {}
+        missing_field_counts: dict[str, int] = {}
+        mismatched_field_counts: dict[str, int] = {}
+        default_field_counts: dict[str, int] = {}
+        entity_summaries: list[dict] = []
+        entities_with_evidence = 0
+
+        for row in rows:
+            entity = self._entity_from_storage_row(row)
+            summary = entity.evidence_quality_summary()
+            if summary["field_count"]:
+                entities_with_evidence += 1
+
+            for band, count in summary["confidence_bands"].items():
+                band_counts[band] += int(count)
+
+            for method, count in summary["methods"].items():
+                method_counts[method] = method_counts.get(method, 0) + int(count)
+
+            for item in summary["low_confidence_fields"]:
+                field = item["field"]
+                low_field_counts[field] = low_field_counts.get(field, 0) + 1
+
+            for field in summary["missing_evidence_fields"]:
+                missing_field_counts[field] = (
+                    missing_field_counts.get(field, 0) + 1
+                )
+
+            for item in summary["mismatched_evidence_fields"]:
+                field = item["field"]
+                mismatched_field_counts[field] = (
+                    mismatched_field_counts.get(field, 0) + 1
+                )
+
+            for field in summary["default_fields"]:
+                default_field_counts[field] = (
+                    default_field_counts.get(field, 0) + 1
+                )
+
+            entity_summaries.append(
+                {
+                    "entity_key": row[0],
+                    "title": entity.title,
+                    "source_domain": entity.source_domain,
+                    "source_url": entity.source_url,
+                    **summary,
+                }
+            )
+
+        def ranked_counts(values: dict[str, int]) -> list[dict]:
+            return [
+                {"field": field, "count": count}
+                for field, count in sorted(
+                    values.items(),
+                    key=lambda item: (-item[1], item[0]),
+                )
+            ]
+
+        return {
+            "entity_count": len(rows),
+            "entities_with_evidence": entities_with_evidence,
+            "entities_without_evidence": len(rows) - entities_with_evidence,
+            "field_count": sum(band_counts.values()),
+            "confidence_bands": band_counts,
+            "methods": dict(
+                sorted(
+                    method_counts.items(),
+                    key=lambda item: (-item[1], item[0]),
+                )
+            ),
+            "low_confidence_fields": ranked_counts(low_field_counts),
+            "missing_evidence_fields": ranked_counts(missing_field_counts),
+            "mismatched_evidence_fields": ranked_counts(
+                mismatched_field_counts
+            ),
+            "default_fields": ranked_counts(default_field_counts),
+            "entities": entity_summaries,
+        }
+
     def explain_entity_cluster(
         self,
         project_id: str,
@@ -1539,9 +1643,10 @@ class Database:
             """
             SELECT m.entity_key, e.title, e.source_url, e.source_domain,
                    e.last_price, e.currency, e.seller, e.attributes_json,
-                   e.field_evidence_json, e.first_seen, e.last_seen,
-                   m.match_reason, m.matched_signals_json,
-                   m.supporting_signals_json, m.linked_at
+                   e.field_evidence_json, e.description, e.image_url,
+                   e.first_seen, e.last_seen, m.match_reason,
+                   m.matched_signals_json, m.supporting_signals_json,
+                   m.linked_at
             FROM entity_cluster_members m
             JOIN entities e
               ON e.project_id=m.project_id
@@ -1568,6 +1673,38 @@ class Database:
                 (project_id, entity_key),
             ).fetchall()
 
+            attributes = json.loads(row[7] or "{}")
+            field_evidence_raw = json.loads(row[8] or "{}")
+            field_evidence = {
+                key: ExtractionEvidence.model_validate(value)
+                for key, value in field_evidence_raw.items()
+            }
+            expected_values = {
+                "title": row[1],
+                "source_url": row[2],
+            }
+            if row[4] is not None:
+                expected_values["price"] = row[4]
+            if row[5]:
+                expected_values["currency"] = row[5]
+            if row[6]:
+                expected_values["seller"] = row[6]
+            if row[9]:
+                expected_values["description"] = row[9]
+            if row[10]:
+                expected_values["image_url"] = row[10]
+            for key in (
+                "gtin",
+                "brand",
+                "manufacturer",
+                "model",
+                "mpn",
+                "sku",
+            ):
+                value = attributes.get(key)
+                if value not in (None, ""):
+                    expected_values[f"attributes.{key}"] = value
+
             members.append(
                 {
                     "entity_key": entity_key,
@@ -1577,14 +1714,18 @@ class Database:
                     "last_price": row[4],
                     "currency": row[5] or "",
                     "seller": row[6] or "",
-                    "attributes": json.loads(row[7] or "{}"),
-                    "field_evidence": json.loads(row[8] or "{}"),
-                    "first_seen": row[9] or "",
-                    "last_seen": row[10] or "",
-                    "match_reason": row[11] or "",
-                    "matched_signals": json.loads(row[12] or "[]"),
-                    "supporting_signals": json.loads(row[13] or "[]"),
-                    "linked_at": row[14] or "",
+                    "attributes": attributes,
+                    "field_evidence": field_evidence_raw,
+                    "evidence_quality": summarize_field_evidence(
+                        field_evidence,
+                        expected_values=expected_values,
+                    ),
+                    "first_seen": row[11] or "",
+                    "last_seen": row[12] or "",
+                    "match_reason": row[13] or "",
+                    "matched_signals": json.loads(row[14] or "[]"),
+                    "supporting_signals": json.loads(row[15] or "[]"),
+                    "linked_at": row[16] or "",
                     "observations": [
                         {
                             "run_id": int(obs[0]),
