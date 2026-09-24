@@ -6,7 +6,9 @@ from spriditis.core.entities import MarketEntity
 from spriditis.core.projects import ResearchProject
 from spriditis.sources import meistardarbs
 
+from .dom_fallback import extract_dom_fallback_product
 from .jsonld import extract_jsonld_products
+from .microdata import extract_microdata_products
 from .opengraph import extract_opengraph_product
 
 
@@ -16,13 +18,20 @@ def _richness(entity: MarketEntity) -> int:
         + (1 if entity.seller else 0)
         + (2 if entity.description else 0)
         + (1 if entity.image_url else 0)
-        + (2 if entity.extraction_method == "json-ld" else 0)
+        + (
+            2
+            if entity.extraction_method == "json-ld"
+            else 1
+            if entity.extraction_method == "microdata"
+            else 0
+        )
     )
 
 
 def _merge(a: MarketEntity, b: MarketEntity) -> MarketEntity:
     primary, secondary = (a, b) if _richness(a) >= _richness(b) else (b, a)
     data = primary.model_dump()
+    field_evidence = dict(data.get("field_evidence") or {})
 
     for field in (
         "seller",
@@ -33,10 +42,19 @@ def _merge(a: MarketEntity, b: MarketEntity) -> MarketEntity:
     ):
         if not data.get(field) and getattr(secondary, field):
             data[field] = getattr(secondary, field)
+            if field in secondary.field_evidence:
+                field_evidence[field] = (
+                    secondary.field_evidence[field].model_dump()
+                )
 
     if data.get("price") is None and secondary.price is not None:
         data["price"] = secondary.price
+        if "price" in secondary.field_evidence:
+            field_evidence["price"] = (
+                secondary.field_evidence["price"].model_dump()
+            )
 
+    data["field_evidence"] = field_evidence
     return MarketEntity(**data)
 
 
@@ -52,6 +70,7 @@ def extract_entities(
     candidates: list[MarketEntity] = []
 
     candidates.extend(extract_jsonld_products(soup, page_url))
+    candidates.extend(extract_microdata_products(soup, page_url))
 
     if meistardarbs.matches(page_url):
         special = meistardarbs.extract_product(soup, page_url)
@@ -61,6 +80,11 @@ def extract_entities(
     og = extract_opengraph_product(soup, page_url)
     if og:
         candidates.append(og)
+
+    if not candidates:
+        fallback = extract_dom_fallback_product(soup, page_url)
+        if fallback:
+            candidates.append(fallback)
 
     by_title: dict[str, MarketEntity] = {}
     for entity in candidates:

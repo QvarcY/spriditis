@@ -136,11 +136,11 @@ Mērķis: izvēlēties labākos pētījuma ceļus bez obligāta maksas MI.
 - DB schema v7 ar `adaptive_decisions` audita tabulu;
 - pilnais alpha5 regression gate izpildīts: 32/32 deterministiskie testi iziet.
 
-## 🧪 3.3.0-alpha.6 — Entity Resolution
+## ✅ 3.3.0-alpha.6 — Entity Resolution
 
 Mērķis: vienu un to pašu reālās pasaules produktu/pakalpojumu attēlot kā vienu canonical entity ar vairākiem source observations.
 
-**Statuss:** feature-complete un pilnībā validēts publicēšanas kandidāts.
+**Statuss:** publicēts un pilnībā validēts.
 
 Ieviests:
 
@@ -164,26 +164,39 @@ Dizaina robežas:
 - bridge entity, kas strong-matcho vairākus clusterus, tiek atlikta review queue, nevis automātiski sapludina clusterus;
 - rejected explicit merge nemaina membership un paliek auditējams.
 
-Pilnais regression gate ir izpildīts: **38/38 deterministiskie testi iziet**. Nākamais solis ir PR → merge → tag.
+Pilnais regression gate ir izpildīts: **38/38 deterministiskie testi iziet**.
 
-## 🧭 3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence
+## 🧪 3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence
 
-Ekstrakcijas prioritāte:
+**Statuss:** feature-complete un pilnībā validēts publicēšanas kandidāts.
 
-1. JSON-LD;
-2. schema.org microdata;
-3. OpenGraph;
-4. avota adapteris;
-5. deterministiskas DOM heuristikas;
-6. izvēles MI ekstraktors tikai kā pēdējais variants.
+Ieviests:
 
-Katram faktam jāspēj saglabāt:
-- value;
-- source URL;
-- extraction method;
-- confidence;
-- extracted_at;
-- evidence/provenance.
+- ekstrakcijas prioritāte: JSON-LD → schema.org microdata → source adapter/OpenGraph → konservatīvs DOM fallback;
+- schema.org microdata ar nested Product/Offer/Brand/Organization scope apstrādi;
+- DOM fallback tikai tad, ja strukturētie ekstraktori neko nav atraduši;
+- DOM fallback prasa produkta virsrakstu, semantisku cenu, explicit valūtu un produkta konteksta signālu;
+- `ExtractionEvidence` katram laukam: value, source URL, extraction method, confidence, evidence un extracted_at;
+- direct un default/fallback vērtībām atšķirīgi confidence līmeņi;
+- source adapteri izmanto to pašu field-level evidence līgumu;
+- DB schema v11 ar `field_evidence_json` current entity provenance glabāšanai;
+- observation snapshots saglabā vēsturisko provenance nemainītu;
+- `explain-cluster` rāda current field evidence un evidence-quality kopsavilkumu;
+- `evidence-quality --project ... [--details]` projekta/entity inspekcijai;
+- auditējami high/medium/low confidence bandi bez `score` vai `average_confidence`;
+- missing evidence, mismatched/stale evidence un default/inferred lauku uzskaite;
+- automatic Entity Resolution GTIN conflict semantika padarīta target-cluster-aware: nesaistīts atšķirīgs GTIN nav conflict, bet strong match + GTIN conflict tajā pašā target clusterī ir hard veto;
+- review queue ir backward-compatible ar veco `identity_conflict` reason un jauno `target_cluster_identity_conflict`.
+
+Dizaina robežas:
+
+- `MarketEntity.confidence` paliek AI/enrichment confidence un netiek jaukts ar extraction confidence;
+- nav viena opaque Evidence Quality score;
+- vecām migrētām entity rindām `field_evidence_json` ir `{}` — vēsturisks provenance netiek izdomāts;
+- DOM heuristikas ir konservatīvs pēdējais deterministiskais slānis, nevis strukturēto avotu aizvietotājs;
+- labāk palaist garām robežgadījumu nekā radīt viltus produktu no parastas lapas teksta.
+
+Pilnais alpha7 regression gate ir izpildīts: **43/43 deterministiskie testi iziet**. Nākamais solis ir PR → merge → tag.
 
 ## 🧭 3.3.0-alpha.8 — Change Detection
 
@@ -262,7 +275,7 @@ Tas ir **Research Memory + Adaptive Discovery + Evidence Confidence + Incrementa
 
 # English
 
-## ✅ Current public baseline — 3.3.0-alpha.5
+## ✅ Current public baseline — 3.3.0-alpha.6
 
 Implemented and public:
 
@@ -376,7 +389,7 @@ Goal: choose better research paths without requiring paid AI.
 
 Goal: represent the same real-world product/service as one canonical entity with multiple source observations.
 
-**Status:** feature-complete and fully validated for publication.
+**Status:** released and fully validated.
 
 Implemented:
 
@@ -400,26 +413,39 @@ Design boundaries:
 - a bridge entity matching multiple clusters is deferred to review instead of auto-merging clusters;
 - a rejected explicit merge leaves membership unchanged and remains auditable.
 
-The complete regression gate passed: **38/38 deterministic tests**. Next step: PR → merge → tag.
+The complete regression gate passed: **38/38 deterministic tests**.
 
-## 🧭 3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence
+## 🧪 3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence
 
-Extraction priority:
+**Status:** feature-complete and fully validated for publication.
 
-1. JSON-LD;
-2. schema.org microdata;
-3. OpenGraph;
-4. source adapter;
-5. deterministic DOM heuristics;
-6. optional AI extractor only as a last resort.
+Implemented:
 
-Each fact should be able to preserve:
-- value;
-- source URL;
-- extraction method;
-- confidence;
-- extracted_at;
-- evidence/provenance.
+- extraction priority: JSON-LD → schema.org microdata → source adapter/OpenGraph → conservative DOM fallback;
+- schema.org microdata with nested Product/Offer/Brand/Organization scope handling;
+- DOM fallback only when structured extraction produced no entity;
+- DOM fallback requires a product title, semantic price, explicit currency and a product-context signal;
+- field-level `ExtractionEvidence`: value, source URL, extraction method, confidence, evidence and extracted_at;
+- separate confidence levels for direct vs default/fallback values;
+- source adapters use the same field-evidence contract;
+- database schema v11 with `field_evidence_json` for current entity provenance;
+- observation snapshots preserve historical provenance unchanged;
+- `explain-cluster` exposes current field evidence and evidence-quality summaries;
+- `evidence-quality --project ... [--details]` for project/entity inspection;
+- auditable high/medium/low confidence bands without a `score` or `average_confidence`; 
+- missing evidence, mismatched/stale evidence and default/inferred field accounting;
+- automatic Entity Resolution GTIN-conflict behavior is target-cluster-aware: an unrelated different GTIN is not a conflict, while strong match + GTIN conflict inside the same target cluster is a hard veto;
+- review queue remains backward-compatible with legacy `identity_conflict` events and the new `target_cluster_identity_conflict` reason.
+
+Design boundaries:
+
+- `MarketEntity.confidence` remains AI/enrichment confidence and is not overloaded with extraction confidence;
+- there is no opaque Evidence Quality score;
+- migrated historical entity rows receive `field_evidence_json={}`; provenance is never invented retroactively;
+- DOM heuristics are a conservative final deterministic layer, not a replacement for structured sources;
+- missing a borderline product is preferable to manufacturing a false product from ordinary page text.
+
+The complete alpha7 regression gate passed: **43/43 deterministic tests**. Next step: PR → merge → tag.
 
 ## 🧭 3.3.0-alpha.8 — Change Detection
 

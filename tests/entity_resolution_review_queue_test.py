@@ -8,7 +8,7 @@ sys.path.insert(0, str(_BootstrapPath(__file__).resolve().parents[1]))
 
 from spriditis.core.entities import MarketEntity
 from spriditis.core.projects import ResearchProject
-from spriditis.storage.database import Database
+from spriditis.storage.database import CURRENT_SCHEMA_VERSION, Database
 
 
 project = ResearchProject.model_validate({
@@ -64,25 +64,52 @@ bridge = make_entity(
     },
 )
 
+conflict_seed = make_entity(
+    title="Conflict seed",
+    url="https://seed.example/product/x2",
+    domain="seed.example",
+    attributes={"brand": "Acme", "model": "X2"},
+)
+
+conflict_member = make_entity(
+    title="Conflict member",
+    url="https://member.example/product/x2",
+    domain="member.example",
+    attributes={
+        "brand": "Acme",
+        "model": "X2",
+        "gtin": "036000291452",
+    },
+)
+
 conflict = make_entity(
     title="Catalog conflict",
-    url="https://conflict.example/product/conflict",
+    url="https://conflict.example/product/x2",
     domain="conflict.example",
-    attributes={"gtin": "036000291452"},
+    attributes={
+        "brand": "Acme",
+        "model": "X2",
+        "gtin": "9501234600000",
+    },
 )
 
 
 with TemporaryDirectory() as tmp:
     db = Database(_BootstrapPath(tmp) / "spriditis.db")
     try:
-        assert db.schema_version() == 10
+        assert db.schema_version() == CURRENT_SCHEMA_VERSION
         db.save_project(project)
         run_id = db.start_run(project)
 
-        db.upsert_entity(project, run_id, a)
-        db.upsert_entity(project, run_id, b)
-        db.upsert_entity(project, run_id, bridge)
-        db.upsert_entity(project, run_id, conflict)
+        for entity in (
+            a,
+            b,
+            bridge,
+            conflict_seed,
+            conflict_member,
+            conflict,
+        ):
+            db.upsert_entity(project, run_id, entity)
 
         queue = db.entity_resolution_review_queue(project.id)
         assert len(queue) == 2
@@ -92,7 +119,7 @@ with TemporaryDirectory() as tmp:
         ]
         assert [row["reason"] for row in queue] == [
             "ambiguous_multiple_clusters",
-            "identity_conflict",
+            "target_cluster_identity_conflict",
         ]
 
         ambiguous_only = db.entity_resolution_review_queue(
@@ -107,6 +134,9 @@ with TemporaryDirectory() as tmp:
         assert len(conflict_only) == 1
         assert ambiguous_only[0]["entity_key"] == bridge.stable_key
         assert conflict_only[0]["entity_key"] == conflict.stable_key
+        assert conflict_only[0]["conflict_cluster_keys"] == [
+            conflict_seed.stable_key
+        ]
 
         # Human chooses one strong candidate for the bridge entity.
         merge_bridge = db.merge_entity_clusters(
@@ -126,7 +156,7 @@ with TemporaryDirectory() as tmp:
         rejected_conflict = db.merge_entity_clusters(
             project.id,
             conflict.stable_key,
-            a.stable_key,
+            conflict_seed.stable_key,
         )
         assert rejected_conflict["decision"] == "rejected"
         assert rejected_conflict["reason"] == "identity_conflict"
@@ -138,7 +168,13 @@ with TemporaryDirectory() as tmp:
         # Later evidence corrects the source identity. Existing membership
         # remains stable until the explicit merge is retried.
         corrected_conflict = conflict.model_copy(
-            update={"attributes": {"gtin": "4006381333931"}}
+            update={
+                "attributes": {
+                    "brand": "Acme",
+                    "model": "X2",
+                    "gtin": "036000291452",
+                }
+            }
         )
         db.upsert_entity(
             project,
@@ -152,11 +188,14 @@ with TemporaryDirectory() as tmp:
         resolved_conflict = db.merge_entity_clusters(
             project.id,
             conflict.stable_key,
-            a.stable_key,
+            conflict_seed.stable_key,
         )
         assert resolved_conflict["decision"] == "merged"
         assert resolved_conflict["reason"] == "explicit_strong_identity_match"
-        assert resolved_conflict["matched_signals"] == ["gtin_exact"]
+        assert set(resolved_conflict["matched_signals"]) == {
+            "gtin_exact",
+            "maker_model_exact",
+        }
 
         final_queue = db.entity_resolution_review_queue(project.id)
         assert final_queue == []
@@ -176,6 +215,6 @@ with TemporaryDirectory() as tmp:
         db.close()
 
 print("ENTITY RESOLUTION REVIEW QUEUE TEST OK")
-print("initial_unresolved=2 ambiguous=1 conflict=1")
+print("initial_unresolved=2 ambiguous=1 target_cluster_conflict=1")
 print("rejected_merge_keeps_item_open")
 print("resolved_queue=0")

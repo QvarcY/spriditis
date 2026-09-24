@@ -7,14 +7,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from spriditis.core.domains import DomainRecord
-from spriditis.core.entities import MarketEntity
+from spriditis.core.entities import (
+    ExtractionEvidence,
+    MarketEntity,
+    summarize_field_evidence,
+)
 from spriditis.core.feeds import FeedState
 from spriditis.core.projects import ResearchProject
 from spriditis.core.run import ResearchRunResult
 from spriditis.resolution.identity import resolve_entities
 
 
-CURRENT_SCHEMA_VERSION = 10
+CURRENT_SCHEMA_VERSION = 11
 DEFAULT_STALE_AFTER_DAYS = 30.0
 
 
@@ -96,6 +100,7 @@ CREATE TABLE IF NOT EXISTS entities (
     opportunity_notes TEXT,
     extraction_method TEXT,
     evidence TEXT,
+    field_evidence_json TEXT NOT NULL DEFAULT '{}',
     first_seen TEXT NOT NULL,
     last_seen TEXT NOT NULL,
     PRIMARY KEY(project_id, entity_key)
@@ -508,6 +513,12 @@ class Database:
         )
 
         self._ensure_column(
+            "entities",
+            "field_evidence_json",
+            "TEXT NOT NULL DEFAULT '{}'",
+        )
+
+        self._ensure_column(
             "entity_clusters",
             "merged_into_cluster_key",
             "TEXT NOT NULL DEFAULT ''",
@@ -625,9 +636,9 @@ class Database:
                 title, seller, last_price, currency, category, is_relevant,
                 confidence, relevance_score, image_url, description, tags_json,
                 attributes_json, opportunity_notes, extraction_method, evidence,
-                first_seen, last_seen
+                field_evidence_json, first_seen, last_seen
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(project_id, entity_key) DO UPDATE SET
                 entity_type=excluded.entity_type,
                 source_url=excluded.source_url,
@@ -647,6 +658,7 @@ class Database:
                 opportunity_notes=excluded.opportunity_notes,
                 extraction_method=excluded.extraction_method,
                 evidence=excluded.evidence,
+                field_evidence_json=excluded.field_evidence_json,
                 last_seen=excluded.last_seen
             """,
             (
@@ -670,6 +682,13 @@ class Database:
                 entity.opportunity_notes,
                 entity.extraction_method,
                 entity.evidence,
+                json.dumps(
+                    {
+                        key: fact.model_dump()
+                        for key, fact in entity.field_evidence.items()
+                    },
+                    ensure_ascii=False,
+                ),
                 first_seen,
                 now,
             ),
@@ -723,6 +742,7 @@ class Database:
             opportunity_notes=row[16] or "",
             extraction_method=row[17] or "",
             evidence=row[18] or "",
+            field_evidence=json.loads(row[19] or "{}"),
         )
 
     def _resolve_entity_cluster(
@@ -761,7 +781,8 @@ class Database:
                    e.currency, e.seller, e.image_url, e.category,
                    e.is_relevant, e.confidence, e.relevance_score,
                    e.tags_json, e.attributes_json, e.opportunity_notes,
-                   e.extraction_method, e.evidence, m.cluster_key
+                   e.extraction_method, e.evidence, e.field_evidence_json,
+                   m.cluster_key
             FROM entities e
             JOIN entity_cluster_members m
               ON m.project_id=e.project_id
@@ -782,11 +803,20 @@ class Database:
             candidate = self._entity_from_storage_row(row)
             decision = resolve_entities(entity, candidate)
             if decision.outcome == "match":
-                matches_by_cluster.setdefault(row[19], []).append(decision)
+                matches_by_cluster.setdefault(row[20], []).append(decision)
             elif decision.outcome == "conflict":
-                conflicts_by_cluster.setdefault(row[19], []).append(decision)
+                conflicts_by_cluster.setdefault(row[20], []).append(decision)
             else:
                 supporting_signal_set.update(decision.supporting_signals)
+
+        hard_conflict_clusters = (
+            set(matches_by_cluster) & set(conflicts_by_cluster)
+        )
+        eligible_matches = {
+            key: decisions
+            for key, decisions in matches_by_cluster.items()
+            if key not in hard_conflict_clusters
+        }
 
         cluster_key = entity_key
         match_reason = "new_cluster"
@@ -799,15 +829,15 @@ class Database:
             sorted(supporting_signal_set)
         )
 
-        if len(matches_by_cluster) == 1:
-            cluster_key, decisions = next(iter(matches_by_cluster.items()))
+        if len(eligible_matches) == 1:
+            cluster_key, decisions = next(iter(eligible_matches.items()))
             selected = decisions[0]
             match_reason = selected.reason
             resolution_decision = "linked"
             resolution_reason = selected.reason
             matched_signals = selected.matched_signals
             supporting_signals = selected.supporting_signals
-        elif len(matches_by_cluster) > 1:
+        elif len(eligible_matches) > 1:
             match_reason = "ambiguous_multiple_clusters"
             resolution_decision = "deferred_ambiguous"
             resolution_reason = "ambiguous_multiple_clusters"
@@ -815,7 +845,7 @@ class Database:
                 sorted(
                     {
                         signal
-                        for decisions in matches_by_cluster.values()
+                        for decisions in eligible_matches.values()
                         for decision in decisions
                         for signal in decision.matched_signals
                     }
@@ -827,17 +857,40 @@ class Database:
                         *supporting_signal_set,
                         *(
                             signal
-                            for decisions in matches_by_cluster.values()
+                            for decisions in eligible_matches.values()
                             for decision in decisions
                             for signal in decision.supporting_signals
                         ),
                     }
                 )
             )
-        elif conflicts_by_cluster:
-            match_reason = "identity_conflict"
+        elif hard_conflict_clusters:
+            match_reason = "target_cluster_identity_conflict"
             resolution_decision = "created_separate"
-            resolution_reason = "identity_conflict"
+            resolution_reason = "target_cluster_identity_conflict"
+            matched_signals = tuple(
+                sorted(
+                    {
+                        signal
+                        for key in hard_conflict_clusters
+                        for decision in matches_by_cluster[key]
+                        for signal in decision.matched_signals
+                    }
+                )
+            )
+            supporting_signals = tuple(
+                sorted(
+                    {
+                        *supporting_signal_set,
+                        *(
+                            signal
+                            for key in hard_conflict_clusters
+                            for decision in matches_by_cluster[key]
+                            for signal in decision.supporting_signals
+                        ),
+                    }
+                )
+            )
 
         self.conn.execute(
             """
@@ -883,11 +936,15 @@ class Database:
             (linked_at, project_id, cluster_key),
         )
 
+        blocked_conflicts = {
+            key: conflicts_by_cluster[key]
+            for key in hard_conflict_clusters
+        }
         conflicting_signals = tuple(
             sorted(
                 {
                     signal
-                    for decisions in conflicts_by_cluster.values()
+                    for decisions in blocked_conflicts.values()
                     for decision in decisions
                     for signal in decision.conflicting_signals
                 }
@@ -912,11 +969,11 @@ class Database:
                 resolution_reason,
                 cluster_key,
                 json.dumps(
-                    sorted(matches_by_cluster),
+                    sorted(eligible_matches),
                     ensure_ascii=False,
                 ),
                 json.dumps(
-                    sorted(conflicts_by_cluster),
+                    sorted(hard_conflict_clusters),
                     ensure_ascii=False,
                 ),
                 json.dumps(matched_signals, ensure_ascii=False),
@@ -995,7 +1052,10 @@ class Database:
             "("
             "r.decision='deferred_ambiguous' "
             "OR (r.decision='created_separate' "
-            "AND r.reason='identity_conflict')"
+            "AND r.reason IN ("
+            "'identity_conflict', "
+            "'target_cluster_identity_conflict'"
+            "))"
             ")",
             "c.merged_into_cluster_key=''",
         ]
@@ -1006,7 +1066,10 @@ class Database:
         elif kind == "conflict":
             filters.append(
                 "r.decision='created_separate' "
-                "AND r.reason='identity_conflict'"
+                "AND r.reason IN ("
+                "'identity_conflict', "
+                "'target_cluster_identity_conflict'"
+                ")"
             )
 
         params.append(max(1, min(int(limit), 1000)))
@@ -1071,7 +1134,7 @@ class Database:
                    e.currency, e.seller, e.image_url, e.category,
                    e.is_relevant, e.confidence, e.relevance_score,
                    e.tags_json, e.attributes_json, e.opportunity_notes,
-                   e.extraction_method, e.evidence
+                   e.extraction_method, e.evidence, e.field_evidence_json
             FROM entity_cluster_members m
             JOIN entities e
               ON e.project_id=m.project_id
@@ -1455,6 +1518,110 @@ class Database:
             )
         return result
 
+    def project_evidence_quality(
+        self,
+        project_id: str,
+    ) -> dict:
+        rows = self.conn.execute(
+            """
+            SELECT entity_key, entity_type, title, source_url,
+                   source_domain, description, last_price,
+                   currency, seller, image_url, category,
+                   is_relevant, confidence, relevance_score,
+                   tags_json, attributes_json, opportunity_notes,
+                   extraction_method, evidence, field_evidence_json
+            FROM entities
+            WHERE project_id=?
+            ORDER BY last_seen, entity_key
+            """,
+            (project_id,),
+        ).fetchall()
+
+        band_counts = {"high": 0, "medium": 0, "low": 0}
+        method_counts: dict[str, int] = {}
+        low_field_counts: dict[str, int] = {}
+        missing_field_counts: dict[str, int] = {}
+        mismatched_field_counts: dict[str, int] = {}
+        default_field_counts: dict[str, int] = {}
+        entity_summaries: list[dict] = []
+        entities_with_evidence = 0
+
+        for row in rows:
+            entity = self._entity_from_storage_row(row)
+            summary = entity.evidence_quality_summary()
+            if summary["field_count"]:
+                entities_with_evidence += 1
+
+            for band, count in summary["confidence_bands"].items():
+                band_counts[band] += int(count)
+
+            for method, count in summary["methods"].items():
+                method_counts[method] = method_counts.get(method, 0) + int(count)
+
+            for item in summary["low_confidence_fields"]:
+                field = item["field"]
+                low_field_counts[field] = low_field_counts.get(field, 0) + 1
+
+            for field in summary["missing_evidence_fields"]:
+                missing_field_counts[field] = (
+                    missing_field_counts.get(field, 0) + 1
+                )
+
+            for item in summary["mismatched_evidence_fields"]:
+                field = item["field"]
+                mismatched_field_counts[field] = (
+                    mismatched_field_counts.get(field, 0) + 1
+                )
+
+            for field in summary["default_fields"]:
+                default_field_counts[field] = (
+                    default_field_counts.get(field, 0) + 1
+                )
+
+            entity_summaries.append(
+                {
+                    "entity_key": row[0],
+                    "title": entity.title,
+                    "source_domain": entity.source_domain,
+                    "source_url": entity.source_url,
+                    **summary,
+                }
+            )
+
+        def ranked_counts(values: dict[str, int]) -> list[dict]:
+            return [
+                {"field": field, "count": count}
+                for field, count in sorted(
+                    values.items(),
+                    key=lambda item: (-item[1], item[0]),
+                )
+            ]
+
+        return {
+            "entity_count": len(rows),
+            "entities_with_evidence": entities_with_evidence,
+            "entities_without_evidence": len(rows) - entities_with_evidence,
+            "evidence_fact_count": sum(
+                item["field_count"]
+                for item in entity_summaries
+            ),
+            "supported_field_count": sum(band_counts.values()),
+            "confidence_bands": band_counts,
+            "methods": dict(
+                sorted(
+                    method_counts.items(),
+                    key=lambda item: (-item[1], item[0]),
+                )
+            ),
+            "low_confidence_fields": ranked_counts(low_field_counts),
+            "missing_evidence_fields": ranked_counts(missing_field_counts),
+            "mismatched_evidence_fields": ranked_counts(
+                mismatched_field_counts
+            ),
+            "default_fields": ranked_counts(default_field_counts),
+            "entities": entity_summaries,
+        }
+
     def explain_entity_cluster(
         self,
         project_id: str,
@@ -1480,6 +1647,7 @@ class Database:
             """
             SELECT m.entity_key, e.title, e.source_url, e.source_domain,
                    e.last_price, e.currency, e.seller, e.attributes_json,
+                   e.field_evidence_json, e.description, e.image_url,
                    e.first_seen, e.last_seen, m.match_reason,
                    m.matched_signals_json, m.supporting_signals_json,
                    m.linked_at
@@ -1509,6 +1677,38 @@ class Database:
                 (project_id, entity_key),
             ).fetchall()
 
+            attributes = json.loads(row[7] or "{}")
+            field_evidence_raw = json.loads(row[8] or "{}")
+            field_evidence = {
+                key: ExtractionEvidence.model_validate(value)
+                for key, value in field_evidence_raw.items()
+            }
+            expected_values = {
+                "title": row[1],
+                "source_url": row[2],
+            }
+            if row[4] is not None:
+                expected_values["price"] = row[4]
+            if row[5]:
+                expected_values["currency"] = row[5]
+            if row[6]:
+                expected_values["seller"] = row[6]
+            if row[9]:
+                expected_values["description"] = row[9]
+            if row[10]:
+                expected_values["image_url"] = row[10]
+            for key in (
+                "gtin",
+                "brand",
+                "manufacturer",
+                "model",
+                "mpn",
+                "sku",
+            ):
+                value = attributes.get(key)
+                if value not in (None, ""):
+                    expected_values[f"attributes.{key}"] = value
+
             members.append(
                 {
                     "entity_key": entity_key,
@@ -1518,13 +1718,18 @@ class Database:
                     "last_price": row[4],
                     "currency": row[5] or "",
                     "seller": row[6] or "",
-                    "attributes": json.loads(row[7] or "{}"),
-                    "first_seen": row[8] or "",
-                    "last_seen": row[9] or "",
-                    "match_reason": row[10] or "",
-                    "matched_signals": json.loads(row[11] or "[]"),
-                    "supporting_signals": json.loads(row[12] or "[]"),
-                    "linked_at": row[13] or "",
+                    "attributes": attributes,
+                    "field_evidence": field_evidence_raw,
+                    "evidence_quality": summarize_field_evidence(
+                        field_evidence,
+                        expected_values=expected_values,
+                    ),
+                    "first_seen": row[11] or "",
+                    "last_seen": row[12] or "",
+                    "match_reason": row[13] or "",
+                    "matched_signals": json.loads(row[14] or "[]"),
+                    "supporting_signals": json.loads(row[15] or "[]"),
+                    "linked_at": row[16] or "",
                     "observations": [
                         {
                             "run_id": int(obs[0]),

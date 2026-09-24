@@ -25,8 +25,8 @@
 
 | | Status |
 |---|---|
-| **Publiskā versija / Public baseline** | ✅ `v3.3.0-alpha.5` — Adaptive Expedition |
-| **Šobrīd / Current work** | 🧪 `3.3.0-alpha.6` — Entity Resolution fully validated; publication preparation |
+| **Publiskā versija / Public baseline** | ✅ `v3.3.0-alpha.6` — Entity Resolution |
+| **Šobrīd / Current work** | 🧪 `3.3.0-alpha.7` — Fallback Extraction + Evidence Confidence fully validated; publication preparation |
 | **Galvenais virziens / North star** | 🧠 **Research Memory + Adaptive Discovery** |
 | **Pamatprincips / Core principle** | 🔎 **source-backed facts > AI guesses** |
 | **Izmaksu princips / Cost direction** | 🌱 Priekšroka lokāliem, atvērtiem, pašhostējamiem un bezmaksas risinājumiem / Prefer local, open, self-hostable and zero-cost building blocks |
@@ -52,8 +52,8 @@
 | ✅ | **3.3.0-alpha.3** | Feed Discovery & Incremental Monitoring | RSS 2.0, Atom, JSON Feed, autodiscovery, ETag / Last-Modified, feed provenance, repeat-run domain persistence |
 | ✅ | **3.3.0-alpha.4** | Research Memory | query/source yield, source profiles, search duplication, provenance, `memory` + `explain` + `trace`, freshness/staleness |
 | ✅ | **3.3.0-alpha.5** | Adaptive Expedition | Research Memory-driven query/source priority, local BM25, adaptive stopping, multi-hop budgets, source diversity, persisted Decision Trace |
-| 🧪 | **3.3.0-alpha.6** | Entity Resolution | deterministic cross-source identity, canonical clusters, resolution audit, guarded merge, review queue, cluster explain |
-| 🧭 | **3.3.0-alpha.7** | Fallback Extraction + Evidence Confidence | schema.org microdata, DOM heuristics, field-level extraction method + confidence |
+| ✅ | **3.3.0-alpha.6** | Entity Resolution | deterministic cross-source identity, canonical clusters, resolution audit, guarded merge, review queue, cluster explain |
+| 🧪 | **3.3.0-alpha.7** | Fallback Extraction + Evidence Confidence | JSON-LD → microdata → OpenGraph → conservative DOM fallback, field provenance/confidence, schema v11, evidence-quality inspection |
 | 🧭 | **3.3.0-alpha.8** | Change Detection | price/new/disappeared events, source/domain changes, `diff` between runs |
 | 🧭 | **3.3.0-alpha.9** | Watch mode | incremental repeated research, scheduling hooks, change-only output, JSONL export |
 | 🧭 | **3.3.0-alpha.10** | Async crawler | bounded concurrency, adaptive politeness, faster crawling without abandoning safety |
@@ -240,6 +240,12 @@ Sprīdītis nav piesaistīts vienai nozarei. Ideja ir vienu un to pašu kodolu p
 - DB schema v10 ar resolution/cluster/merge audita slāņiem
 - `clusters`, `explain-cluster`, `merge-clusters`, `cluster-merges` un `review-queue` CLI
 - ambiguity/conflict review workflow ar guarded explicit merge; title-only un identity conflict merge netiek pieļauts
+- schema.org microdata ekstrakcija starp JSON-LD un OpenGraph prioritātē
+- konservatīvs DOM fallback tikai pēc strukturēto ekstraktoru neveiksmes, ar explicit valūtas un produkta-konteksta prasību
+- field-level `ExtractionEvidence` ar value/source/method/confidence/evidence/extracted_at
+- DB schema v11 ar `field_evidence_json` current entity provenance un nemainīgiem historical observation snapshots
+- `evidence-quality` CLI ar high/medium/low, missing, mismatched/stale un default/inferred lauku auditu bez opaque score
+- target-cluster-aware GTIN hard veto automātiskajā Entity Resolution, saglabājot matched + conflicting signālus
 - search duplicate rate ar atsevišķiem raw / unique / duplicate / filtered skaitītājiem
 - freshness/staleness signāli ar skaidru `last_useful_at → last_crawled → last_seen` pamatu un konfigurējamu stale slieksni
 - page lineage `page_visits` audita dati ar source type, source URL, depth, outcome un HTTP statusu
@@ -263,7 +269,7 @@ Sprīdītis nav piesaistīts vienai nozarei. Ideja ir vienu un to pašu kodolu p
 
 ### Kas vēl nav gatavs?
 
-Pieņemtais attīstības virziens ir redzams README sākumā sadaļā **Development journey / Attīstības ceļš**. Research Memory ir publicēta kā `3.3.0-alpha.4`; nākamais aktīvais posms ir Adaptive Expedition → Entity Resolution → fallback ekstrakcija ar evidence confidence → izmaiņu noteikšana → watch režīms → kontrolēts async crawleris.
+Pieņemtais attīstības virziens ir redzams README sākumā sadaļā **Development journey / Attīstības ceļš**. Publiskā bāze ir `3.3.0-alpha.6`; `3.3.0-alpha.7` Fallback Extraction + Evidence Confidence ir pilnībā validēts publicēšanas kandidāts, pēc tam seko Change Detection → Watch mode → kontrolēts async crawleris.
 
 Detalizēti skatīt [ROADMAP.md](ROADMAP.md).
 
@@ -427,11 +433,11 @@ Sprīdīti nevajadzētu izmantot autentifikācijas, piekļuves kontroles, paywal
 
 ### Projekta statuss
 
-Pašreizējais publiskais atskaites punkts ir **Sprīdītis 3.3.0-alpha.5 — Adaptive Expedition**.
+Pašreizējais publiskais atskaites punkts ir **Sprīdītis 3.3.0-alpha.6 — Entity Resolution**.
 
-**3.3.0-alpha.6 — Entity Resolution** ir feature-complete un pilnībā validēts publicēšanas kandidāts. Tas pievieno deterministisku cross-source identity resolution, canonical clusterus, ambiguity/conflict auditu, guarded explicit merge, unresolved review queue un `explain-cluster` inspekciju. DB schema ir v10.
+**3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence** ir feature-complete un pilnībā validēts publicēšanas kandidāts. Tas pievieno schema.org microdata, konservatīvu DOM fallback, field-level extraction provenance/confidence, DB schema v11 current evidence persistence, `evidence-quality` inspekciju un target-cluster-aware identity conflict hard veto.
 
-Pilnais alpha6 regression gate ir izpildīts: **38/38 deterministiskie testi iziet**, ieskaitot visus alpha5 Research Memory/Adaptive Expedition, Search/Discovery/Feed/core regresijas slāņus.
+Pilnais alpha7 regression gate ir izpildīts: **43/43 deterministiskie testi iziet**, ieskaitot Adaptive Expedition, Research Memory, Search/Discovery/Feed, Entity Resolution, extraction evidence un schema v11 regresijas.
 
 Šis ir alpha projekts, tāpēc līdz stabilai versijai iespējamas arī nesavietojamas izmaiņas.
 
@@ -746,11 +752,11 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ### Project status
 
-The current public baseline is **Sprīdītis 3.3.0-alpha.5 — Adaptive Expedition**.
+The current public baseline is **Sprīdītis 3.3.0-alpha.6 — Entity Resolution**.
 
-**3.3.0-alpha.6 — Entity Resolution** is feature-complete and fully validated for publication preparation. It adds deterministic cross-source identity resolution, canonical clusters, ambiguity/conflict auditing, guarded explicit merge, an unresolved review queue and `explain-cluster` inspection. Database schema is v10.
+**3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence** is feature-complete and fully validated for publication preparation. It adds schema.org microdata, conservative DOM fallback extraction, field-level extraction provenance/confidence, database schema v11 current-evidence persistence, `evidence-quality` inspection, and target-cluster-aware identity-conflict hard veto behavior.
 
-The complete alpha6 regression gate passed: **38/38 deterministic tests**, including the existing alpha5 Research Memory/Adaptive Expedition, Search/Discovery/Feed/core regression layers.
+The complete alpha7 regression gate passed: **43/43 deterministic tests**, including Adaptive Expedition, Research Memory, Search/Discovery/Feed, Entity Resolution, extraction-evidence and schema-v11 regression layers.
 
 This is alpha software. Expect breaking changes before a stable release.
 

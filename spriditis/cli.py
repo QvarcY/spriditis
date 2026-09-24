@@ -160,6 +160,17 @@ def _parser() -> argparse.ArgumentParser:
         help="Stale slieksnis dienās Research Memory freshness signālam",
     )
 
+    evidence_quality = sub.add_parser(
+        "evidence-quality",
+        help="Parādīt auditējamu extraction evidence kvalitātes kopsavilkumu",
+    )
+    evidence_quality.add_argument("--project", required=True)
+    evidence_quality.add_argument(
+        "--details",
+        action="store_true",
+        help="Parādīt arī katras entity evidence kopsavilkumu",
+    )
+
     clusters = sub.add_parser(
         "clusters",
         help="Parādīt projekta canonical entity clusterus",
@@ -699,6 +710,107 @@ def main() -> int:
                 print(f"      {feed['feed_url']}")
         return 0
 
+    if args.command == "evidence-quality":
+        from spriditis.storage.database import Database
+
+        settings = load_settings()
+        project = load_project(Path(args.project))
+        db = Database(
+            settings.db_path,
+            legacy_path=settings.legacy_db_path,
+        )
+        try:
+            summary = db.project_evidence_quality(project.id)
+        finally:
+            db.close()
+
+        if summary["entity_count"] == 0:
+            print("Projektam vēl nav entity evidence datu.")
+            return 0
+
+        bands = summary["confidence_bands"]
+        print(f"EVIDENCE QUALITY · {project.name}")
+        print(
+            f"   entities={summary['entity_count']} "
+            f"with_evidence={summary['entities_with_evidence']} "
+            f"without_evidence={summary['entities_without_evidence']}"
+        )
+        print(
+            f"   facts={summary['evidence_fact_count']} "
+            f"supported_current={summary['supported_field_count']}"
+        )
+        print(
+            f"   confidence: high={bands['high']} "
+            f"medium={bands['medium']} low={bands['low']}"
+        )
+
+        if summary["methods"]:
+            print("")
+            print("EXTRACTION METHODS")
+            for method, count in summary["methods"].items():
+                print(f"   {method}: {count}")
+
+        def print_field_counts(title: str, rows: list[dict]):
+            if not rows:
+                return
+            print("")
+            print(title)
+            for row in rows:
+                print(f"   {row['field']}: {row['count']}")
+
+        print_field_counts(
+            "LOW CONFIDENCE FIELDS",
+            summary["low_confidence_fields"],
+        )
+        print_field_counts(
+            "MISSING EVIDENCE",
+            summary["missing_evidence_fields"],
+        )
+        print_field_counts(
+            "MISMATCHED / STALE EVIDENCE",
+            summary["mismatched_evidence_fields"],
+        )
+        print_field_counts(
+            "DEFAULT / INFERRED FIELDS",
+            summary["default_fields"],
+        )
+
+        if args.details:
+            print("")
+            print("ENTITIES")
+            for item in summary["entities"]:
+                bands = item["confidence_bands"]
+                print(
+                    f"   {item['source_domain'] or '-'} "
+                    f"{item['title']}"
+                )
+                print(
+                    f"      supported={item['supported_field_count']}/"
+                    f"{item['field_count']} "
+                    f"high={bands['high']} "
+                    f"medium={bands['medium']} "
+                    f"low={bands['low']}"
+                )
+                if item["weakest_fields"]:
+                    weak = ", ".join(
+                        f"{field['field']}={field['confidence']:.2f}"
+                        for field in item["weakest_fields"]
+                    )
+                    print(f"      weakest={weak}")
+                if item["missing_evidence_fields"]:
+                    print(
+                        "      missing="
+                        + ", ".join(item["missing_evidence_fields"])
+                    )
+                if item["mismatched_evidence_fields"]:
+                    mismatch = ", ".join(
+                        row["field"]
+                        for row in item["mismatched_evidence_fields"]
+                    )
+                    print(f"      mismatched={mismatch}")
+                print(f"      {item['source_url']}")
+        return 0
+
     if args.command == "clusters":
         from spriditis.storage.database import Database
 
@@ -830,6 +942,52 @@ def main() -> int:
                         identity.append(f"{key}={value}")
                 if identity:
                     print("      identity=" + " · ".join(identity))
+
+            if member["field_evidence"]:
+                print("      FIELD EVIDENCE")
+                for field, fact in sorted(
+                    member["field_evidence"].items()
+                ):
+                    method = fact.get("extraction_method") or "-"
+                    confidence = float(fact.get("confidence") or 0.0)
+                    evidence = fact.get("evidence") or "-"
+                    print(
+                        f"         {field}: "
+                        f"method={method} "
+                        f"confidence={confidence:.2f} "
+                        f"evidence={evidence}"
+                    )
+
+            quality = member["evidence_quality"]
+            bands = quality["confidence_bands"]
+            print(
+                f"      EVIDENCE QUALITY "
+                f"supported={quality['supported_field_count']}/"
+                f"{quality['field_count']} "
+                f"high={bands['high']} "
+                f"medium={bands['medium']} "
+                f"low={bands['low']}"
+            )
+            if quality["weakest_fields"]:
+                weak = ", ".join(
+                    f"{item['field']}={item['confidence']:.2f}"
+                    for item in quality["weakest_fields"]
+                )
+                print(f"         weakest={weak}")
+            if quality["missing_evidence_fields"]:
+                print(
+                    "         missing="
+                    + ", ".join(quality["missing_evidence_fields"])
+                )
+            if quality["mismatched_evidence_fields"]:
+                print(
+                    "         mismatched="
+                    + ", ".join(
+                        item["field"]
+                        for item in quality["mismatched_evidence_fields"]
+                    )
+                )
+
             print(
                 f"      observations="
                 f"{len(member['observations'])}"
@@ -1368,7 +1526,7 @@ def main() -> int:
             else f"{project.analysis.ai_provider}/{settings.gemini_model}"
         )
 
-        print("🚀 Sprīdītis 3.3.0-alpha.6 sāk pētījumu")
+        print("🚀 Sprīdītis 3.3.0-alpha.7 sāk pētījumu")
         print(f"   Projekts: {project.name}")
         print(f"   ID: {project.id}")
         print(f"   Tips: {project.research_type}")
