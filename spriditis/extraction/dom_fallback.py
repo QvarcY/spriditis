@@ -12,7 +12,7 @@ from .common import clean_text, parse_price
 
 _PRICE_SUFFIX_RE = re.compile(
     r"(?<!\d)(\d{1,9}(?:[.,]\d{1,2})?)\s*"
-    r"(EUR|USD|GBP|CHF|SEK|NOK|DKK|PLN|€|£)\b?",
+    r"(EUR|USD|GBP|CHF|SEK|NOK|DKK|PLN|€|£)(?![A-Za-z])",
     re.IGNORECASE,
 )
 _PRICE_PREFIX_RE = re.compile(
