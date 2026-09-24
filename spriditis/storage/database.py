@@ -11,9 +11,10 @@ from spriditis.core.entities import MarketEntity
 from spriditis.core.feeds import FeedState
 from spriditis.core.projects import ResearchProject
 from spriditis.core.run import ResearchRunResult
+from spriditis.resolution.identity import resolve_entities
 
 
-CURRENT_SCHEMA_VERSION = 7
+CURRENT_SCHEMA_VERSION = 10
 DEFAULT_STALE_AFTER_DAYS = 30.0
 
 
@@ -229,6 +230,81 @@ CREATE TABLE IF NOT EXISTS adaptive_decisions (
 CREATE INDEX IF NOT EXISTS idx_adaptive_decisions_run
 ON adaptive_decisions(project_id, run_id, sequence);
 
+CREATE TABLE IF NOT EXISTS entity_clusters (
+    project_id TEXT NOT NULL,
+    cluster_key TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    canonical_title TEXT NOT NULL,
+    first_seen TEXT NOT NULL,
+    last_seen TEXT NOT NULL,
+    merged_into_cluster_key TEXT NOT NULL DEFAULT '',
+    merged_at TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY(project_id, cluster_key),
+    FOREIGN KEY(project_id) REFERENCES projects(project_id)
+);
+
+CREATE TABLE IF NOT EXISTS entity_cluster_members (
+    project_id TEXT NOT NULL,
+    entity_key TEXT NOT NULL,
+    cluster_key TEXT NOT NULL,
+    match_reason TEXT NOT NULL,
+    matched_signals_json TEXT NOT NULL DEFAULT '[]',
+    supporting_signals_json TEXT NOT NULL DEFAULT '[]',
+    linked_at TEXT NOT NULL,
+    PRIMARY KEY(project_id, entity_key),
+    FOREIGN KEY(project_id, cluster_key)
+        REFERENCES entity_clusters(project_id, cluster_key),
+    FOREIGN KEY(project_id, entity_key)
+        REFERENCES entities(project_id, entity_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_entity_cluster_members_cluster
+ON entity_cluster_members(project_id, cluster_key, linked_at);
+
+CREATE TABLE IF NOT EXISTS entity_resolution_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id TEXT NOT NULL,
+    run_id INTEGER NOT NULL,
+    entity_key TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    selected_cluster_key TEXT NOT NULL,
+    candidate_cluster_keys_json TEXT NOT NULL DEFAULT '[]',
+    conflict_cluster_keys_json TEXT NOT NULL DEFAULT '[]',
+    matched_signals_json TEXT NOT NULL DEFAULT '[]',
+    supporting_signals_json TEXT NOT NULL DEFAULT '[]',
+    conflicting_signals_json TEXT NOT NULL DEFAULT '[]',
+    compared_entities INTEGER NOT NULL DEFAULT 0,
+    resolved_at TEXT NOT NULL,
+    FOREIGN KEY(run_id) REFERENCES runs(id),
+    FOREIGN KEY(project_id, entity_key)
+        REFERENCES entities(project_id, entity_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_entity_resolution_events_run
+ON entity_resolution_events(project_id, run_id, id);
+
+CREATE INDEX IF NOT EXISTS idx_entity_resolution_events_entity
+ON entity_resolution_events(project_id, entity_key, id);
+
+CREATE TABLE IF NOT EXISTS entity_cluster_merge_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id TEXT NOT NULL,
+    source_cluster_key TEXT NOT NULL,
+    target_cluster_key TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    matched_signals_json TEXT NOT NULL DEFAULT '[]',
+    conflicting_signals_json TEXT NOT NULL DEFAULT '[]',
+    source_member_count INTEGER NOT NULL DEFAULT 0,
+    target_member_count INTEGER NOT NULL DEFAULT 0,
+    merged_member_count INTEGER NOT NULL DEFAULT 0,
+    requested_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_entity_cluster_merge_events_project
+ON entity_cluster_merge_events(project_id, id);
+
 CREATE TABLE IF NOT EXISTS schema_meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -431,6 +507,44 @@ class Database:
             """
         )
 
+        self._ensure_column(
+            "entity_clusters",
+            "merged_into_cluster_key",
+            "TEXT NOT NULL DEFAULT ''",
+        )
+        self._ensure_column(
+            "entity_clusters",
+            "merged_at",
+            "TEXT NOT NULL DEFAULT ''",
+        )
+
+        # Alpha6 canonical clustering is layered on top of the existing
+        # source-specific entities/observations model. Existing entities are
+        # bootstrapped into one-member clusters so migration never merges
+        # historical evidence implicitly.
+        self.conn.execute(
+            """
+            INSERT OR IGNORE INTO entity_clusters(
+                project_id, cluster_key, entity_type, canonical_title,
+                first_seen, last_seen
+            )
+            SELECT project_id, entity_key, entity_type, title,
+                   first_seen, last_seen
+            FROM entities
+            """
+        )
+        self.conn.execute(
+            """
+            INSERT OR IGNORE INTO entity_cluster_members(
+                project_id, entity_key, cluster_key, match_reason,
+                matched_signals_json, supporting_signals_json, linked_at
+            )
+            SELECT project_id, entity_key, entity_key, 'legacy_seed',
+                   '[]', '[]', first_seen
+            FROM entities
+            """
+        )
+
         self.conn.execute(
             """
             INSERT INTO schema_meta(key, value)
@@ -579,7 +693,1020 @@ class Database:
                 entity.as_json(),
             ),
         )
+
+        self._resolve_entity_cluster(
+            project.id,
+            run_id,
+            key,
+            entity,
+            now,
+        )
         self.conn.commit()
+
+    def _entity_from_storage_row(self, row) -> MarketEntity:
+        return MarketEntity(
+            title=row[2],
+            entity_type=row[1],
+            source_url=row[3],
+            source_domain=row[4] or "",
+            description=row[5] or "",
+            price=row[6],
+            currency=row[7] or "EUR",
+            seller=row[8] or "",
+            image_url=row[9] or "",
+            category=row[10] or "uncategorized",
+            is_relevant=bool(row[11]),
+            confidence=float(row[12] or 0.0),
+            relevance_score=float(row[13] or 0.0),
+            tags=json.loads(row[14] or "[]"),
+            attributes=json.loads(row[15] or "{}"),
+            opportunity_notes=row[16] or "",
+            extraction_method=row[17] or "",
+            evidence=row[18] or "",
+        )
+
+    def _resolve_entity_cluster(
+        self,
+        project_id: str,
+        run_id: int,
+        entity_key: str,
+        entity: MarketEntity,
+        linked_at: str,
+    ) -> str:
+        existing = self.conn.execute(
+            """
+            SELECT cluster_key
+            FROM entity_cluster_members
+            WHERE project_id=? AND entity_key=?
+            """,
+            (project_id, entity_key),
+        ).fetchone()
+
+        if existing:
+            cluster_key = existing[0]
+            self.conn.execute(
+                """
+                UPDATE entity_clusters
+                SET last_seen=?
+                WHERE project_id=? AND cluster_key=?
+                """,
+                (linked_at, project_id, cluster_key),
+            )
+            return cluster_key
+
+        rows = self.conn.execute(
+            """
+            SELECT e.entity_key, e.entity_type, e.title, e.source_url,
+                   e.source_domain, e.description, e.last_price,
+                   e.currency, e.seller, e.image_url, e.category,
+                   e.is_relevant, e.confidence, e.relevance_score,
+                   e.tags_json, e.attributes_json, e.opportunity_notes,
+                   e.extraction_method, e.evidence, m.cluster_key
+            FROM entities e
+            JOIN entity_cluster_members m
+              ON m.project_id=e.project_id
+             AND m.entity_key=e.entity_key
+            WHERE e.project_id=?
+              AND e.entity_key<>?
+              AND e.entity_type=?
+            ORDER BY e.first_seen, e.entity_key
+            """,
+            (project_id, entity_key, entity.entity_type),
+        ).fetchall()
+
+        matches_by_cluster: dict[str, list] = {}
+        conflicts_by_cluster: dict[str, list] = {}
+        supporting_signal_set: set[str] = set()
+
+        for row in rows:
+            candidate = self._entity_from_storage_row(row)
+            decision = resolve_entities(entity, candidate)
+            if decision.outcome == "match":
+                matches_by_cluster.setdefault(row[19], []).append(decision)
+            elif decision.outcome == "conflict":
+                conflicts_by_cluster.setdefault(row[19], []).append(decision)
+            else:
+                supporting_signal_set.update(decision.supporting_signals)
+
+        cluster_key = entity_key
+        match_reason = "new_cluster"
+        resolution_decision = "new_cluster"
+        resolution_reason = (
+            "no_candidates" if not rows else "no_strong_match"
+        )
+        matched_signals: tuple[str, ...] = ()
+        supporting_signals: tuple[str, ...] = tuple(
+            sorted(supporting_signal_set)
+        )
+
+        if len(matches_by_cluster) == 1:
+            cluster_key, decisions = next(iter(matches_by_cluster.items()))
+            selected = decisions[0]
+            match_reason = selected.reason
+            resolution_decision = "linked"
+            resolution_reason = selected.reason
+            matched_signals = selected.matched_signals
+            supporting_signals = selected.supporting_signals
+        elif len(matches_by_cluster) > 1:
+            match_reason = "ambiguous_multiple_clusters"
+            resolution_decision = "deferred_ambiguous"
+            resolution_reason = "ambiguous_multiple_clusters"
+            matched_signals = tuple(
+                sorted(
+                    {
+                        signal
+                        for decisions in matches_by_cluster.values()
+                        for decision in decisions
+                        for signal in decision.matched_signals
+                    }
+                )
+            )
+            supporting_signals = tuple(
+                sorted(
+                    {
+                        *supporting_signal_set,
+                        *(
+                            signal
+                            for decisions in matches_by_cluster.values()
+                            for decision in decisions
+                            for signal in decision.supporting_signals
+                        ),
+                    }
+                )
+            )
+        elif conflicts_by_cluster:
+            match_reason = "identity_conflict"
+            resolution_decision = "created_separate"
+            resolution_reason = "identity_conflict"
+
+        self.conn.execute(
+            """
+            INSERT OR IGNORE INTO entity_clusters(
+                project_id, cluster_key, entity_type, canonical_title,
+                first_seen, last_seen
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                project_id,
+                cluster_key,
+                entity.entity_type,
+                entity.title,
+                linked_at,
+                linked_at,
+            ),
+        )
+        self.conn.execute(
+            """
+            INSERT INTO entity_cluster_members(
+                project_id, entity_key, cluster_key, match_reason,
+                matched_signals_json, supporting_signals_json, linked_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                project_id,
+                entity_key,
+                cluster_key,
+                match_reason,
+                json.dumps(matched_signals, ensure_ascii=False),
+                json.dumps(supporting_signals, ensure_ascii=False),
+                linked_at,
+            ),
+        )
+        self.conn.execute(
+            """
+            UPDATE entity_clusters
+            SET last_seen=MAX(last_seen, ?)
+            WHERE project_id=? AND cluster_key=?
+            """,
+            (linked_at, project_id, cluster_key),
+        )
+
+        conflicting_signals = tuple(
+            sorted(
+                {
+                    signal
+                    for decisions in conflicts_by_cluster.values()
+                    for decision in decisions
+                    for signal in decision.conflicting_signals
+                }
+            )
+        )
+        self.conn.execute(
+            """
+            INSERT INTO entity_resolution_events(
+                project_id, run_id, entity_key, decision, reason,
+                selected_cluster_key, candidate_cluster_keys_json,
+                conflict_cluster_keys_json, matched_signals_json,
+                supporting_signals_json, conflicting_signals_json,
+                compared_entities, resolved_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                project_id,
+                run_id,
+                entity_key,
+                resolution_decision,
+                resolution_reason,
+                cluster_key,
+                json.dumps(
+                    sorted(matches_by_cluster),
+                    ensure_ascii=False,
+                ),
+                json.dumps(
+                    sorted(conflicts_by_cluster),
+                    ensure_ascii=False,
+                ),
+                json.dumps(matched_signals, ensure_ascii=False),
+                json.dumps(supporting_signals, ensure_ascii=False),
+                json.dumps(conflicting_signals, ensure_ascii=False),
+                len(rows),
+                linked_at,
+            ),
+        )
+        return cluster_key
+
+    def entity_resolution_events(
+        self,
+        project_id: str,
+        *,
+        run_id: int | None = None,
+        limit: int = 100,
+    ) -> list[dict]:
+        clauses = ["project_id=?"]
+        params: list[object] = [project_id]
+
+        if run_id is not None:
+            clauses.append("run_id=?")
+            params.append(run_id)
+
+        params.append(max(1, min(int(limit), 1000)))
+        rows = self.conn.execute(
+            f"""
+            SELECT id, run_id, entity_key, decision, reason,
+                   selected_cluster_key, candidate_cluster_keys_json,
+                   conflict_cluster_keys_json, matched_signals_json,
+                   supporting_signals_json, conflicting_signals_json,
+                   compared_entities, resolved_at
+            FROM entity_resolution_events
+            WHERE {' AND '.join(clauses)}
+            ORDER BY id
+            LIMIT ?
+            """,
+            tuple(params),
+        ).fetchall()
+
+        return [
+            {
+                "id": int(row[0]),
+                "run_id": int(row[1]),
+                "entity_key": row[2],
+                "decision": row[3],
+                "reason": row[4],
+                "selected_cluster_key": row[5],
+                "candidate_cluster_keys": json.loads(row[6] or "[]"),
+                "conflict_cluster_keys": json.loads(row[7] or "[]"),
+                "matched_signals": json.loads(row[8] or "[]"),
+                "supporting_signals": json.loads(row[9] or "[]"),
+                "conflicting_signals": json.loads(row[10] or "[]"),
+                "compared_entities": int(row[11] or 0),
+                "resolved_at": row[12] or "",
+            }
+            for row in rows
+        ]
+
+    def entity_resolution_review_queue(
+        self,
+        project_id: str,
+        *,
+        kind: str = "all",
+        limit: int = 100,
+    ) -> list[dict]:
+        kind = kind.strip().casefold()
+        if kind not in {"all", "ambiguous", "conflict"}:
+            raise ValueError(
+                "Review queue kind jābūt: all, ambiguous vai conflict."
+            )
+
+        filters = [
+            "r.project_id=?",
+            "("
+            "r.decision='deferred_ambiguous' "
+            "OR (r.decision='created_separate' "
+            "AND r.reason='identity_conflict')"
+            ")",
+            "c.merged_into_cluster_key=''",
+        ]
+        params: list[object] = [project_id]
+
+        if kind == "ambiguous":
+            filters.append("r.decision='deferred_ambiguous'")
+        elif kind == "conflict":
+            filters.append(
+                "r.decision='created_separate' "
+                "AND r.reason='identity_conflict'"
+            )
+
+        params.append(max(1, min(int(limit), 1000)))
+        rows = self.conn.execute(
+            f"""
+            SELECT r.id, r.run_id, r.entity_key, r.decision, r.reason,
+                   r.selected_cluster_key,
+                   r.candidate_cluster_keys_json,
+                   r.conflict_cluster_keys_json,
+                   r.matched_signals_json,
+                   r.supporting_signals_json,
+                   r.conflicting_signals_json,
+                   r.compared_entities, r.resolved_at,
+                   e.title, e.source_url, e.source_domain,
+                   c.canonical_title
+            FROM entity_resolution_events r
+            JOIN entities e
+              ON e.project_id=r.project_id
+             AND e.entity_key=r.entity_key
+            JOIN entity_clusters c
+              ON c.project_id=r.project_id
+             AND c.cluster_key=r.selected_cluster_key
+            WHERE {' AND '.join(filters)}
+            ORDER BY r.id
+            LIMIT ?
+            """,
+            tuple(params),
+        ).fetchall()
+
+        return [
+            {
+                "event_id": int(row[0]),
+                "run_id": int(row[1]),
+                "entity_key": row[2],
+                "decision": row[3],
+                "reason": row[4],
+                "selected_cluster_key": row[5],
+                "candidate_cluster_keys": json.loads(row[6] or "[]"),
+                "conflict_cluster_keys": json.loads(row[7] or "[]"),
+                "matched_signals": json.loads(row[8] or "[]"),
+                "supporting_signals": json.loads(row[9] or "[]"),
+                "conflicting_signals": json.loads(row[10] or "[]"),
+                "compared_entities": int(row[11] or 0),
+                "resolved_at": row[12] or "",
+                "title": row[13] or "",
+                "source_url": row[14] or "",
+                "source_domain": row[15] or "",
+                "canonical_title": row[16] or "",
+            }
+            for row in rows
+        ]
+
+    def _cluster_member_rows(
+        self,
+        project_id: str,
+        cluster_key: str,
+    ) -> list:
+        return self.conn.execute(
+            """
+            SELECT e.entity_key, e.entity_type, e.title, e.source_url,
+                   e.source_domain, e.description, e.last_price,
+                   e.currency, e.seller, e.image_url, e.category,
+                   e.is_relevant, e.confidence, e.relevance_score,
+                   e.tags_json, e.attributes_json, e.opportunity_notes,
+                   e.extraction_method, e.evidence
+            FROM entity_cluster_members m
+            JOIN entities e
+              ON e.project_id=m.project_id
+             AND e.entity_key=m.entity_key
+            WHERE m.project_id=? AND m.cluster_key=?
+            ORDER BY m.linked_at, m.entity_key
+            """,
+            (project_id, cluster_key),
+        ).fetchall()
+
+    def _record_cluster_merge_event(
+        self,
+        *,
+        project_id: str,
+        source_cluster_key: str,
+        target_cluster_key: str,
+        decision: str,
+        reason: str,
+        matched_signals: tuple[str, ...] = (),
+        conflicting_signals: tuple[str, ...] = (),
+        source_member_count: int = 0,
+        target_member_count: int = 0,
+        merged_member_count: int = 0,
+        requested_at: str,
+    ) -> dict:
+        cur = self.conn.execute(
+            """
+            INSERT INTO entity_cluster_merge_events(
+                project_id, source_cluster_key, target_cluster_key,
+                decision, reason, matched_signals_json,
+                conflicting_signals_json, source_member_count,
+                target_member_count, merged_member_count, requested_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                project_id,
+                source_cluster_key,
+                target_cluster_key,
+                decision,
+                reason,
+                json.dumps(matched_signals, ensure_ascii=False),
+                json.dumps(conflicting_signals, ensure_ascii=False),
+                source_member_count,
+                target_member_count,
+                merged_member_count,
+                requested_at,
+            ),
+        )
+        return {
+            "id": int(cur.lastrowid),
+            "project_id": project_id,
+            "source_cluster_key": source_cluster_key,
+            "target_cluster_key": target_cluster_key,
+            "decision": decision,
+            "reason": reason,
+            "matched_signals": list(matched_signals),
+            "conflicting_signals": list(conflicting_signals),
+            "source_member_count": source_member_count,
+            "target_member_count": target_member_count,
+            "merged_member_count": merged_member_count,
+            "requested_at": requested_at,
+        }
+
+    def merge_entity_clusters(
+        self,
+        project_id: str,
+        source_cluster_key: str,
+        target_cluster_key: str,
+    ) -> dict:
+        now = datetime.now(timezone.utc).isoformat()
+
+        if source_cluster_key == target_cluster_key:
+            event = self._record_cluster_merge_event(
+                project_id=project_id,
+                source_cluster_key=source_cluster_key,
+                target_cluster_key=target_cluster_key,
+                decision="rejected",
+                reason="same_cluster",
+                requested_at=now,
+            )
+            self.conn.commit()
+            return event
+
+        source_cluster = self.conn.execute(
+            """
+            SELECT entity_type, merged_into_cluster_key
+            FROM entity_clusters
+            WHERE project_id=? AND cluster_key=?
+            """,
+            (project_id, source_cluster_key),
+        ).fetchone()
+        target_cluster = self.conn.execute(
+            """
+            SELECT entity_type, merged_into_cluster_key
+            FROM entity_clusters
+            WHERE project_id=? AND cluster_key=?
+            """,
+            (project_id, target_cluster_key),
+        ).fetchone()
+
+        if source_cluster is None or target_cluster is None:
+            event = self._record_cluster_merge_event(
+                project_id=project_id,
+                source_cluster_key=source_cluster_key,
+                target_cluster_key=target_cluster_key,
+                decision="rejected",
+                reason="cluster_not_found",
+                requested_at=now,
+            )
+            self.conn.commit()
+            return event
+
+        if source_cluster[1]:
+            event = self._record_cluster_merge_event(
+                project_id=project_id,
+                source_cluster_key=source_cluster_key,
+                target_cluster_key=target_cluster_key,
+                decision="rejected",
+                reason="source_cluster_already_merged",
+                requested_at=now,
+            )
+            self.conn.commit()
+            return event
+
+        if target_cluster[1]:
+            event = self._record_cluster_merge_event(
+                project_id=project_id,
+                source_cluster_key=source_cluster_key,
+                target_cluster_key=target_cluster_key,
+                decision="rejected",
+                reason="target_cluster_already_merged",
+                requested_at=now,
+            )
+            self.conn.commit()
+            return event
+
+        source_rows = self._cluster_member_rows(
+            project_id,
+            source_cluster_key,
+        )
+        target_rows = self._cluster_member_rows(
+            project_id,
+            target_cluster_key,
+        )
+        source_count = len(source_rows)
+        target_count = len(target_rows)
+
+        if source_cluster[0] != target_cluster[0]:
+            event = self._record_cluster_merge_event(
+                project_id=project_id,
+                source_cluster_key=source_cluster_key,
+                target_cluster_key=target_cluster_key,
+                decision="rejected",
+                reason="entity_type_mismatch",
+                source_member_count=source_count,
+                target_member_count=target_count,
+                requested_at=now,
+            )
+            self.conn.commit()
+            return event
+
+        matched_signals: set[str] = set()
+        conflicting_signals: set[str] = set()
+
+        for source_row in source_rows:
+            source_entity = self._entity_from_storage_row(source_row)
+            for target_row in target_rows:
+                target_entity = self._entity_from_storage_row(target_row)
+                decision = resolve_entities(source_entity, target_entity)
+                if decision.outcome == "match":
+                    matched_signals.update(decision.matched_signals)
+                elif decision.outcome == "conflict":
+                    conflicting_signals.update(
+                        decision.conflicting_signals
+                    )
+
+        matched = tuple(sorted(matched_signals))
+        conflicts = tuple(sorted(conflicting_signals))
+
+        if conflicts:
+            event = self._record_cluster_merge_event(
+                project_id=project_id,
+                source_cluster_key=source_cluster_key,
+                target_cluster_key=target_cluster_key,
+                decision="rejected",
+                reason="identity_conflict",
+                matched_signals=matched,
+                conflicting_signals=conflicts,
+                source_member_count=source_count,
+                target_member_count=target_count,
+                requested_at=now,
+            )
+            self.conn.commit()
+            return event
+
+        if not matched:
+            event = self._record_cluster_merge_event(
+                project_id=project_id,
+                source_cluster_key=source_cluster_key,
+                target_cluster_key=target_cluster_key,
+                decision="rejected",
+                reason="no_strong_identity_match",
+                source_member_count=source_count,
+                target_member_count=target_count,
+                requested_at=now,
+            )
+            self.conn.commit()
+            return event
+
+        self.conn.execute(
+            """
+            UPDATE entity_cluster_members
+            SET cluster_key=?
+            WHERE project_id=? AND cluster_key=?
+            """,
+            (
+                target_cluster_key,
+                project_id,
+                source_cluster_key,
+            ),
+        )
+        self.conn.execute(
+            """
+            UPDATE entity_clusters
+            SET last_seen=MAX(
+                    last_seen,
+                    (
+                        SELECT last_seen
+                        FROM entity_clusters
+                        WHERE project_id=? AND cluster_key=?
+                    )
+                )
+            WHERE project_id=? AND cluster_key=?
+            """,
+            (
+                project_id,
+                source_cluster_key,
+                project_id,
+                target_cluster_key,
+            ),
+        )
+        self.conn.execute(
+            """
+            UPDATE entity_clusters
+            SET merged_into_cluster_key=?, merged_at=?
+            WHERE project_id=? AND cluster_key=?
+            """,
+            (
+                target_cluster_key,
+                now,
+                project_id,
+                source_cluster_key,
+            ),
+        )
+
+        event = self._record_cluster_merge_event(
+            project_id=project_id,
+            source_cluster_key=source_cluster_key,
+            target_cluster_key=target_cluster_key,
+            decision="merged",
+            reason="explicit_strong_identity_match",
+            matched_signals=matched,
+            source_member_count=source_count,
+            target_member_count=target_count,
+            merged_member_count=source_count,
+            requested_at=now,
+        )
+        self.conn.commit()
+        return event
+
+    def entity_cluster_merge_events(
+        self,
+        project_id: str,
+        *,
+        limit: int = 100,
+    ) -> list[dict]:
+        rows = self.conn.execute(
+            """
+            SELECT id, source_cluster_key, target_cluster_key,
+                   decision, reason, matched_signals_json,
+                   conflicting_signals_json, source_member_count,
+                   target_member_count, merged_member_count, requested_at
+            FROM entity_cluster_merge_events
+            WHERE project_id=?
+            ORDER BY id
+            LIMIT ?
+            """,
+            (project_id, max(1, min(int(limit), 1000))),
+        ).fetchall()
+
+        return [
+            {
+                "id": int(row[0]),
+                "source_cluster_key": row[1],
+                "target_cluster_key": row[2],
+                "decision": row[3],
+                "reason": row[4],
+                "matched_signals": json.loads(row[5] or "[]"),
+                "conflicting_signals": json.loads(row[6] or "[]"),
+                "source_member_count": int(row[7] or 0),
+                "target_member_count": int(row[8] or 0),
+                "merged_member_count": int(row[9] or 0),
+                "requested_at": row[10] or "",
+            }
+            for row in rows
+        ]
+
+    def entity_clusters(
+        self,
+        project_id: str,
+    ) -> list[dict]:
+        clusters = self.conn.execute(
+            """
+            SELECT c.cluster_key, c.entity_type, c.canonical_title,
+                   c.first_seen, c.last_seen,
+                   COUNT(m.entity_key) AS member_count,
+                   COUNT(DISTINCT e.source_domain) AS source_count
+            FROM entity_clusters c
+            LEFT JOIN entity_cluster_members m
+              ON m.project_id=c.project_id
+             AND m.cluster_key=c.cluster_key
+            LEFT JOIN entities e
+              ON e.project_id=m.project_id
+             AND e.entity_key=m.entity_key
+            WHERE c.project_id=?
+              AND c.merged_into_cluster_key=''
+            GROUP BY c.cluster_key, c.entity_type, c.canonical_title,
+                     c.first_seen, c.last_seen
+            ORDER BY c.first_seen, c.cluster_key
+            """,
+            (project_id,),
+        ).fetchall()
+
+        result: list[dict] = []
+        for row in clusters:
+            members = self.conn.execute(
+                """
+                SELECT m.entity_key, e.title, e.source_url, e.source_domain,
+                       e.last_price, e.currency, m.match_reason,
+                       m.matched_signals_json,
+                       m.supporting_signals_json, m.linked_at
+                FROM entity_cluster_members m
+                JOIN entities e
+                  ON e.project_id=m.project_id
+                 AND e.entity_key=m.entity_key
+                WHERE m.project_id=? AND m.cluster_key=?
+                ORDER BY m.linked_at, m.entity_key
+                """,
+                (project_id, row[0]),
+            ).fetchall()
+            result.append(
+                {
+                    "cluster_key": row[0],
+                    "entity_type": row[1],
+                    "canonical_title": row[2],
+                    "first_seen": row[3],
+                    "last_seen": row[4],
+                    "member_count": int(row[5] or 0),
+                    "source_count": int(row[6] or 0),
+                    "members": [
+                        {
+                            "entity_key": member[0],
+                            "title": member[1],
+                            "source_url": member[2],
+                            "source_domain": member[3] or "",
+                            "price": member[4],
+                            "currency": member[5] or "",
+                            "match_reason": member[6],
+                            "matched_signals": json.loads(
+                                member[7] or "[]"
+                            ),
+                            "supporting_signals": json.loads(
+                                member[8] or "[]"
+                            ),
+                            "linked_at": member[9],
+                        }
+                        for member in members
+                    ],
+                }
+            )
+        return result
+
+    def explain_entity_cluster(
+        self,
+        project_id: str,
+        cluster_key: str,
+    ) -> dict | None:
+        cluster = self.conn.execute(
+            """
+            SELECT cluster_key, entity_type, canonical_title,
+                   first_seen, last_seen,
+                   merged_into_cluster_key, merged_at
+            FROM entity_clusters
+            WHERE project_id=? AND cluster_key=?
+            """,
+            (project_id, cluster_key),
+        ).fetchone()
+
+        if cluster is None:
+            return None
+
+        status = "merged" if cluster[5] else "active"
+
+        member_rows = self.conn.execute(
+            """
+            SELECT m.entity_key, e.title, e.source_url, e.source_domain,
+                   e.last_price, e.currency, e.seller, e.attributes_json,
+                   e.first_seen, e.last_seen, m.match_reason,
+                   m.matched_signals_json, m.supporting_signals_json,
+                   m.linked_at
+            FROM entity_cluster_members m
+            JOIN entities e
+              ON e.project_id=m.project_id
+             AND e.entity_key=m.entity_key
+            WHERE m.project_id=? AND m.cluster_key=?
+            ORDER BY m.linked_at, m.entity_key
+            """,
+            (project_id, cluster_key),
+        ).fetchall()
+
+        members: list[dict] = []
+        entity_keys: list[str] = []
+
+        for row in member_rows:
+            entity_key = row[0]
+            entity_keys.append(entity_key)
+            observations = self.conn.execute(
+                """
+                SELECT run_id, observed_at, price, currency
+                FROM observations
+                WHERE project_id=? AND entity_key=?
+                ORDER BY observed_at, id
+                """,
+                (project_id, entity_key),
+            ).fetchall()
+
+            members.append(
+                {
+                    "entity_key": entity_key,
+                    "title": row[1],
+                    "source_url": row[2],
+                    "source_domain": row[3] or "",
+                    "last_price": row[4],
+                    "currency": row[5] or "",
+                    "seller": row[6] or "",
+                    "attributes": json.loads(row[7] or "{}"),
+                    "first_seen": row[8] or "",
+                    "last_seen": row[9] or "",
+                    "match_reason": row[10] or "",
+                    "matched_signals": json.loads(row[11] or "[]"),
+                    "supporting_signals": json.loads(row[12] or "[]"),
+                    "linked_at": row[13] or "",
+                    "observations": [
+                        {
+                            "run_id": int(obs[0]),
+                            "observed_at": obs[1] or "",
+                            "price": obs[2],
+                            "currency": obs[3] or "",
+                        }
+                        for obs in observations
+                    ],
+                }
+            )
+
+        resolution_events: list[dict] = []
+        if entity_keys:
+            placeholders = ",".join("?" for _ in entity_keys)
+            rows = self.conn.execute(
+                f"""
+                SELECT id, run_id, entity_key, decision, reason,
+                       selected_cluster_key,
+                       candidate_cluster_keys_json,
+                       conflict_cluster_keys_json,
+                       matched_signals_json,
+                       supporting_signals_json,
+                       conflicting_signals_json,
+                       compared_entities, resolved_at
+                FROM entity_resolution_events
+                WHERE project_id=?
+                  AND (
+                      entity_key IN ({placeholders})
+                      OR selected_cluster_key=?
+                  )
+                ORDER BY id
+                """,
+                (project_id, *entity_keys, cluster_key),
+            ).fetchall()
+
+            resolution_events = [
+                {
+                    "id": int(row[0]),
+                    "run_id": int(row[1]),
+                    "entity_key": row[2],
+                    "decision": row[3],
+                    "reason": row[4],
+                    "selected_cluster_key": row[5],
+                    "candidate_cluster_keys": json.loads(row[6] or "[]"),
+                    "conflict_cluster_keys": json.loads(row[7] or "[]"),
+                    "matched_signals": json.loads(row[8] or "[]"),
+                    "supporting_signals": json.loads(row[9] or "[]"),
+                    "conflicting_signals": json.loads(row[10] or "[]"),
+                    "compared_entities": int(row[11] or 0),
+                    "resolved_at": row[12] or "",
+                }
+                for row in rows
+            ]
+        else:
+            rows = self.conn.execute(
+                """
+                SELECT id, run_id, entity_key, decision, reason,
+                       selected_cluster_key,
+                       candidate_cluster_keys_json,
+                       conflict_cluster_keys_json,
+                       matched_signals_json,
+                       supporting_signals_json,
+                       conflicting_signals_json,
+                       compared_entities, resolved_at
+                FROM entity_resolution_events
+                WHERE project_id=? AND selected_cluster_key=?
+                ORDER BY id
+                """,
+                (project_id, cluster_key),
+            ).fetchall()
+            resolution_events = [
+                {
+                    "id": int(row[0]),
+                    "run_id": int(row[1]),
+                    "entity_key": row[2],
+                    "decision": row[3],
+                    "reason": row[4],
+                    "selected_cluster_key": row[5],
+                    "candidate_cluster_keys": json.loads(row[6] or "[]"),
+                    "conflict_cluster_keys": json.loads(row[7] or "[]"),
+                    "matched_signals": json.loads(row[8] or "[]"),
+                    "supporting_signals": json.loads(row[9] or "[]"),
+                    "conflicting_signals": json.loads(row[10] or "[]"),
+                    "compared_entities": int(row[11] or 0),
+                    "resolved_at": row[12] or "",
+                }
+                for row in rows
+            ]
+
+        merge_rows = self.conn.execute(
+            """
+            SELECT id, source_cluster_key, target_cluster_key,
+                   decision, reason, matched_signals_json,
+                   conflicting_signals_json, source_member_count,
+                   target_member_count, merged_member_count, requested_at
+            FROM entity_cluster_merge_events
+            WHERE project_id=?
+              AND (
+                  source_cluster_key=?
+                  OR target_cluster_key=?
+              )
+            ORDER BY id
+            """,
+            (project_id, cluster_key, cluster_key),
+        ).fetchall()
+
+        merge_events = [
+            {
+                "id": int(row[0]),
+                "source_cluster_key": row[1],
+                "target_cluster_key": row[2],
+                "decision": row[3],
+                "reason": row[4],
+                "matched_signals": json.loads(row[5] or "[]"),
+                "conflicting_signals": json.loads(row[6] or "[]"),
+                "source_member_count": int(row[7] or 0),
+                "target_member_count": int(row[8] or 0),
+                "merged_member_count": int(row[9] or 0),
+                "requested_at": row[10] or "",
+            }
+            for row in merge_rows
+        ]
+
+        review_rows = self.entity_resolution_review_queue(
+            project_id,
+            kind="all",
+            limit=1000,
+        )
+        review_items = [
+            item
+            for item in review_rows
+            if item["selected_cluster_key"] == cluster_key
+        ]
+
+        source_domains = {
+            member["source_domain"]
+            for member in members
+            if member["source_domain"]
+        }
+        observation_count = sum(
+            len(member["observations"])
+            for member in members
+        )
+
+        identity_signals: dict[str, list[str]] = {}
+        for member in members:
+            attributes = member["attributes"]
+            for key in (
+                "gtin",
+                "brand",
+                "manufacturer",
+                "model",
+                "mpn",
+                "sku",
+            ):
+                value = attributes.get(key)
+                if value in (None, ""):
+                    continue
+                text_value = str(value)
+                bucket = identity_signals.setdefault(key, [])
+                if text_value not in bucket:
+                    bucket.append(text_value)
+
+        return {
+            "cluster_key": cluster[0],
+            "entity_type": cluster[1],
+            "canonical_title": cluster[2],
+            "first_seen": cluster[3],
+            "last_seen": cluster[4],
+            "status": status,
+            "merged_into_cluster_key": cluster[5] or "",
+            "merged_at": cluster[6] or "",
+            "member_count": len(members),
+            "source_count": len(source_domains),
+            "observation_count": observation_count,
+            "identity_signals": identity_signals,
+            "members": members,
+            "resolution_events": resolution_events,
+            "merge_events": merge_events,
+            "review_items": review_items,
+        }
 
     def save_domain_registry(
         self,
@@ -1362,15 +2489,33 @@ class Database:
             (project_id, run_id),
         ).fetchall()
 
+        resolution_rows = self.conn.execute(
+            """
+            SELECT id, entity_key, decision, reason,
+                   selected_cluster_key, candidate_cluster_keys_json,
+                   conflict_cluster_keys_json, matched_signals_json,
+                   supporting_signals_json, conflicting_signals_json,
+                   compared_entities, resolved_at
+            FROM entity_resolution_events
+            WHERE project_id=? AND run_id=?
+            ORDER BY id
+            """,
+            (project_id, run_id),
+        ).fetchall()
+
         observation_rows = self.conn.execute(
             """
             SELECT o.entity_key, e.title, e.entity_type, e.source_url,
                    e.source_domain, o.observed_at, o.price, o.currency,
-                   e.extraction_method, e.relevance_score
+                   e.extraction_method, e.relevance_score,
+                   m.cluster_key, m.match_reason
             FROM observations o
             LEFT JOIN entities e
               ON e.project_id=o.project_id
              AND e.entity_key=o.entity_key
+            LEFT JOIN entity_cluster_members m
+              ON m.project_id=o.project_id
+             AND m.entity_key=o.entity_key
             WHERE o.project_id=? AND o.run_id=?
             ORDER BY o.id
             """,
@@ -1444,6 +2589,23 @@ class Database:
                 }
                 for row in adaptive_rows
             ],
+            "entity_resolution_events": [
+                {
+                    "id": int(row[0]),
+                    "entity_key": row[1],
+                    "decision": row[2],
+                    "reason": row[3],
+                    "selected_cluster_key": row[4],
+                    "candidate_cluster_keys": json.loads(row[5] or "[]"),
+                    "conflict_cluster_keys": json.loads(row[6] or "[]"),
+                    "matched_signals": json.loads(row[7] or "[]"),
+                    "supporting_signals": json.loads(row[8] or "[]"),
+                    "conflicting_signals": json.loads(row[9] or "[]"),
+                    "compared_entities": int(row[10] or 0),
+                    "resolved_at": row[11] or "",
+                }
+                for row in resolution_rows
+            ],
             "observations": [
                 {
                     "entity_key": row[0],
@@ -1456,6 +2618,8 @@ class Database:
                     "currency": row[7] or "",
                     "extraction_method": row[8] or "",
                     "relevance_score": float(row[9] or 0.0),
+                    "cluster_key": row[10] or "",
+                    "cluster_match_reason": row[11] or "",
                 }
                 for row in observation_rows
             ],

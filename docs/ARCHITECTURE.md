@@ -1,6 +1,7 @@
 # Sprīdītis — arhitektūra / Architecture
 
-Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.5 — Adaptive Expedition**
+Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.5 — Adaptive Expedition**  
+Pilnībā validēts kandidāts / Fully validated candidate: **3.3.0-alpha.6 — Entity Resolution**
 
 > **Latviski pirmajā vietā, angļu valoda zemāk. / Latvian first, English below.**
 
@@ -75,7 +76,7 @@ Avotiem specifiski adapteri, izolējot konkrētas vietnes īpatnības no crawler
 Izvēles MI enrichment. Crawler/extraction plūsmai jāstrādā arī bez MI.
 
 ### `spriditis/storage`
-SQLite persistence un schema evolution. Alpha4 izmanto DB schema v6 un pievieno `page_visits` tabulu Research Memory lineage auditam. Alpha5 pāriet uz DB schema v7 un pievieno `adaptive_decisions` tabulu izskaidrojamai adaptīvo lēmumu secībai. Esošie `runs` search skaitītāji tiek izmantoti arī duplicate-rate atmiņai, tāpēc šim signālam nav vajadzīga paralēla dublējoša tabula.
+SQLite persistence un schema evolution. Alpha4 izmanto DB schema v6 un pievieno `page_visits` tabulu Research Memory lineage auditam. Alpha5 pāriet uz DB schema v7 un pievieno `adaptive_decisions` tabulu izskaidrojamai adaptīvo lēmumu secībai. Alpha6 release candidate izmanto DB schema v10 un pievieno canonical `entity_clusters`, `entity_cluster_members`, `entity_resolution_events` un `entity_cluster_merge_events` slāņus, saglabājot source-specific `entities` un `observations` kā pierādījumu avotu. Esošie `runs` search skaitītāji tiek izmantoti arī duplicate-rate atmiņai, tāpēc šim signālam nav vajadzīga paralēla dublējoša tabula.
 
 Noklusējuma DB:
 ```text
@@ -185,6 +186,55 @@ Galvenās robežas:
 - katrs nozīmīgais adaptīvais lēmums tiek pievienots `AdaptiveDecision` un persistēts DB schema v7 `adaptive_decisions` tabulā;
 - `trace --run N` parāda lēmumu secību un signālus kopā ar page/discovery/observation provenance.
 
+## Entity Resolution — 3.3.0-alpha.6 validated release candidate
+
+Alpha6 ievieš atsevišķu identity-resolution slāni **virs** source-specific entity/observation pierādījumiem. Canonical clusteri neaizstāj avota rindas un neizdzēš observations.
+
+Plūsma:
+
+```text
+Structured Extraction
+      ↓
+source-specific MarketEntity
+      ↓
+identity signals
+(GTIN / maker+model / maker+MPN / source SKU)
+      ↓
+deterministic resolver
+      ↓
+canonical entity cluster
+      ├── source entity A
+      ├── source entity B
+      └── observations remain source-specific
+      ↓
+resolution audit
+      ├── linked
+      ├── new_cluster
+      ├── deferred_ambiguous
+      └── created_separate / identity_conflict
+      ↓
+review-queue
+      ↓
+guarded explicit merge
+```
+
+Galvenās robežas:
+
+- GTIN tiek izmantots tikai pēc check-digit validācijas;
+- maker+model un maker+MPN ir strong cross-source identitātes signāli;
+- SKU ir strong signāls tikai viena source-domain kontekstā;
+- vienāds normalized title viens pats nekad neveic cross-source merge;
+- cross-source SKU viens pats ir tikai supporting signāls;
+- bridge entity, kas strong-matcho vairākus atsevišķus clusterus, tiek `deferred_ambiguous`;
+- explicit merge prasa vismaz vienu strong identity match un nevienu strong conflict;
+- GTIN konflikts bloķē merge arī manuālā workflow;
+- rejected merge membership nemaina;
+- merge’ots source clusteris paliek vēsturē ar `merged_into_cluster_key` / `merged_at`;
+- review queue ir atvasināts skats no auditējamiem eventiem un aktīvā cluster stāvokļa, nevis paralēla statusu tabula;
+- `explain-cluster` apkopo members, identity signālus, observations, resolution history, merge history un review items.
+
+DB schema v10 uztur canonical clusterus, resolution auditu un merge auditu, nezaudējot source provenance.
+
 ## Feed state un HTTP resursu stāvoklis
 
 RSS/Atom/JSON Feed dati netiek glabāti kā nejaušas kolonnas `domains` tabulā. Vienam domēnam var būt vairāki feedi, tāpēc 3.3.0-alpha.3 izmanto atsevišķu 1:N `feeds` tabulu (DB schema v5).
@@ -293,7 +343,7 @@ Source-specific adapters isolate site quirks from crawler core.
 Optional AI enrichment. Crawling/extraction must remain usable without AI.
 
 ### `spriditis/storage`
-SQLite persistence and schema evolution. Alpha4 uses database schema v6 and adds a `page_visits` table for Research Memory lineage auditing. Alpha5 moves to database schema v7 and adds an `adaptive_decisions` table for explainable adaptive-decision sequences. Existing search counters in `runs` also back duplicate-rate memory, avoiding a parallel duplicate source of truth.
+SQLite persistence and schema evolution. Alpha4 uses database schema v6 and adds a `page_visits` table for Research Memory lineage auditing. Alpha5 moves to database schema v7 and adds an `adaptive_decisions` table for explainable adaptive-decision sequences. The alpha6 release candidate uses database schema v10 and adds canonical `entity_clusters`, `entity_cluster_members`, `entity_resolution_events` and `entity_cluster_merge_events` layers while preserving source-specific `entities` and `observations` as evidence. Existing search counters in `runs` also back duplicate-rate memory, avoiding a parallel duplicate source of truth.
 
 Default DB:
 ```text
@@ -402,6 +452,55 @@ Key boundaries:
 - adaptive stopping is opt-in with `0 = disabled` windows;
 - every important adaptive decision is appended as an `AdaptiveDecision` and persisted in the schema-v7 `adaptive_decisions` table;
 - `trace --run N` exposes the decision sequence and signals alongside page/discovery/observation provenance.
+
+## Entity Resolution — 3.3.0-alpha.6 validated release candidate
+
+Alpha6 adds a dedicated identity-resolution layer **above** source-specific entity/observation evidence. Canonical clusters do not replace source rows and do not discard observations.
+
+Flow:
+
+```text
+Structured Extraction
+      ↓
+source-specific MarketEntity
+      ↓
+identity signals
+(GTIN / maker+model / maker+MPN / source SKU)
+      ↓
+deterministic resolver
+      ↓
+canonical entity cluster
+      ├── source entity A
+      ├── source entity B
+      └── observations remain source-specific
+      ↓
+resolution audit
+      ├── linked
+      ├── new_cluster
+      ├── deferred_ambiguous
+      └── created_separate / identity_conflict
+      ↓
+review-queue
+      ↓
+guarded explicit merge
+```
+
+Key boundaries:
+
+- GTIN is only used after check-digit validation;
+- maker+model and maker+MPN are strong cross-source identity signals;
+- SKU is strong only within one source-domain context;
+- equal normalized title alone never performs cross-source merge;
+- cross-source SKU alone is only a supporting signal;
+- a bridge entity strongly matching multiple separate clusters becomes `deferred_ambiguous`;
+- explicit merge requires at least one strong identity match and no strong conflict;
+- GTIN conflict blocks merge even in the manual workflow;
+- a rejected merge does not change membership;
+- a merged source cluster remains historical through `merged_into_cluster_key` / `merged_at`;
+- the review queue is derived from auditable events and live cluster state instead of a parallel status table;
+- `explain-cluster` combines members, identity signals, observations, resolution history, merge history and review items.
+
+Database schema v10 stores canonical clusters, resolution audit and merge audit without losing source provenance.
 
 ## Feed state and HTTP resource state
 

@@ -160,6 +160,56 @@ def _parser() -> argparse.ArgumentParser:
         help="Stale slieksnis dienās Research Memory freshness signālam",
     )
 
+    clusters = sub.add_parser(
+        "clusters",
+        help="Parādīt projekta canonical entity clusterus",
+    )
+    clusters.add_argument("--project", required=True)
+    clusters.add_argument(
+        "--details",
+        action="store_true",
+        help="Parādīt pilnus cluster/member identifikatorus",
+    )
+
+    explain_cluster = sub.add_parser(
+        "explain-cluster",
+        help="Izskaidrot vienu canonical entity clusteri",
+    )
+    explain_cluster.add_argument("--project", required=True)
+    explain_cluster.add_argument("--cluster", required=True)
+
+    merge_clusters = sub.add_parser(
+        "merge-clusters",
+        help="Explicit un auditējami sapludināt divus entity clusterus",
+    )
+    merge_clusters.add_argument("--project", required=True)
+    merge_clusters.add_argument("--source", required=True)
+    merge_clusters.add_argument("--target", required=True)
+
+    cluster_merges = sub.add_parser(
+        "cluster-merges",
+        help="Parādīt explicit cluster merge audita ierakstus",
+    )
+    cluster_merges.add_argument("--project", required=True)
+    cluster_merges.add_argument("--limit", type=int, default=50)
+
+    review_queue = sub.add_parser(
+        "review-queue",
+        help="Parādīt neatrisinātos Entity Resolution gadījumus",
+    )
+    review_queue.add_argument("--project", required=True)
+    review_queue.add_argument(
+        "--kind",
+        choices=["all", "ambiguous", "conflict"],
+        default="all",
+    )
+    review_queue.add_argument("--limit", type=int, default=50)
+    review_queue.add_argument(
+        "--details",
+        action="store_true",
+        help="Parādīt pilnus cluster identifikatorus un signālus",
+    )
+
     trace = sub.add_parser(
         "trace",
         help="Parādīt viena research run provenance pēdas",
@@ -649,6 +699,376 @@ def main() -> int:
                 print(f"      {feed['feed_url']}")
         return 0
 
+    if args.command == "clusters":
+        from spriditis.storage.database import Database
+
+        settings = load_settings()
+        project = load_project(Path(args.project))
+        db = Database(
+            settings.db_path,
+            legacy_path=settings.legacy_db_path,
+        )
+        try:
+            rows = db.entity_clusters(project.id)
+        finally:
+            db.close()
+
+        if not rows:
+            print("Projektam vēl nav canonical entity clusteru.")
+            return 0
+
+        print(
+            f"{'CLUSTER':<20} {'TYPE':<10} {'MEM':>4} "
+            f"{'SRC':>3} TITLE"
+        )
+        print("-" * 100)
+        for row in rows:
+            short_key = row["cluster_key"][:18] + "..."
+            print(
+                f"{short_key:<20} "
+                f"{row['entity_type']:<10} "
+                f"{row['member_count']:>4} "
+                f"{row['source_count']:>3} "
+                f"{row['canonical_title'][:55]}"
+            )
+            if args.details:
+                print(f"   cluster_key={row['cluster_key']}")
+                for member in row["members"]:
+                    print(
+                        f"      {member['source_domain'] or '-'} "
+                        f"{member['title'][:55]}"
+                    )
+                    print(
+                        f"         entity_key={member['entity_key']} "
+                        f"reason={member['match_reason']}"
+                    )
+        return 0
+
+    if args.command == "explain-cluster":
+        from spriditis.storage.database import Database
+
+        settings = load_settings()
+        project = load_project(Path(args.project))
+        db = Database(
+            settings.db_path,
+            legacy_path=settings.legacy_db_path,
+        )
+        try:
+            info = db.explain_entity_cluster(
+                project.id,
+                args.cluster,
+            )
+        finally:
+            db.close()
+
+        if info is None:
+            print(
+                f"Canonical cluster nav atrasts projektā "
+                f"{project.id}: {args.cluster}"
+            )
+            return 1
+
+        print(
+            f"CLUSTER {info['cluster_key']} "
+            f"[{info['status']}]"
+        )
+        print(
+            f"   type={info['entity_type']} "
+            f"title={info['canonical_title']}"
+        )
+        print(
+            f"   members={info['member_count']} "
+            f"sources={info['source_count']} "
+            f"observations={info['observation_count']}"
+        )
+        print(
+            f"   first={info['first_seen']} "
+            f"last={info['last_seen']}"
+        )
+
+        if info["merged_into_cluster_key"]:
+            print(
+                f"   merged_into="
+                f"{info['merged_into_cluster_key']}"
+            )
+            print(f"   merged_at={info['merged_at']}")
+
+        if info["identity_signals"]:
+            print("")
+            print("IDENTITY SIGNALS")
+            for key, values in info["identity_signals"].items():
+                print(f"   {key}: {', '.join(values)}")
+
+        print("")
+        print(f"MEMBERS ({len(info['members'])})")
+        for member in info["members"]:
+            price = (
+                f"{member['last_price']} {member['currency']}"
+                if member["last_price"] is not None
+                else "-"
+            )
+            print(
+                f"   {member['source_domain'] or '-'} "
+                f"{member['title']} · {price}"
+            )
+            print(
+                f"      entity={member['entity_key']} "
+                f"reason={member['match_reason']}"
+            )
+            if member["attributes"]:
+                identity = []
+                for key in (
+                    "gtin",
+                    "brand",
+                    "manufacturer",
+                    "model",
+                    "mpn",
+                    "sku",
+                ):
+                    value = member["attributes"].get(key)
+                    if value not in (None, ""):
+                        identity.append(f"{key}={value}")
+                if identity:
+                    print("      identity=" + " · ".join(identity))
+            print(
+                f"      observations="
+                f"{len(member['observations'])}"
+            )
+            for obs in member["observations"]:
+                obs_price = (
+                    f"{obs['price']} {obs['currency']}"
+                    if obs["price"] is not None
+                    else "-"
+                )
+                print(
+                    f"         run={obs['run_id']} "
+                    f"{obs['observed_at']} · {obs_price}"
+                )
+            print(f"      {member['source_url']}")
+
+        print("")
+        print(
+            f"RESOLUTION EVENTS "
+            f"({len(info['resolution_events'])})"
+        )
+        for event in info["resolution_events"]:
+            print(
+                f"   #{event['id']} "
+                f"{event['decision']} "
+                f"reason={event['reason']}"
+            )
+            signals = (
+                event["matched_signals"]
+                + event["supporting_signals"]
+                + event["conflicting_signals"]
+            )
+            if signals:
+                print("      signals=" + ", ".join(signals))
+
+        print("")
+        print(f"MERGE EVENTS ({len(info['merge_events'])})")
+        for event in info["merge_events"]:
+            print(
+                f"   #{event['id']} "
+                f"{event['decision']} "
+                f"reason={event['reason']}"
+            )
+            print(
+                f"      {event['source_cluster_key']} -> "
+                f"{event['target_cluster_key']}"
+            )
+            signals = (
+                event["matched_signals"]
+                + event["conflicting_signals"]
+            )
+            if signals:
+                print("      signals=" + ", ".join(signals))
+
+        print("")
+        print(
+            f"REVIEW ITEMS ({len(info['review_items'])})"
+        )
+        for item in info["review_items"]:
+            print(
+                f"   #{item['event_id']} "
+                f"{item['decision']} "
+                f"reason={item['reason']}"
+            )
+            if item["candidate_cluster_keys"]:
+                print(
+                    "      candidates="
+                    + ", ".join(item["candidate_cluster_keys"])
+                )
+            if item["conflict_cluster_keys"]:
+                print(
+                    "      conflicts="
+                    + ", ".join(item["conflict_cluster_keys"])
+                )
+
+        return 0
+
+    if args.command == "merge-clusters":
+        from spriditis.storage.database import Database
+
+        settings = load_settings()
+        project = load_project(Path(args.project))
+        db = Database(
+            settings.db_path,
+            legacy_path=settings.legacy_db_path,
+        )
+        try:
+            event = db.merge_entity_clusters(
+                project.id,
+                args.source,
+                args.target,
+            )
+        finally:
+            db.close()
+
+        print(
+            f"Cluster merge: {event['decision']} "
+            f"reason={event['reason']}"
+        )
+        print(f"   source={event['source_cluster_key']}")
+        print(f"   target={event['target_cluster_key']}")
+        if event["matched_signals"]:
+            print(
+                "   matched="
+                + ", ".join(event["matched_signals"])
+            )
+        if event["conflicting_signals"]:
+            print(
+                "   conflicts="
+                + ", ".join(event["conflicting_signals"])
+            )
+        print(
+            f"   source_members={event['source_member_count']} "
+            f"target_members={event['target_member_count']} "
+            f"merged_members={event['merged_member_count']}"
+        )
+        return 0 if event["decision"] == "merged" else 2
+
+    if args.command == "cluster-merges":
+        from spriditis.storage.database import Database
+
+        settings = load_settings()
+        project = load_project(Path(args.project))
+        db = Database(
+            settings.db_path,
+            legacy_path=settings.legacy_db_path,
+        )
+        try:
+            rows = db.entity_cluster_merge_events(
+                project.id,
+                limit=args.limit,
+            )
+        finally:
+            db.close()
+
+        if not rows:
+            print("Cluster merge audit vēl nav ierakstu.")
+            return 0
+
+        for row in rows:
+            print(
+                f"#{row['id']} {row['decision']:<8} "
+                f"reason={row['reason']}"
+            )
+            print(
+                f"   {row['source_cluster_key'][:20]}... -> "
+                f"{row['target_cluster_key'][:20]}..."
+            )
+            if row["matched_signals"]:
+                print(
+                    "   matched="
+                    + ", ".join(row["matched_signals"])
+                )
+            if row["conflicting_signals"]:
+                print(
+                    "   conflicts="
+                    + ", ".join(row["conflicting_signals"])
+                )
+        return 0
+
+    if args.command == "review-queue":
+        from spriditis.storage.database import Database
+
+        settings = load_settings()
+        project = load_project(Path(args.project))
+        db = Database(
+            settings.db_path,
+            legacy_path=settings.legacy_db_path,
+        )
+        try:
+            rows = db.entity_resolution_review_queue(
+                project.id,
+                kind=args.kind,
+                limit=args.limit,
+            )
+        finally:
+            db.close()
+
+        if not rows:
+            print("Entity Resolution review queue ir tukša.")
+            return 0
+
+        print(
+            f"{'ID':>4} {'KIND':<10} {'DOMAIN':<22} "
+            f"{'TITLE':<42} {'CAND':>4} {'CONF':>4}"
+        )
+        print("-" * 96)
+
+        for row in rows:
+            kind = (
+                "ambiguous"
+                if row["decision"] == "deferred_ambiguous"
+                else "conflict"
+            )
+            print(
+                f"{row['event_id']:>4} "
+                f"{kind:<10} "
+                f"{row['source_domain'][:22]:<22} "
+                f"{row['title'][:42]:<42} "
+                f"{len(row['candidate_cluster_keys']):>4} "
+                f"{len(row['conflict_cluster_keys']):>4}"
+            )
+            print(
+                f"     source_cluster="
+                f"{row['selected_cluster_key'][:24]}..."
+            )
+
+            if args.details:
+                print(f"     entity_key={row['entity_key']}")
+                print(
+                    f"     source_cluster="
+                    f"{row['selected_cluster_key']}"
+                )
+                if row["candidate_cluster_keys"]:
+                    print("     candidates:")
+                    for key in row["candidate_cluster_keys"]:
+                        print(f"        {key}")
+                if row["conflict_cluster_keys"]:
+                    print("     conflicts:")
+                    for key in row["conflict_cluster_keys"]:
+                        print(f"        {key}")
+                signals = (
+                    row["matched_signals"]
+                    + row["supporting_signals"]
+                    + row["conflicting_signals"]
+                )
+                if signals:
+                    print("     signals=" + ", ".join(signals))
+                print(f"     source={row['source_url']}")
+
+        print("")
+        print(
+            "Risināšanai izmanto: "
+            "python -m spriditis.cli merge-clusters "
+            "--project <fails> --source <source_cluster> "
+            "--target <candidate_cluster>"
+        )
+        return 0
+
     if args.command == "trace":
         from spriditis.storage.database import Database
 
@@ -764,6 +1184,45 @@ def main() -> int:
                     print(f"      reason={event['reason']}")
 
         print("")
+        print(
+            f"ENTITY RESOLUTION "
+            f"({len(trace['entity_resolution_events'])})"
+        )
+        for event in trace["entity_resolution_events"]:
+            print(
+                f"   {event['decision']:<20} "
+                f"reason={event['reason']:<28} "
+                f"compared={event['compared_entities']}"
+            )
+            print(
+                f"      entity={event['entity_key'][:20]}... "
+                f"cluster={event['selected_cluster_key'][:20]}..."
+            )
+            if event["candidate_cluster_keys"]:
+                print(
+                    "      candidates="
+                    + ", ".join(
+                        key[:16] + "..."
+                        for key in event["candidate_cluster_keys"]
+                    )
+                )
+            if event["conflict_cluster_keys"]:
+                print(
+                    "      conflicts="
+                    + ", ".join(
+                        key[:16] + "..."
+                        for key in event["conflict_cluster_keys"]
+                    )
+                )
+            signals = (
+                event["matched_signals"]
+                + event["supporting_signals"]
+                + event["conflicting_signals"]
+            )
+            if signals:
+                print("      signals=" + ", ".join(signals))
+
+        print("")
         print(f"OBSERVATIONS ({len(trace['observations'])})")
         for obs in trace["observations"]:
             price = (
@@ -779,6 +1238,11 @@ def main() -> int:
                 f"      method={obs['extraction_method'] or '-'} "
                 f"relevance={obs['relevance_score']:.2f}"
             )
+            if obs["cluster_key"]:
+                print(
+                    f"      cluster={obs['cluster_key'][:20]}... "
+                    f"reason={obs['cluster_match_reason'] or '-'}"
+                )
             print(f"      {obs['source_url']}")
         return 0
 
@@ -904,7 +1368,7 @@ def main() -> int:
             else f"{project.analysis.ai_provider}/{settings.gemini_model}"
         )
 
-        print("🚀 Sprīdītis 3.3.0-alpha.5 sāk pētījumu")
+        print("🚀 Sprīdītis 3.3.0-alpha.6 sāk pētījumu")
         print(f"   Projekts: {project.name}")
         print(f"   ID: {project.id}")
         print(f"   Tips: {project.research_type}")
@@ -981,3 +1445,7 @@ def main() -> int:
         return 0
 
     return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

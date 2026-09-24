@@ -98,7 +98,7 @@ def main():
             columns = db._table_columns("domains")
             assert "sitemap_urls_found" in columns
             assert db.schema_version() == CURRENT_SCHEMA_VERSION
-            assert db.schema_version() == 7
+            assert db.schema_version() == 10
 
             feed_table = db.conn.execute(
                 "SELECT name FROM sqlite_master "
@@ -117,6 +117,34 @@ def main():
                 "WHERE type='table' AND name='adaptive_decisions'"
             ).fetchone()
             assert adaptive_table == ("adaptive_decisions",)
+
+            cluster_table = db.conn.execute(
+                "SELECT name FROM sqlite_master "
+                "WHERE type='table' AND name='entity_clusters'"
+            ).fetchone()
+            assert cluster_table == ("entity_clusters",)
+
+            member_table = db.conn.execute(
+                "SELECT name FROM sqlite_master "
+                "WHERE type='table' AND name='entity_cluster_members'"
+            ).fetchone()
+            assert member_table == ("entity_cluster_members",)
+
+            resolution_event_table = db.conn.execute(
+                "SELECT name FROM sqlite_master "
+                "WHERE type='table' AND name='entity_resolution_events'"
+            ).fetchone()
+            assert resolution_event_table == ("entity_resolution_events",)
+
+            merge_event_table = db.conn.execute(
+                "SELECT name FROM sqlite_master "
+                "WHERE type='table' AND name='entity_cluster_merge_events'"
+            ).fetchone()
+            assert merge_event_table == ("entity_cluster_merge_events",)
+
+            cluster_columns = db._table_columns("entity_clusters")
+            assert "merged_into_cluster_key" in cluster_columns
+            assert "merged_at" in cluster_columns
 
             run_columns = db._table_columns("runs")
             assert "feed_entries_new" in run_columns

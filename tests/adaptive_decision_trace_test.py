@@ -16,7 +16,7 @@ from spriditis.core.projects import ResearchProject
 from spriditis.crawler.engine import ResearchCrawler
 from spriditis.search.fake import FakeSearchProvider
 from spriditis.search.models import SearchHit
-from spriditis.storage.database import Database
+from spriditis.storage.database import CURRENT_SCHEMA_VERSION, Database
 
 
 @dataclass
@@ -183,7 +183,7 @@ assert stop_decision.signals["max_pages_total"] == 1
 with TemporaryDirectory() as tmp:
     db = Database(Path(tmp) / "spriditis.db")
     try:
-        assert db.schema_version() == 7
+        assert db.schema_version() == CURRENT_SCHEMA_VERSION
         db.save_project(project)
         run_id = db.start_run(project)
         db.save_domain_registry(project, run_id, result)
@@ -209,5 +209,5 @@ with TemporaryDirectory() as tmp:
 
 print("ADAPTIVE DECISION TRACE TEST OK")
 print("stages=query_priority > search_result_priority > stop")
-print("schema_version=7")
+print(f"schema_version={CURRENT_SCHEMA_VERSION}")
 print("sqlite_roundtrip=ok")

@@ -1,5 +1,50 @@
 # Izmaiņu vēsture / Changelog
 
+## [3.3.0-alpha.6]
+
+> **Statuss / Status:** release baseline pilnībā validēts; pilnais regression gate izpildīts ar 38/38 testiem.  
+> Release baseline fully validated; the complete regression gate passed 38/38 tests.
+
+### Pievienots / Added
+
+- deterministisks Entity Resolution resolveris ar valid GTIN, maker+model, maker+MPN un source-scoped SKU strong signāliem
+- JSON-LD identity lauku saglabāšana: brand/manufacturer, model, MPN, SKU un GTIN/EAN
+- canonical `entity_clusters` un `entity_cluster_members` virs source-specific `MarketEntity`/observations
+- DB schema v10 ar resolution/cluster/merge audita slāņiem
+- persistēti `entity_resolution_events` ambiguity/conflict lēmumiem
+- guarded explicit cluster merge ar `entity_cluster_merge_events` auditu
+- vēsturisks `merged_into_cluster_key` / `merged_at` source clusteriem
+- unresolved `review-queue` ambiguity un identity-conflict gadījumiem
+- `clusters`, `explain-cluster`, `merge-clusters`, `cluster-merges`, `review-queue` CLI
+- cluster explain skats ar members, source observations, identity signāliem, resolution/merge history un review items
+- seši jauni deterministiski Entity Resolution testi
+
+### Drošības un identitātes robežas / Identity safety boundaries
+
+- nederīgs GTIN tiek atmests pēc check-digit validācijas
+- title-only un cross-source SKU vieni paši neveic cross-source merge
+- bridge entity, kas strong-matcho vairākus clusterus, tiek atlikta kā `deferred_ambiguous`
+- explicit merge prasa strong identity match
+- GTIN/strong identity konflikts bloķē arī manuālu merge
+- rejected merge membership nemaina
+- source-specific entity un observation pierādījumi netiek dzēsti vai sapludināti vienā source rindā
+- review queue aizveras no reāla cluster stāvokļa, nevis manuāla checkbox/statusa
+
+### Validācija / Validation
+
+- `entity_identity_resolution_test.py`
+- `entity_cluster_persistence_test.py`
+- `entity_resolution_audit_test.py`
+- `entity_cluster_merge_test.py`
+- `entity_resolution_review_queue_test.py`
+- `entity_cluster_explain_test.py`
+- DB migration v10 testi
+- Adaptive Decision Trace schema-version regression salabots uz `CURRENT_SCHEMA_VERSION`
+- fokusētie alpha6 un alpha5/core regression testi paliek zaļi
+- pilnais **38/38** testu regression gate izpildīts sekmīgi / complete **38/38** regression gate passed
+
+---
+
 ## [3.3.0-alpha.5]
 
 > **Statuss / Status:** release baseline pilnībā validēts; pilnais regression gate izpildīts ar 32/32 testiem.  
