@@ -131,7 +131,7 @@ with TemporaryDirectory() as tmp:
             title="Conflict D",
             url="https://d.example/product/d",
             domain="d.example",
-            attributes={"gtin": "9501234600003"},
+            attributes={"gtin": "9501234600000"},
         )
         db.upsert_entity(project, run_id, c)
         db.upsert_entity(project, run_id, d)
