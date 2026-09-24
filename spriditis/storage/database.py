@@ -22,7 +22,7 @@ from spriditis.core.run import ResearchRunResult
 from spriditis.resolution.identity import resolve_entities
 
 
-CURRENT_SCHEMA_VERSION = 11
+CURRENT_SCHEMA_VERSION = 12
 DEFAULT_STALE_AFTER_DAYS = 30.0
 
 
@@ -222,6 +222,34 @@ CREATE TABLE IF NOT EXISTS feeds (
 
 CREATE INDEX IF NOT EXISTS idx_feeds_project_domain
 ON feeds(project_id, domain, status);
+
+CREATE TABLE IF NOT EXISTS feed_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id TEXT NOT NULL,
+    run_id INTEGER NOT NULL,
+    feed_url TEXT NOT NULL,
+    domain TEXT NOT NULL,
+    feed_type TEXT NOT NULL DEFAULT 'unknown',
+    status TEXT NOT NULL DEFAULT 'unknown',
+    etag TEXT DEFAULT '',
+    last_modified TEXT DEFAULT '',
+    last_entry_id TEXT DEFAULT '',
+    last_published TEXT DEFAULT '',
+    last_checked TEXT DEFAULT '',
+    last_success TEXT DEFAULT '',
+    entries_seen INTEGER NOT NULL DEFAULT 0,
+    new_entries INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT DEFAULT '',
+    observed_at TEXT NOT NULL,
+    UNIQUE(project_id, run_id, feed_url),
+    FOREIGN KEY(run_id) REFERENCES runs(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_feed_snapshots_project_run
+ON feed_snapshots(project_id, run_id, id);
+
+CREATE INDEX IF NOT EXISTS idx_feed_snapshots_feed
+ON feed_snapshots(project_id, feed_url, run_id);
 
 CREATE TABLE IF NOT EXISTS adaptive_decisions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -3125,6 +3153,7 @@ class Database:
     def save_feed_states(
         self,
         project: ResearchProject,
+        run_id: int,
         result: ResearchRunResult,
     ):
         for state in result.feed_states.values():
@@ -3176,7 +3205,88 @@ class Database:
                 ),
             )
 
+            self.conn.execute(
+                """
+                INSERT INTO feed_snapshots(
+                    project_id, run_id, feed_url, domain, feed_type,
+                    status, etag, last_modified, last_entry_id,
+                    last_published, last_checked, last_success,
+                    entries_seen, new_entries, last_error, observed_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(project_id, run_id, feed_url) DO UPDATE SET
+                    domain=excluded.domain,
+                    feed_type=excluded.feed_type,
+                    status=excluded.status,
+                    etag=excluded.etag,
+                    last_modified=excluded.last_modified,
+                    last_entry_id=excluded.last_entry_id,
+                    last_published=excluded.last_published,
+                    last_checked=excluded.last_checked,
+                    last_success=excluded.last_success,
+                    entries_seen=excluded.entries_seen,
+                    new_entries=excluded.new_entries,
+                    last_error=excluded.last_error,
+                    observed_at=excluded.observed_at
+                """,
+                (
+                    project.id,
+                    run_id,
+                    state.feed_url,
+                    state.domain,
+                    state.feed_type,
+                    state.status,
+                    state.etag,
+                    state.last_modified,
+                    state.last_entry_id,
+                    state.last_published,
+                    state.last_checked,
+                    state.last_success,
+                    state.entries_seen,
+                    state.new_entries,
+                    state.last_error,
+                    now,
+                ),
+            )
+
         self.conn.commit()
+
+    def feed_snapshots(
+        self,
+        project_id: str,
+        run_id: int,
+    ) -> list[dict]:
+        rows = self.conn.execute(
+            """
+            SELECT id, feed_url, domain, feed_type, status, etag,
+                   last_modified, last_entry_id, last_published,
+                   last_checked, last_success, entries_seen,
+                   new_entries, last_error, observed_at
+            FROM feed_snapshots
+            WHERE project_id=? AND run_id=?
+            ORDER BY id
+            """,
+            (project_id, run_id),
+        ).fetchall()
+
+        keys = [
+            "id",
+            "feed_url",
+            "domain",
+            "feed_type",
+            "status",
+            "etag",
+            "last_modified",
+            "last_entry_id",
+            "last_published",
+            "last_checked",
+            "last_success",
+            "entries_seen",
+            "new_entries",
+            "last_error",
+            "observed_at",
+        ]
+        return [dict(zip(keys, row)) for row in rows]
 
     def list_feeds(
         self,
