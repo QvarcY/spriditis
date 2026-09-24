@@ -342,7 +342,7 @@ python main.py explain --project projects\mans_tirgus.json --domain example.com
 python main.py trace --project projects\mans_tirgus.json --run 1
 ```
 
-`memory` rāda query yield, search deduplikāciju, source profiles un freshness signālus. `explain` apkopo viena domēna auditējamo vēsturi, bet `trace` sasaista viena run page lineage, discovery eventus un observations. Alpha4 šos signālus **krāj un izskaidro**. Alpha5 release candidate tos jau izmanto query/source prioritizācijai, lokālai relevance izvēlei, controlled multi-hop, source diversity un stopping lēmumiem; šie lēmumi tiek saglabāti arī Adaptive Decision Trace.
+`memory` rāda query yield, search deduplikāciju, source profiles un freshness signālus. `explain` apkopo viena domēna auditējamo vēsturi, bet `trace` sasaista viena run page lineage, discovery eventus un observations. Alpha4 šos signālus **krāj un izskaidro**. Alpha5 tos izmanto query/source prioritizācijai, lokālai relevance izvēlei, controlled multi-hop, source diversity un stopping lēmumiem; šie lēmumi tiek saglabāti arī Adaptive Decision Trace.
 
 Pilno zero-seed Expedition plūsmu bez ārēja meklētāja var pārbaudīt ar:
 
