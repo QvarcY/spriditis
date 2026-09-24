@@ -86,6 +86,20 @@ class ResearchProject(BaseModel):
             )
         return value
 
+    @field_validator("crawl")
+    @classmethod
+    def validate_crawl(cls, value: CrawlConfig) -> CrawlConfig:
+        for depth, budget in value.discovery_depth_budgets.items():
+            if depth < 1 or depth > 20:
+                raise ValueError(
+                    "discovery_depth_budgets hop jābūt diapazonā 1..20."
+                )
+            if budget < 0:
+                raise ValueError(
+                    "discovery_depth_budgets budžets nevar būt negatīvs."
+                )
+        return value
+
     @field_validator("seed_urls")
     @classmethod
     def validate_seed_urls(cls, value: list[str]) -> list[str]:
