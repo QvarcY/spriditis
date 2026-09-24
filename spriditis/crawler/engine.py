@@ -41,6 +41,7 @@ class ResearchCrawler:
         feed_states: dict[str, FeedState] | None = None,
         domain_states: dict[str, DomainRecord] | None = None,
         query_memory: list[dict] | None = None,
+        source_profiles: list[dict] | None = None,
     ):
         self.settings = settings
         self.project = project
@@ -49,6 +50,11 @@ class ResearchCrawler:
         self.feed_states = dict(feed_states or {})
         self.domain_states = dict(domain_states or {})
         self.query_memory = list(query_memory or [])
+        self.source_profiles = {
+            str(row.get("domain", "")): dict(row)
+            for row in (source_profiles or [])
+            if row.get("domain")
+        }
 
         self.session = requests.Session()
         self.session.headers.update(
@@ -526,6 +532,74 @@ class ResearchCrawler:
         result.finished_at = datetime.now(timezone.utc).isoformat()
         return result
 
+    def _source_memory_state(self, domain: str) -> str:
+        profile = self.source_profiles.get(domain)
+        if profile is None:
+            return "untested"
+
+        status = str(profile.get("status", ""))
+        if status in {"blocked", "rejected"}:
+            return status
+
+        crawl_runs = int(profile.get("crawl_runs", 0) or 0)
+        productive_runs = int(profile.get("productive_runs", 0) or 0)
+        is_stale = bool(profile.get("is_stale", False))
+
+        if productive_runs > 0:
+            return "productive_stale" if is_stale else "productive_fresh"
+        if crawl_runs > 0:
+            return "nonproductive"
+        return "untested"
+
+    def _rank_search_hits_by_source_memory(self, hits):
+        ranked = []
+
+        band_order = {
+            "productive_fresh": 0,
+            "untested": 1,
+            "productive_stale": 2,
+            "nonproductive": 3,
+            "blocked": 4,
+            "rejected": 4,
+        }
+
+        for index, hit in enumerate(hits):
+            normalized = normalize_url(hit.url)
+            domain = host_key(normalized) if normalized else ""
+            profile = self.source_profiles.get(domain)
+            state = self._source_memory_state(domain)
+
+            if profile is None:
+                productive_rate = 0.0
+                entity_yield = 0.0
+                success_rate = 0.0
+            else:
+                productive_rate = float(
+                    profile.get("productive_run_rate", 0.0) or 0.0
+                )
+                entity_yield = float(
+                    profile.get("entity_yield", 0.0) or 0.0
+                )
+                success_rate = float(
+                    profile.get("success_rate", 0.0) or 0.0
+                )
+
+            band = band_order[state]
+            ranked.append(
+                (
+                    (
+                        band,
+                        -productive_rate if "productive" in state else 0.0,
+                        -entity_yield if "productive" in state else 0.0,
+                        -success_rate if "productive" in state else 0.0,
+                        index,
+                    ),
+                    hit,
+                )
+            )
+
+        return [hit for _, hit in sorted(ranked, key=lambda item: item[0])]
+
     def _seed_from_search(
         self,
         frontier: URLFrontier,
@@ -580,6 +654,7 @@ class ResearchCrawler:
                     limit=self.project.search.results_per_query,
                     safesearch=self.project.search.safesearch,
                 )
+                hits = self._rank_search_hits_by_source_memory(hits)
             except SearchProviderError as exc:
                 result.search_provider_errors += 1
                 detail = f"kind={exc.kind}, attempts={exc.attempts}"
@@ -619,9 +694,21 @@ class ResearchCrawler:
 
                 if discovery.action == "activated":
                     result.search_domains_activated += 1
+                    profile = self.source_profiles.get(record.domain)
+                    state = self._source_memory_state(record.domain)
+                    source_note = ""
+                    if profile is not None:
+                        source_note = (
+                            f" source_memory={state}"
+                            f" productive_run_rate="
+                            f"{float(profile.get('productive_run_rate', 0.0) or 0.0):.1%}"
+                            f" entity_yield="
+                            f"{float(profile.get('entity_yield', 0.0) or 0.0):.2f}"
+                        )
                     print(
                         f"      🧭 Search domēns aktivizēts: "
                         f"{record.domain} (score={record.relevance_score:.2f})"
+                        f"{source_note}"
                     )
 
                 if record.status == "active":
