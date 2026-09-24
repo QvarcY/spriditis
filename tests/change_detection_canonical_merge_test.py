@@ -116,6 +116,8 @@ with TemporaryDirectory() as tmp:
             "DESCRIPTION_CHANGED": 0,
             "IMAGE_CHANGED": 0,
             "SOURCE_CHANGED": 1,
+            "DOMAIN_FAILED": 0,
+            "DOMAIN_RECOVERED": 0,
         }
         assert len(post_merge["events"]) == 1
 
