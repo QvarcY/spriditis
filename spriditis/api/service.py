@@ -30,6 +30,12 @@ class RunArtifacts:
     search_results_duplicates: int = 0
     search_domains_activated: int = 0
     search_provider_errors: int = 0
+    feed_candidates_seen: int = 0
+    feeds_found: int = 0
+    feed_entries_seen: int = 0
+    feed_entries_new: int = 0
+    feed_not_modified: int = 0
+    feed_errors: int = 0
     database_migrated_from: Path | None = None
 
     @property
@@ -61,11 +67,13 @@ def run_project(
             force_no_ai=force_no_ai,
         )
         search_provider = build_search_provider(settings, project)
+        feed_states = db.load_feed_states(project.id)
         crawler = ResearchCrawler(
             settings,
             project,
             ai,
             search_provider=search_provider,
+            feed_states=feed_states,
         )
         result = crawler.crawl()
 
@@ -73,6 +81,7 @@ def run_project(
             db.upsert_entity(project, run_id, entity)
 
         db.save_domain_registry(project, run_id, result)
+        db.save_feed_states(project, result)
         db.finish_run(run_id, result)
 
         html = generate_html_report(project, result)
@@ -112,6 +121,12 @@ def run_project(
             search_results_duplicates=result.search_results_duplicates,
             search_domains_activated=result.search_domains_activated,
             search_provider_errors=result.search_provider_errors,
+            feed_candidates_seen=result.feed_candidates_seen,
+            feeds_found=result.feeds_found,
+            feed_entries_seen=result.feed_entries_seen,
+            feed_entries_new=result.feed_entries_new,
+            feed_not_modified=result.feed_not_modified,
+            feed_errors=result.feed_errors,
             database_migrated_from=migrated_from,
         )
     finally:

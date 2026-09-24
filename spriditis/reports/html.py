@@ -212,6 +212,9 @@ td,th {{ padding:10px;border-bottom:1px solid var(--line);text-align:left }}
   search_queries={result.search_queries_issued} · search_raw={result.search_results_seen} ·
   search_unique={result.search_results_unique} · search_duplicates={result.search_results_duplicates} ·
   search_activated={result.search_domains_activated} · search_errors={result.search_provider_errors} ·
+  feed_candidates={result.feed_candidates_seen} · feeds={result.feeds_found} ·
+  feed_entries={result.feed_entries_seen} · feed_new={result.feed_entries_new} ·
+  feed_304={result.feed_not_modified} · feed_errors={result.feed_errors} ·
   kopā atrasti={len(result.entities)}
 </p>
 </div>
