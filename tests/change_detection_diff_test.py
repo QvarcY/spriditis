@@ -185,6 +185,10 @@ with TemporaryDirectory() as tmp:
 
         diff = db.compare_runs(project.id, run_a, run_b)
 
+        assert diff["comparison_basis"] == {
+            "facts": "historical_observation_snapshots",
+            "identity": "current_canonical_membership",
+        }
         assert diff["before_run"]["id"] == run_a
         assert diff["after_run"]["id"] == run_b
         assert diff["before_run"]["entity_count"] == 5
@@ -279,6 +283,12 @@ with TemporaryDirectory() as tmp:
                 "source_url": "https://source-b.example/product/shared",
             }
         ]
+        assert len(
+            source_event["evidence"]["before_observation_ids"]
+        ) == 1
+        assert len(
+            source_event["evidence"]["after_observation_ids"]
+        ) == 1
 
         price_entity_keys = {
             event["entity_key"]
