@@ -4,6 +4,7 @@ import json
 import argparse
 from pathlib import Path
 
+from spriditis import __version__
 from spriditis.api.service import run_project
 from spriditis.config import load_settings
 from spriditis.search.base import SearchProviderError
@@ -220,6 +221,23 @@ def _parser() -> argparse.ArgumentParser:
         "--details",
         action="store_true",
         help="Parādīt pilnus cluster identifikatorus un signālus",
+    )
+
+    watch = sub.add_parser(
+        "watch",
+        help="Palaist incremental pētījumu un parādīt tikai jēgpilnas izmaiņas",
+    )
+    watch.add_argument("--project", required=True)
+    watch.add_argument(
+        "--once",
+        action="store_true",
+        help="Izpildīt vienu drošu watch ciklu un iziet",
+    )
+    watch.add_argument("--no-ai", action="store_true")
+    watch.add_argument(
+        "--details",
+        action="store_true",
+        help="Parādīt eventu before/after/evidence detaļas",
     )
 
     diff = sub.add_parser(
@@ -1241,6 +1259,112 @@ def main() -> int:
         )
         return 0
 
+    if args.command == "watch":
+        from spriditis.storage.database import Database
+
+        if not args.once:
+            print(
+                "Alpha9 pašlaik atbalsta drošu vienas iterācijas watch režīmu. "
+                "Izmanto --once."
+            )
+            return 2
+
+        settings = load_settings()
+        project = load_project(Path(args.project))
+
+        print(f"WATCH · {project.name}")
+        print("   mode=once")
+        print("   memory=existing research/feed/domain state")
+
+        artifacts = run_project(
+            settings,
+            project,
+            force_no_ai=args.no_ai,
+            send_email=False,
+        )
+
+        db = Database(
+            settings.db_path,
+            legacy_path=settings.legacy_db_path,
+        )
+        try:
+            try:
+                diff = db.compare_with_previous_run(
+                    project.id,
+                    artifacts.run_id,
+                )
+            except ValueError as exc:
+                print(str(exc))
+                return 1
+        finally:
+            db.close()
+
+        print("")
+        print(f"WATCH RESULT · run #{artifacts.run_id}")
+
+        if diff is None:
+            print(
+                "   baseline=created · previous_completed_run=none · "
+                "changes=not_applicable"
+            )
+            return 0
+
+        before_run = diff["before_run"]
+        after_run = diff["after_run"]
+        events = diff["events"]
+        nonzero = [
+            f"{name.lower()}={count}"
+            for name, count in diff["counts"].items()
+            if count
+        ]
+
+        print(
+            f"   compared=run #{before_run['id']} → "
+            f"#{after_run['id']} · changes={len(events)}"
+        )
+        if nonzero:
+            print("   " + " · ".join(nonzero))
+
+        if not events:
+            print("   Nozīmīgas izmaiņas nav atrastas.")
+            return 0
+
+        print("")
+        print(f"CHANGES ({len(events)})")
+        for event in events:
+            print(
+                f"   {event['change_type']:<20} "
+                f"{event['title'] or event['source_url'] or '-'}"
+            )
+            if event["source_domain"]:
+                print(f"      source={event['source_domain']}")
+            if args.details:
+                print(
+                    "      before="
+                    + json.dumps(
+                        event["before"],
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    )
+                )
+                print(
+                    "      after="
+                    + json.dumps(
+                        event["after"],
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    )
+                )
+                print(
+                    "      evidence="
+                    + json.dumps(
+                        event["evidence"],
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    )
+                )
+        return 0
+
     if args.command == "diff":
         from spriditis.storage.database import Database
 
@@ -1725,7 +1849,7 @@ def main() -> int:
             else f"{project.analysis.ai_provider}/{settings.gemini_model}"
         )
 
-        print("🚀 Sprīdītis 3.3.0-alpha.8 sāk pētījumu")
+        print(f"🚀 Sprīdītis {__version__} sāk pētījumu")
         print(f"   Projekts: {project.name}")
         print(f"   ID: {project.id}")
         print(f"   Tips: {project.research_type}")
