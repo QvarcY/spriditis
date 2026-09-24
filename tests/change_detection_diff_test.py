@@ -17,11 +17,12 @@ def fact(
     url: str,
     confidence: float,
     evidence: str,
+    method: str = "json-ld",
 ) -> ExtractionEvidence:
     return ExtractionEvidence(
         value=value,
         source_url=url,
-        extraction_method="json-ld",
+        extraction_method=method,
         confidence=confidence,
         evidence=evidence,
     )
@@ -122,12 +123,14 @@ drop_b = drop_a.model_copy(
                 url="https://price.example/product/drop",
                 confidence=0.93,
                 evidence="microdata:itemprop=price",
+                method="microdata",
             ),
             "currency": fact(
                 "EUR",
                 url="https://price.example/product/drop",
                 confidence=0.93,
                 evidence="microdata:itemprop=priceCurrency",
+                method="microdata",
             ),
         },
     }
@@ -252,7 +255,7 @@ with TemporaryDirectory() as tmp:
             drop_event["evidence"]["after_field_evidence"]["price"][
                 "extraction_method"
             ]
-            == "json-ld"
+            == "microdata"
         )
         assert (
             drop_event["evidence"]["after_field_evidence"]["price"][
