@@ -358,7 +358,9 @@ class FeedDiscovery:
 
             if response.status_code == 304 and previous:
                 state = replace(previous)
-                state.status = "not_modified"
+                # 304 is a fetch outcome, not a feed lifecycle state.
+                # Keep the feed active and expose "not modified" via run metrics.
+                state.status = "active"
                 state.last_checked = now
                 state.last_seen = now
                 state.last_error = ""
@@ -394,12 +396,16 @@ class FeedDiscovery:
                 continue
 
             state = replace(previous) if previous else FeedState(
-                feed_url=final_url,
-                domain=host_key(final_url),
+                feed_url=feed_url,
+                domain=host_key(feed_url),
                 first_seen=now,
             )
-            state.feed_url = final_url
-            state.domain = host_key(final_url)
+            # Keep the discovered/request URL as the persistent resource key.
+            # A same-host redirect may canonicalize the response URL, but if
+            # we persisted only the redirect target, the next HTML discovery
+            # would miss the saved ETag/Last-Modified state.
+            state.feed_url = feed_url
+            state.domain = host_key(feed_url)
             state.feed_type = feed_type
             state.status = "active"
             state.etag = response.headers.get("ETag", "") or state.etag
