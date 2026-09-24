@@ -26,7 +26,7 @@
 | | Status |
 |---|---|
 | **Publiskā versija / Public baseline** | ✅ `v3.3.0-alpha.6` — Entity Resolution |
-| **Šobrīd / Current work** | 🧪 `3.3.0-alpha.7` — Fallback Extraction + Evidence Confidence release candidate |
+| **Šobrīd / Current work** | 🧪 `3.3.0-alpha.7` — Fallback Extraction + Evidence Confidence fully validated; publication preparation |
 | **Galvenais virziens / North star** | 🧠 **Research Memory + Adaptive Discovery** |
 | **Pamatprincips / Core principle** | 🔎 **source-backed facts > AI guesses** |
 | **Izmaksu princips / Cost direction** | 🌱 Priekšroka lokāliem, atvērtiem, pašhostējamiem un bezmaksas risinājumiem / Prefer local, open, self-hostable and zero-cost building blocks |
@@ -269,7 +269,7 @@ Sprīdītis nav piesaistīts vienai nozarei. Ideja ir vienu un to pašu kodolu p
 
 ### Kas vēl nav gatavs?
 
-Pieņemtais attīstības virziens ir redzams README sākumā sadaļā **Development journey / Attīstības ceļš**. Publiskā bāze ir `3.3.0-alpha.6`; `3.3.0-alpha.7` Fallback Extraction + Evidence Confidence ir release-candidate stabilizācijā, pēc tam seko Change Detection → Watch mode → kontrolēts async crawleris.
+Pieņemtais attīstības virziens ir redzams README sākumā sadaļā **Development journey / Attīstības ceļš**. Publiskā bāze ir `3.3.0-alpha.6`; `3.3.0-alpha.7` Fallback Extraction + Evidence Confidence ir pilnībā validēts publicēšanas kandidāts, pēc tam seko Change Detection → Watch mode → kontrolēts async crawleris.
 
 Detalizēti skatīt [ROADMAP.md](ROADMAP.md).
 
@@ -435,9 +435,9 @@ Sprīdīti nevajadzētu izmantot autentifikācijas, piekļuves kontroles, paywal
 
 Pašreizējais publiskais atskaites punkts ir **Sprīdītis 3.3.0-alpha.6 — Entity Resolution**.
 
-**3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence** ir feature-complete release candidate stabilizācijas posmā. Tas pievieno schema.org microdata, konservatīvu DOM fallback, field-level extraction provenance/confidence, DB schema v11 current evidence persistence, `evidence-quality` inspekciju un target-cluster-aware identity conflict hard veto.
+**3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence** ir feature-complete un pilnībā validēts publicēšanas kandidāts. Tas pievieno schema.org microdata, konservatīvu DOM fallback, field-level extraction provenance/confidence, DB schema v11 current evidence persistence, `evidence-quality` inspekciju un target-cluster-aware identity conflict hard veto.
 
-Alpha7 fokusētie testi ir zaļi; pirms merge/tag vēl jāizpilda pilnais **43 testu regression gate**.
+Pilnais alpha7 regression gate ir izpildīts: **43/43 deterministiskie testi iziet**, ieskaitot Adaptive Expedition, Research Memory, Search/Discovery/Feed, Entity Resolution, extraction evidence un schema v11 regresijas.
 
 Šis ir alpha projekts, tāpēc līdz stabilai versijai iespējamas arī nesavietojamas izmaiņas.
 
@@ -754,9 +754,9 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 The current public baseline is **Sprīdītis 3.3.0-alpha.6 — Entity Resolution**.
 
-**3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence** is a feature-complete release candidate under stabilization. It adds schema.org microdata, conservative DOM fallback extraction, field-level extraction provenance/confidence, database schema v11 current-evidence persistence, `evidence-quality` inspection, and target-cluster-aware identity-conflict hard veto behavior.
+**3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence** is feature-complete and fully validated for publication preparation. It adds schema.org microdata, conservative DOM fallback extraction, field-level extraction provenance/confidence, database schema v11 current-evidence persistence, `evidence-quality` inspection, and target-cluster-aware identity-conflict hard veto behavior.
 
-The focused alpha7 tests are green; the complete **43-test regression gate** still has to pass before merge/tag.
+The complete alpha7 regression gate passed: **43/43 deterministic tests**, including Adaptive Expedition, Research Memory, Search/Discovery/Feed, Entity Resolution, extraction-evidence and schema-v11 regression layers.
 
 This is alpha software. Expect breaking changes before a stable release.
 
