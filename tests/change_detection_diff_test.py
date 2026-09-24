@@ -6,9 +6,25 @@ from tempfile import TemporaryDirectory
 
 sys.path.insert(0, str(_BootstrapPath(__file__).resolve().parents[1]))
 
-from spriditis.core.entities import MarketEntity
+from spriditis.core.entities import ExtractionEvidence, MarketEntity
 from spriditis.core.projects import ResearchProject
 from spriditis.storage.database import CURRENT_SCHEMA_VERSION, Database
+
+
+def fact(
+    value,
+    *,
+    url: str,
+    confidence: float,
+    evidence: str,
+) -> ExtractionEvidence:
+    return ExtractionEvidence(
+        value=value,
+        source_url=url,
+        extraction_method="json-ld",
+        confidence=confidence,
+        evidence=evidence,
+    )
 
 
 project = ResearchProject.model_validate({
@@ -50,6 +66,23 @@ drop_a = entity(
     domain="price.example",
     price=100.0,
     gtin="4006381333931",
+).model_copy(
+    update={
+        "field_evidence": {
+            "price": fact(
+                100.0,
+                url="https://price.example/product/drop",
+                confidence=0.98,
+                evidence="jsonld:offers.price",
+            ),
+            "currency": fact(
+                "EUR",
+                url="https://price.example/product/drop",
+                confidence=0.98,
+                evidence="jsonld:offers.priceCurrency",
+            ),
+        }
+    }
 )
 increase_a = entity(
     title="Price Increase Product",
@@ -80,7 +113,25 @@ currency_a = entity(
     currency="EUR",
 )
 
-drop_b = drop_a.model_copy(update={"price": 90.0})
+drop_b = drop_a.model_copy(
+    update={
+        "price": 90.0,
+        "field_evidence": {
+            "price": fact(
+                90.0,
+                url="https://price.example/product/drop",
+                confidence=0.93,
+                evidence="microdata:itemprop=price",
+            ),
+            "currency": fact(
+                "EUR",
+                url="https://price.example/product/drop",
+                confidence=0.93,
+                evidence="microdata:itemprop=priceCurrency",
+            ),
+        },
+    }
+)
 increase_b = increase_a.model_copy(update={"price": 65.0})
 new_entity = entity(
     title="New Product",
@@ -179,6 +230,32 @@ with TemporaryDirectory() as tmp:
         }
         assert drop_event["evidence"]["before_run_id"] == run_a
         assert drop_event["evidence"]["after_run_id"] == run_b
+        assert (
+            drop_event["evidence"]["before_field_evidence"]["price"]["value"]
+            == 100.0
+        )
+        assert (
+            drop_event["evidence"]["before_field_evidence"]["price"][
+                "extraction_method"
+            ]
+            == "json-ld"
+        )
+        assert (
+            drop_event["evidence"]["after_field_evidence"]["price"]["value"]
+            == 90.0
+        )
+        assert (
+            drop_event["evidence"]["after_field_evidence"]["price"][
+                "extraction_method"
+            ]
+            == "json-ld"
+        )
+        assert (
+            drop_event["evidence"]["after_field_evidence"]["price"][
+                "confidence"
+            ]
+            == 0.93
+        )
 
         increase_event = by_type["PRICE_INCREASE"]
         assert increase_event["entity_key"] == increase_a.stable_key
@@ -233,4 +310,5 @@ print("CHANGE DETECTION DIFF TEST OK")
 print("events=new+disappeared+price_drop+price_increase+source_changed")
 print("price_comparison=same_source_entity_only")
 print("currency_mismatch=no_price_event")
+print("price_event_provenance=historical_field_evidence")
 print("schema_version=11")
