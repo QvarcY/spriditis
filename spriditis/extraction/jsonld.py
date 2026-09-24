@@ -141,10 +141,12 @@ def extract_jsonld_products(
                 or offers.get("lowPrice")
                 or node.get("price")
             )
-            currency = clean_text(
+            raw_currency = (
                 offers.get("priceCurrency")
                 or node.get("priceCurrency")
-                or "EUR",
+            )
+            currency = clean_text(
+                raw_currency or "EUR",
                 10,
             ).upper()
 
@@ -191,8 +193,12 @@ def extract_jsonld_products(
                 field_evidence["currency"] = _fact(
                     currency or "EUR",
                     page_url=page_url,
-                    confidence=0.94,
-                    evidence="jsonld:offers.priceCurrency|priceCurrency|default",
+                    confidence=0.98 if raw_currency else 0.55,
+                    evidence=(
+                        "jsonld:offers.priceCurrency|priceCurrency"
+                        if raw_currency
+                        else "default:EUR"
+                    ),
                 )
             if seller:
                 field_evidence["seller"] = _fact(
