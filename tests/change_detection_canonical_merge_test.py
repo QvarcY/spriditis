@@ -165,6 +165,7 @@ with TemporaryDirectory() as tmp:
         assert post_merge["comparison_basis"] == {
             "entity_facts": "historical_observation_snapshots",
             "domain_health": "historical_page_visits",
+            "feed_state": "historical_feed_snapshots",
             "identity": "current_canonical_membership",
         }
     finally:
