@@ -36,6 +36,8 @@ class CrawlConfig(BaseModel):
     max_feed_entries_per_feed: int = Field(default=50, ge=0, le=1000)
     diminishing_returns_window: int = Field(default=0, ge=0, le=10000)
     saturation_window: int = Field(default=0, ge=0, le=10000)
+    max_discovery_depth: int = Field(default=20, ge=0, le=20)
+    discovery_depth_budgets: dict[int, int] = Field(default_factory=dict)
 
 
 class SearchConfig(BaseModel):
