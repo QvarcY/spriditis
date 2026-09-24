@@ -26,6 +26,8 @@ class RunArtifacts:
     activated_domain_count: int = 0
     search_queries_issued: int = 0
     search_results_seen: int = 0
+    search_results_unique: int = 0
+    search_results_duplicates: int = 0
     search_domains_activated: int = 0
     search_provider_errors: int = 0
     database_migrated_from: Path | None = None
@@ -106,6 +108,8 @@ def run_project(
             ),
             search_queries_issued=result.search_queries_issued,
             search_results_seen=result.search_results_seen,
+            search_results_unique=result.search_results_unique,
+            search_results_duplicates=result.search_results_duplicates,
             search_domains_activated=result.search_domains_activated,
             search_provider_errors=result.search_provider_errors,
             database_migrated_from=migrated_from,

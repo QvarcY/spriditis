@@ -183,8 +183,8 @@ def url_allowed(
             return True
         return len(known_domains) < project.crawl.max_domains
 
-    # expedition būs aktīvs meklēšanas režīms nākamajā posmā.
-    # 3.1 alpha neizdomā jaunus search seedus, bet var sekot discovery noteikumiem.
+    # Expedition izmanto aktīvu SearchProvider bootstrapu un pēc tam
+    # seko tiem pašiem drošajiem vairāku domēnu crawl principiem.
     if project.crawl.mode == "expedition":
         if host in known_domains:
             return True

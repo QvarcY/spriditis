@@ -209,7 +209,8 @@ td,th {{ padding:10px;border-bottom:1px solid var(--line);text-align:left }}
 
 <p class="muted">
   failed={result.failed_pages} · robots_skipped={result.skipped_by_robots} ·
-  search_queries={result.search_queries_issued} · search_results={result.search_results_seen} ·
+  search_queries={result.search_queries_issued} · search_raw={result.search_results_seen} ·
+  search_unique={result.search_results_unique} · search_duplicates={result.search_results_duplicates} ·
   search_activated={result.search_domains_activated} · search_errors={result.search_provider_errors} ·
   kopā atrasti={len(result.entities)}
 </p>

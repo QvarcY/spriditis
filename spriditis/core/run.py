@@ -23,6 +23,8 @@ class ResearchRunResult:
 
     search_queries_issued: int = 0
     search_results_seen: int = 0
+    search_results_unique: int = 0
+    search_results_duplicates: int = 0
     search_domains_activated: int = 0
     search_provider_errors: int = 0
 

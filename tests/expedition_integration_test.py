@@ -135,6 +135,8 @@ result = crawler.crawl()
 
 assert result.search_queries_issued == 1
 assert result.search_results_seen == 3
+assert result.search_results_unique == 3
+assert result.search_results_duplicates == 0
 assert result.search_domains_activated == 1
 assert result.search_provider_errors == 0
 assert result.visited_pages == 1

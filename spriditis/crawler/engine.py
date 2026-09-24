@@ -356,6 +356,8 @@ class ResearchCrawler:
             f"{len(queries)} vaicājumi"
         )
 
+        seen_search_urls: set[str] = set()
+
         for query in queries:
             result.search_queries_issued += 1
             print(f"   🔍 {query.query}")
@@ -369,7 +371,10 @@ class ResearchCrawler:
                 )
             except SearchProviderError as exc:
                 result.search_provider_errors += 1
-                print(f"   ⚠️ SearchProvider kļūda: {exc}")
+                detail = f"kind={exc.kind}, attempts={exc.attempts}"
+                if exc.status_code is not None:
+                    detail += f", http={exc.status_code}"
+                print(f"   ⚠️ SearchProvider kļūda: {exc} [{detail}]")
                 continue
 
             for hit in hits:
@@ -377,6 +382,11 @@ class ResearchCrawler:
                 normalized = normalize_url(hit.url)
                 if not normalized:
                     continue
+                if normalized in seen_search_urls:
+                    result.search_results_duplicates += 1
+                    continue
+                seen_search_urls.add(normalized)
+                result.search_results_unique += 1
 
                 evidence = " ".join(
                     part for part in [hit.title, hit.snippet] if part

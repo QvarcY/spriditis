@@ -84,6 +84,8 @@ class AppSettings:
 
     searxng_base_url: str = ""
     searxng_timeout_seconds: int = 15
+    searxng_max_retries: int = 2
+    searxng_retry_base_seconds: float = 1.5
 
 
 def load_settings() -> AppSettings:
@@ -117,4 +119,8 @@ def load_settings() -> AppSettings:
         request_timeout_seconds=_int("REQUEST_TIMEOUT_SECONDS", 15),
         searxng_base_url=os.getenv("SEARXNG_BASE_URL", "").strip(),
         searxng_timeout_seconds=max(1, _int("SEARXNG_TIMEOUT_SECONDS", 15)),
+        searxng_max_retries=max(0, _int("SEARXNG_MAX_RETRIES", 2)),
+        searxng_retry_base_seconds=max(
+            0.0, _float("SEARXNG_RETRY_BASE_SECONDS", 1.5)
+        ),
     )

@@ -5,6 +5,8 @@ from pathlib import Path
 
 from spriditis.api.service import run_project
 from spriditis.config import load_settings
+from spriditis.search.base import SearchProviderError
+from spriditis.search.factory import build_search_provider
 from spriditis.search.query import build_search_queries
 
 from spriditis.core.projects import (
@@ -27,7 +29,7 @@ DOMAIN_STATUSES = [
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Sprīdītis 3.2 — universāls tirgus izpētes dzinējs"
+        description="Sprīdītis 3.3 — universāls tirgus izpētes dzinējs"
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -55,6 +57,14 @@ def _parser() -> argparse.ArgumentParser:
 
     queries = sub.add_parser("queries", help="Parādīt deterministisko Expedition search plānu")
     queries.add_argument("--project", required=True)
+
+    search_check = sub.add_parser(
+        "search-check",
+        help="Pārbaudīt konfigurēto SearchProvider bez pilna crawl",
+    )
+    search_check.add_argument("--project", required=True)
+    search_check.add_argument("--query")
+    search_check.add_argument("--limit", type=int, default=5)
 
     domains = sub.add_parser("domains", help="Parādīt projekta Domain Registry")
     domains.add_argument("--project", required=True)
@@ -156,6 +166,53 @@ def main() -> int:
         print(f"Expedition query plāns ({len(queries)}):")
         for index, query in enumerate(queries, start=1):
             print(f"  {index:>2}. {query.query}  [{query.reason}]")
+        return 0
+
+
+    if args.command == "search-check":
+        settings = load_settings()
+        project = load_project(Path(args.project))
+        try:
+            provider = build_search_provider(settings, project)
+        except ValueError as exc:
+            print(f"❌ SearchProvider konfigurācijas kļūda: {exc}")
+            return 2
+        if provider is None:
+            print("SearchProvider nav konfigurēts šim Expedition projektam.")
+            return 2
+
+        if args.query:
+            query_text = args.query.strip()
+        else:
+            plan = build_search_queries(project)
+            if not plan:
+                print("Projektam nav neviena search vaicājuma provider pārbaudei.")
+                return 2
+            query_text = plan[0].query
+
+        language = project.languages[0] if project.languages else "all"
+        limit = max(1, min(args.limit, 20))
+        print(f"🔎 SearchProvider pārbaude: {provider.name}")
+        print(f"   Query: {query_text}")
+        try:
+            hits = provider.search(
+                query_text,
+                language=language,
+                limit=limit,
+                safesearch=project.search.safesearch,
+            )
+        except SearchProviderError as exc:
+            print(f"❌ Provider pārbaude neizdevās: {exc}")
+            print(f"   kind={exc.kind} retryable={exc.retryable} attempts={exc.attempts}")
+            if exc.status_code is not None:
+                print(f"   HTTP: {exc.status_code}")
+            return 1
+
+        print(f"✅ Provider atbildēja. Rezultāti: {len(hits)}")
+        for index, hit in enumerate(hits, start=1):
+            title = " ".join(hit.title.split())[:80] or "-"
+            print(f"  {index:>2}. {title}")
+            print(f"      {hit.url}")
         return 0
 
     if args.command == "discoveries":
@@ -340,7 +397,7 @@ def main() -> int:
             else f"{project.analysis.ai_provider}/{settings.gemini_model}"
         )
 
-        print("🚀 Sprīdītis 3.3.0-alpha.1 sāk pētījumu")
+        print("🚀 Sprīdītis 3.3.0-alpha.2 sāk pētījumu")
         print(f"   Projekts: {project.name}")
         print(f"   ID: {project.id}")
         print(f"   Tips: {project.research_type}")
@@ -384,7 +441,9 @@ def main() -> int:
         if project.crawl.mode == "expedition":
             print(
                 f"   Search: {artifacts.search_queries_issued} vaicājumi / "
-                f"{artifacts.search_results_seen} rezultāti / "
+                f"{artifacts.search_results_seen} raw rezultāti / "
+                f"{artifacts.search_results_unique} unikāli / "
+                f"{artifacts.search_results_duplicates} dublikāti / "
                 f"{artifacts.search_domains_activated} aktivizēti domēni / "
                 f"{artifacts.search_provider_errors} kļūdas"
             )

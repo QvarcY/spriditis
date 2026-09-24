@@ -23,6 +23,8 @@ def build_search_provider(settings: AppSettings, project: ResearchProject) -> Se
         return SearXNGProvider(
             settings.searxng_base_url,
             timeout_seconds=settings.searxng_timeout_seconds,
+            max_retries=settings.searxng_max_retries,
+            retry_base_seconds=settings.searxng_retry_base_seconds,
             user_agent=settings.user_agent,
         )
 

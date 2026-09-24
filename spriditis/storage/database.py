@@ -11,7 +11,7 @@ from spriditis.core.projects import ResearchProject
 from spriditis.core.run import ResearchRunResult
 
 
-CURRENT_SCHEMA_VERSION = 3
+CURRENT_SCHEMA_VERSION = 4
 
 
 SCHEMA = """
@@ -38,6 +38,8 @@ CREATE TABLE IF NOT EXISTS runs (
     domains_found INTEGER DEFAULT 0,
     search_queries_issued INTEGER DEFAULT 0,
     search_results_seen INTEGER DEFAULT 0,
+    search_results_unique INTEGER DEFAULT 0,
+    search_results_duplicates INTEGER DEFAULT 0,
     search_domains_activated INTEGER DEFAULT 0,
     search_provider_errors INTEGER DEFAULT 0,
     FOREIGN KEY(project_id) REFERENCES projects(project_id)
@@ -251,6 +253,16 @@ class Database:
         self._ensure_column(
             "runs",
             "search_results_seen",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
+        self._ensure_column(
+            "runs",
+            "search_results_unique",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
+        self._ensure_column(
+            "runs",
+            "search_results_duplicates",
             "INTEGER NOT NULL DEFAULT 0",
         )
         self._ensure_column(
@@ -705,6 +717,8 @@ class Database:
                 domains_found=?,
                 search_queries_issued=?,
                 search_results_seen=?,
+                search_results_unique=?,
+                search_results_duplicates=?,
                 search_domains_activated=?,
                 search_provider_errors=?
             WHERE id=?
@@ -718,6 +732,8 @@ class Database:
                 len(result.discovered_domains),
                 result.search_queries_issued,
                 result.search_results_seen,
+                result.search_results_unique,
+                result.search_results_duplicates,
                 result.search_domains_activated,
                 result.search_provider_errors,
                 run_id,

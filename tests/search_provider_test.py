@@ -9,6 +9,7 @@ from spriditis.search.searxng import SearXNGProvider
 
 class Response:
     status_code = 200
+    headers = {"Content-Type": "application/json"}
     def json(self):
         return {
             "results": [
