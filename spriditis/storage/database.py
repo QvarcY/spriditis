@@ -815,6 +815,7 @@ class Database:
                 SELECT
                     domain,
                     COUNT(*) AS visits,
+                    COUNT(DISTINCT run_id) AS crawl_runs,
                     SUM(CASE WHEN outcome='html_ok' THEN 1 ELSE 0 END) AS html_ok,
                     SUM(CASE
                         WHEN outcome LIKE 'http_error:%'
@@ -846,6 +847,21 @@ class Database:
                 FROM domain_discoveries
                 WHERE project_id=?
                 GROUP BY target_domain
+            ),
+            observation_stats AS (
+                SELECT
+                    e.source_domain AS domain,
+                    COUNT(*) AS observations,
+                    COUNT(DISTINCT o.run_id) AS productive_runs,
+                    MAX(o.observed_at) AS last_useful_at
+                FROM observations o
+                JOIN entities e
+                  ON e.project_id=o.project_id
+                 AND e.entity_key=o.entity_key
+                WHERE o.project_id=?
+                  AND e.source_domain IS NOT NULL
+                  AND e.source_domain<>''
+                GROUP BY e.source_domain
             )
             SELECT
                 d.domain,
@@ -862,6 +878,7 @@ class Database:
                 d.last_seen,
                 d.last_crawled,
                 COALESCE(v.visits, 0),
+                COALESCE(v.crawl_runs, 0),
                 COALESCE(v.html_ok, 0),
                 COALESCE(v.failures, 0),
                 COALESCE(v.last_visit, ''),
@@ -870,17 +887,25 @@ class Database:
                 COALESCE(x.discovery_events, 0),
                 COALESCE(x.activated_events, 0),
                 COALESCE(x.blocked_events, 0),
-                COALESCE(x.last_discovered, '')
+                COALESCE(x.last_discovered, ''),
+                COALESCE(o.observations, 0),
+                COALESCE(o.productive_runs, 0),
+                COALESCE(o.last_useful_at, '')
             FROM domains d
             LEFT JOIN visit_stats v ON v.domain=d.domain
             LEFT JOIN feed_stats f ON f.domain=d.domain
             LEFT JOIN discovery_stats x ON x.domain=d.domain
+            LEFT JOIN observation_stats o ON o.domain=d.domain
             WHERE d.project_id=?
-            ORDER BY d.entities_found DESC, d.pages_seen DESC,
-                     d.relevance_score DESC, d.domain ASC
+            ORDER BY COALESCE(o.productive_runs, 0) DESC,
+                     d.entities_found DESC,
+                     d.pages_seen DESC,
+                     d.relevance_score DESC,
+                     d.domain ASC
             LIMIT ?
             """,
             (
+                project_id,
                 project_id,
                 project_id,
                 project_id,
@@ -894,7 +919,9 @@ class Database:
             pages_seen = int(row[3] or 0)
             entities_found = int(row[4] or 0)
             visits = int(row[13] or 0)
-            html_ok = int(row[14] or 0)
+            crawl_runs = int(row[14] or 0)
+            html_ok = int(row[15] or 0)
+            productive_runs = int(row[25] or 0)
             profiles.append(
                 {
                     "domain": row[0],
@@ -915,18 +942,26 @@ class Database:
                     "last_seen": row[11] or "",
                     "last_crawled": row[12] or "",
                     "visit_count": visits,
+                    "crawl_runs": crawl_runs,
                     "successful_visits": html_ok,
-                    "failed_visits": int(row[15] or 0),
+                    "failed_visits": int(row[16] or 0),
                     "success_rate": (
                         html_ok / visits if visits else 0.0
                     ),
-                    "last_visit": row[16] or "",
-                    "feed_count": int(row[17] or 0),
-                    "last_feed_success": row[18] or "",
-                    "discovery_events": int(row[19] or 0),
-                    "activated_events": int(row[20] or 0),
-                    "blocked_events": int(row[21] or 0),
-                    "last_discovered": row[22] or "",
+                    "last_visit": row[17] or "",
+                    "feed_count": int(row[18] or 0),
+                    "last_feed_success": row[19] or "",
+                    "discovery_events": int(row[20] or 0),
+                    "activated_events": int(row[21] or 0),
+                    "blocked_events": int(row[22] or 0),
+                    "last_discovered": row[23] or "",
+                    "observation_count": int(row[24] or 0),
+                    "productive_runs": productive_runs,
+                    "productive_run_rate": (
+                        productive_runs / crawl_runs
+                        if crawl_runs else 0.0
+                    ),
+                    "last_useful_at": row[26] or "",
                 }
             )
         return profiles
