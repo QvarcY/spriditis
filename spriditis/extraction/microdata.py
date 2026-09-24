@@ -30,6 +30,28 @@ def _fact(
     )
 
 
+def _belongs_to_scope(tag: Tag, scope: Tag) -> bool:
+    parent = tag.parent
+    while isinstance(parent, Tag):
+        if parent is scope:
+            return True
+        if parent.has_attr("itemscope"):
+            return False
+        parent = parent.parent
+    return False
+
+
+def _find_prop(scope: Tag, name: str) -> Tag | None:
+    pattern = re.compile(
+        rf"(?:^|\s){re.escape(name)}(?:\s|$)",
+        re.I,
+    )
+    for tag in scope.find_all(attrs={"itemprop": pattern}):
+        if isinstance(tag, Tag) and _belongs_to_scope(tag, scope):
+            return tag
+    return None
+
+
 def _prop_value(tag: Tag | None) -> str:
     if tag is None:
         return ""
@@ -39,14 +61,15 @@ def _prop_value(tag: Tag | None) -> str:
         if value:
             return clean_text(value, 2500)
 
+    if tag.has_attr("itemscope"):
+        for nested_name in ("name", "model", "value"):
+            nested = _find_prop(tag, nested_name)
+            if nested is not None:
+                value = _prop_value(nested)
+                if value:
+                    return value
+
     return clean_text(tag.get_text(" ", strip=True), 2500)
-
-
-def _find_prop(scope: Tag, name: str) -> Tag | None:
-    return scope.find(attrs={"itemprop": re.compile(
-        rf"(?:^|\s){re.escape(name)}(?:\s|$)",
-        re.I,
-    )})
 
 
 def _prop(scope: Tag, name: str) -> str:
@@ -87,16 +110,33 @@ def extract_microdata_products(
             continue
 
         description = _prop(scope, "description")
+
+        offers_scope = _find_prop(scope, "offers")
+        if offers_scope is not None and not offers_scope.has_attr("itemscope"):
+            offers_scope = None
+
         price_text, price_prop = _first_prop(
-            scope,
+            offers_scope or scope,
             ("price", "lowPrice"),
         )
+        if not price_text and offers_scope is not None:
+            price_text, price_prop = _first_prop(
+                scope,
+                ("price", "lowPrice"),
+            )
         price = parse_price(price_text)
 
-        raw_currency = _prop(scope, "priceCurrency")
+        raw_currency = _prop(
+            offers_scope or scope,
+            "priceCurrency",
+        )
+        if not raw_currency and offers_scope is not None:
+            raw_currency = _prop(scope, "priceCurrency")
         currency = clean_text(raw_currency or "EUR", 10).upper()
 
         raw_url = _prop(scope, "url")
+        if not raw_url and offers_scope is not None:
+            raw_url = _prop(offers_scope, "url")
         source_url = _absolute(raw_url, page_url) if raw_url else page_url
 
         image_raw = _prop(scope, "image")
@@ -104,8 +144,18 @@ def extract_microdata_products(
 
         seller, seller_prop = _first_prop(
             scope,
-            ("seller", "brand", "manufacturer"),
+            ("seller",),
         )
+        if not seller and offers_scope is not None:
+            seller, seller_prop = _first_prop(
+                offers_scope,
+                ("seller",),
+            )
+        if not seller:
+            seller, seller_prop = _first_prop(
+                scope,
+                ("brand", "manufacturer"),
+            )
 
         attributes: dict[str, str] = {}
         identity_sources: dict[str, str] = {}
