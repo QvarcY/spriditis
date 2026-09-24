@@ -64,6 +64,17 @@ def main():
                 '2026-01-01T00:00:00+00:00',
                 '2026-01-01T00:00:00+00:00'
             );
+
+            INSERT INTO domains(
+                project_id, domain, status, relevance_score,
+                first_seen, last_seen, reason
+            )
+            VALUES (
+                'demo', 'candidate.example', 'candidate', 0.5,
+                '2026-01-01T00:00:00+00:00',
+                '2026-01-01T00:00:00+00:00',
+                'blocked_path'
+            );
             """
         )
         conn.commit()
@@ -105,14 +116,18 @@ def main():
             assert "feed_entries_new" in run_columns
             assert "feed_not_modified" in run_columns
 
-            row = db.conn.execute(
+            rows = db.conn.execute(
                 """
                 SELECT domain, status, reason
                 FROM domains
                 WHERE project_id='demo'
+                ORDER BY domain
                 """
-            ).fetchone()
-            assert row == ("example.com", "candidate", "")
+            ).fetchall()
+            assert rows == [
+                ("candidate.example", "candidate", ""),
+                ("example.com", "candidate", ""),
+            ]
         finally:
             db.close()
 
