@@ -18,7 +18,7 @@ project = ResearchProject.model_validate({
     ],
     "seed_urls": [],
     "search": {
-        "provider": "fake",
+        "provider": "none",
         "max_queries": 4,
         "queries": ["custom chair market"],
     },
