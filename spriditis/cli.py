@@ -884,7 +884,7 @@ def main() -> int:
             else f"{project.analysis.ai_provider}/{settings.gemini_model}"
         )
 
-        print("🚀 Sprīdītis 3.3.0-alpha.4 sāk pētījumu")
+        print("🚀 Sprīdītis 3.3.0-alpha.5 sāk pētījumu")
         print(f"   Projekts: {project.name}")
         print(f"   ID: {project.id}")
         print(f"   Tips: {project.research_type}")
@@ -915,6 +915,11 @@ def main() -> int:
         print(f"   Run ID: {artifacts.run_id}")
         print(f"   Apmeklētas lapas: {artifacts.visited_pages}")
         print(f"   Atrasti objekti: {artifacts.entity_count}")
+        print(
+            f"   STOP_REASON: {artifacts.stop_reason or '-'} "
+            f"(diminishing={artifacts.diminishing_returns_streak}, "
+            f"saturation={artifacts.saturation_streak})"
+        )
         print(
             f"   Domēni: {artifacts.observed_domain_count} novēroti / "
             f"{artifacts.activated_domain_count} aktivizēti / "
