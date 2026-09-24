@@ -2,8 +2,8 @@
 
 ## [3.3.0-alpha.5]
 
-> **Statuss / Status:** pilnībā validēts release kandidāts; pilnais regression gate izpildīts ar 32/32 testiem.  
-> Fully validated release candidate; the complete regression gate passed 32/32 tests.
+> **Statuss / Status:** release baseline pilnībā validēts; pilnais regression gate izpildīts ar 32/32 testiem.  
+> Release baseline fully validated; the complete regression gate passed 32/32 tests.
 
 ### Pievienots / Added
 
