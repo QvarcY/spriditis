@@ -91,11 +91,11 @@ Mērķis: pārvērst katru vērtīgu domēnu par iespējamu efektīvu atkārtota
 - deterministiski RSS/Atom/JSON Feed, storage, 304 un repeat-run testi;
 - reāls publiska RSS tests ar apstiprinātu `304 Not Modified`.
 
-## 🧪 3.3.0-alpha.4 — Research Memory
+## ✅ 3.3.0-alpha.4 — Research Memory
 
 Mērķis: atcerēties ne tikai atrastos datus, bet arī pētījuma procesa efektivitāti.
 
-**Statuss:** implementēts un pilnībā regresijas testēts release candidate branchā; vēl nav mergeots `main` un tagots.
+**Statuss:** publicēts un pilnībā regresijas testēts.
 
 Ieviests:
 
@@ -117,7 +117,7 @@ Alpha4 **krāj un izskaidro** pieredzi. Tā vēl neveic automātisku source/quer
 
 Jaunajām metrikām jābūt izskaidrojamām; viens “mistisks score” nedrīkst aizstāt atsevišķos signālus.
 
-## 🧭 3.3.0-alpha.5 — Adaptive Expedition
+## 🚧 3.3.0-alpha.5 — Adaptive Expedition
 
 Mērķis: izvēlēties labākos pētījuma ceļus bez obligāta maksas MI.
 
@@ -308,11 +308,11 @@ Goal: turn every useful domain into a possible efficient recurring discovery sou
 - deterministic RSS/Atom/JSON Feed, storage, 304 and repeat-run tests;
 - real public RSS validation confirming `304 Not Modified`.
 
-## 🧪 3.3.0-alpha.4 — Research Memory
+## ✅ 3.3.0-alpha.4 — Research Memory
 
 Goal: remember not only collected data, but the effectiveness of the research process itself.
 
-**Status:** implemented and fully regression-tested on the release-candidate branch; not yet merged into `main` or tagged.
+**Status:** released and fully regression-tested.
 
 Implemented:
 
@@ -334,7 +334,7 @@ Alpha4 **records and explains** experience. It does not yet perform automatic so
 
 Metrics stay explainable; one opaque “magic score” must not replace the underlying signals.
 
-## 🧭 3.3.0-alpha.5 — Adaptive Expedition
+## 🚧 3.3.0-alpha.5 — Adaptive Expedition
 
 Goal: choose better research paths without requiring paid AI.
 
