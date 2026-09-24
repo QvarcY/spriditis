@@ -1573,6 +1573,23 @@ def main() -> int:
                     f"reason={obs['cluster_match_reason'] or '-'}"
                 )
             print(f"      {obs['source_url']}")
+
+        print("")
+        print(f"FEED SNAPSHOTS ({len(trace['feed_snapshots'])})")
+        for feed in trace["feed_snapshots"]:
+            print(
+                f"   #{feed['id']} "
+                f"{feed['status']:<8} "
+                f"{feed['feed_type']:<8} "
+                f"new={feed['new_entries']} "
+                f"seen={feed['entries_seen']}"
+            )
+            print(f"      {feed['feed_url']}")
+            if feed["last_entry_id"]:
+                print(f"      last_entry_id={feed['last_entry_id']}")
+            if feed["last_error"]:
+                print(f"      error={feed['last_error']}")
+            print(f"      observed_at={feed['observed_at']}")
         return 0
 
     if args.command == "migrate-db":
