@@ -68,12 +68,14 @@ def run_project(
         )
         search_provider = build_search_provider(settings, project)
         feed_states = db.load_feed_states(project.id)
+        domain_states = db.load_domain_states(project.id)
         crawler = ResearchCrawler(
             settings,
             project,
             ai,
             search_provider=search_provider,
             feed_states=feed_states,
+            domain_states=domain_states,
         )
         result = crawler.crawl()
 
