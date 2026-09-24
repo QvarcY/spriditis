@@ -28,6 +28,7 @@ def main():
         db = Database(Path(tmp) / "spriditis.db")
         try:
             db.save_project(project)
+            run_id = db.start_run(project)
             result = ResearchRunResult(project_id=project.id)
             result.feed_states["https://example.com/feed.xml"] = FeedState(
                 feed_url="https://example.com/feed.xml",
@@ -45,7 +46,13 @@ def main():
                 first_seen="2026-09-24T08:05:00+00:00",
                 last_seen="2026-09-24T08:05:00+00:00",
             )
-            db.save_feed_states(project, result)
+            db.save_feed_states(project, run_id, result)
+
+            snapshots = db.feed_snapshots(project.id, run_id)
+            assert len(snapshots) == 1
+            assert snapshots[0]["feed_url"] == "https://example.com/feed.xml"
+            assert snapshots[0]["status"] == "active"
+            assert snapshots[0]["new_entries"] == 2
 
             states = db.load_feed_states(project.id)
             state = states["https://example.com/feed.xml"]
