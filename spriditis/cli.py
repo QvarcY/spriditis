@@ -221,6 +221,19 @@ def _parser() -> argparse.ArgumentParser:
         help="Parādīt pilnus cluster identifikatorus un signālus",
     )
 
+    diff = sub.add_parser(
+        "diff",
+        help="Salīdzināt divus research run un parādīt jēgpilnas izmaiņas",
+    )
+    diff.add_argument("--project", required=True)
+    diff.add_argument("--run-a", required=True, type=int)
+    diff.add_argument("--run-b", required=True, type=int)
+    diff.add_argument(
+        "--details",
+        action="store_true",
+        help="Parādīt arī eventu before/after/evidence detaļas",
+    )
+
     trace = sub.add_parser(
         "trace",
         help="Parādīt viena research run provenance pēdas",
@@ -1225,6 +1238,109 @@ def main() -> int:
             "--project <fails> --source <source_cluster> "
             "--target <candidate_cluster>"
         )
+        return 0
+
+    if args.command == "diff":
+        from spriditis.storage.database import Database
+
+        settings = load_settings()
+        project = load_project(Path(args.project))
+        db = Database(
+            settings.db_path,
+            legacy_path=settings.legacy_db_path,
+        )
+        try:
+            try:
+                diff = db.compare_runs(
+                    project.id,
+                    args.run_a,
+                    args.run_b,
+                )
+            except ValueError as exc:
+                print(str(exc))
+                return 1
+        finally:
+            db.close()
+
+        before_run = diff["before_run"]
+        after_run = diff["after_run"]
+        counts = diff["counts"]
+
+        print(
+            f"CHANGE DIFF · {project.name} · "
+            f"run #{before_run['id']} → #{after_run['id']}"
+        )
+        print(
+            f"   entities={before_run['entity_count']}→"
+            f"{after_run['entity_count']} · "
+            f"clusters={before_run['cluster_count']}→"
+            f"{after_run['cluster_count']}"
+        )
+        print(
+            "   "
+            + " · ".join(
+                (
+                    f"new={counts['NEW_ENTITY']}",
+                    f"disappeared={counts['ENTITY_DISAPPEARED']}",
+                    f"price_drop={counts['PRICE_DROP']}",
+                    f"price_increase={counts['PRICE_INCREASE']}",
+                    f"source_changed={counts['SOURCE_CHANGED']}",
+                )
+            )
+        )
+
+        if not diff["events"]:
+            print("")
+            print("Nozīmīgas izmaiņas nav atrastas.")
+            return 0
+
+        print("")
+        print(f"CHANGES ({len(diff['events'])})")
+        for event in diff["events"]:
+            print(
+                f"   {event['change_type']:<20} "
+                f"{event['title'] or '-'}"
+            )
+            if event["source_domain"]:
+                print(
+                    f"      source={event['source_domain']} "
+                    f"{event['source_url']}"
+                )
+            if event["change_type"] in (
+                "PRICE_DROP",
+                "PRICE_INCREASE",
+            ):
+                old = event["before"]
+                new = event["after"]
+                print(
+                    f"      {old['price']} {old['currency']} → "
+                    f"{new['price']} {new['currency']}"
+                )
+            if args.details:
+                print(
+                    "      before="
+                    + json.dumps(
+                        event["before"],
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    )
+                )
+                print(
+                    "      after="
+                    + json.dumps(
+                        event["after"],
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    )
+                )
+                print(
+                    "      evidence="
+                    + json.dumps(
+                        event["evidence"],
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    )
+                )
         return 0
 
     if args.command == "trace":
