@@ -98,6 +98,8 @@ entity = MarketEntity(
 
 quality = entity.evidence_quality_summary()
 
+assert "score" not in quality
+assert "average_confidence" not in quality
 assert quality["field_count"] == 7
 assert quality["supported_field_count"] == 6
 assert quality["confidence_bands"] == {
@@ -149,6 +151,8 @@ with TemporaryDirectory() as tmp:
 
         summary = db.project_evidence_quality(project.id)
 
+        assert "score" not in summary
+        assert "average_confidence" not in summary
         assert summary["entity_count"] == 2
         assert summary["entities_with_evidence"] == 1
         assert summary["entities_without_evidence"] == 1
