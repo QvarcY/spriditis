@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from .domains import DomainDiscovery, DomainRecord
 from .entities import MarketEntity
 from .feeds import FeedState
+from .memory import PageVisit
 
 
 @dataclass
@@ -17,6 +18,7 @@ class ResearchRunResult:
     finished_at: str | None = None
 
     entities: list[MarketEntity] = field(default_factory=list)
+    page_visits: list[PageVisit] = field(default_factory=list)
 
     visited_pages: int = 0
     failed_pages: int = 0
