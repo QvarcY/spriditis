@@ -47,7 +47,7 @@ with TemporaryDirectory() as tmp:
     db = Database(_BootstrapPath(tmp) / "spriditis.db")
     try:
         assert db.schema_version() == CURRENT_SCHEMA_VERSION
-        assert CURRENT_SCHEMA_VERSION == 11
+        assert CURRENT_SCHEMA_VERSION == 12
         db.save_project(project)
 
         run_a = db.start_run(project)
@@ -145,6 +145,7 @@ with TemporaryDirectory() as tmp:
         assert diff["comparison_basis"] == {
             "entity_facts": "historical_observation_snapshots",
             "domain_health": "historical_page_visits",
+            "feed_state": "historical_feed_snapshots",
             "identity": "current_canonical_membership",
         }
         assert diff["before_run"]["domain_count"] == 7
@@ -161,6 +162,9 @@ with TemporaryDirectory() as tmp:
             "SOURCE_CHANGED": 0,
             "DOMAIN_FAILED": 1,
             "DOMAIN_RECOVERED": 1,
+            "FEED_NEW_ENTRIES": 0,
+            "FEED_FAILED": 0,
+            "FEED_RECOVERED": 0,
         }
 
         assert len(diff["events"]) == 2
@@ -221,4 +225,4 @@ print("http_4xx=reachable_not_failed")
 print("robots_and_unsafe=unknown_no_event")
 print("mixed_success_and_5xx=reachable_no_event")
 print("one_run_only=no_transition_event")
-print("schema_version=11")
+print(f"schema_version={CURRENT_SCHEMA_VERSION}")
