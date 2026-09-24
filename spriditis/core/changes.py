@@ -17,6 +17,8 @@ CHANGE_TYPES = (
     "SOURCE_CHANGED",
     "DOMAIN_FAILED",
     "DOMAIN_RECOVERED",
+    "FEED_APPEARED",
+    "FEED_DISAPPEARED",
     "FEED_NEW_ENTRIES",
     "FEED_FAILED",
     "FEED_RECOVERED",
@@ -298,8 +300,69 @@ def compare_run_snapshots(
 
     before_feeds = before.get("feeds", {})
     after_feeds = after.get("feeds", {})
+    before_feed_urls = set(before_feeds)
+    after_feed_urls = set(after_feeds)
 
-    for feed_url in sorted(set(before_feeds) & set(after_feeds)):
+    for feed_url in sorted(after_feed_urls - before_feed_urls):
+        new_feed = after_feeds[feed_url]
+        source_domain = new_feed.get("domain") or ""
+        events.append(
+            ChangeEvent(
+                change_type="FEED_APPEARED",
+                cluster_key="",
+                title=feed_url,
+                source_url=feed_url,
+                source_domain=source_domain,
+                before={"observed": False},
+                after={
+                    "observed": True,
+                    "status": new_feed.get("status") or "unknown",
+                    "feed_type": new_feed.get("feed_type") or "unknown",
+                },
+                evidence={
+                    "after_run_id": after["run_id"],
+                    "after_snapshot_id": new_feed["id"],
+                },
+            )
+        )
+
+    for feed_url in sorted(before_feed_urls - after_feed_urls):
+        old_feed = before_feeds[feed_url]
+        source_domain = old_feed.get("domain") or ""
+        after_domain = after_domains.get(source_domain)
+
+        # Absence is only meaningful when the feed's domain was actually
+        # reachable in the later run. Otherwise a crawl budget, robots/safety
+        # decision or domain outage could masquerade as a disappeared feed.
+        if not after_domain or after_domain.get("state") != "reachable":
+            continue
+
+        events.append(
+            ChangeEvent(
+                change_type="FEED_DISAPPEARED",
+                cluster_key="",
+                title=feed_url,
+                source_url=feed_url,
+                source_domain=source_domain,
+                before={
+                    "observed": True,
+                    "status": old_feed.get("status") or "unknown",
+                    "feed_type": old_feed.get("feed_type") or "unknown",
+                },
+                after={"observed": False},
+                evidence={
+                    "before_run_id": before["run_id"],
+                    "after_run_id": after["run_id"],
+                    "before_snapshot_id": old_feed["id"],
+                    "after_domain_visit_ids": after_domain["visit_ids"],
+                    "after_domain_reachable_visit_ids": after_domain[
+                        "reachable_visit_ids"
+                    ],
+                },
+            )
+        )
+
+    for feed_url in sorted(before_feed_urls & after_feed_urls):
         old_feed = before_feeds[feed_url]
         new_feed = after_feeds[feed_url]
         old_status = old_feed.get("status") or "unknown"
