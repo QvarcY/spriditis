@@ -90,6 +90,7 @@ def main():
     assert discovery.action == "blocked"
     assert discovery.reason == "blocked_path"
     assert candidate.status == "candidate"
+    assert candidate.reason == ""
 
     path_registry.add_seed("https://docs.example/start")
     active, discovery = path_registry.observe_link(
