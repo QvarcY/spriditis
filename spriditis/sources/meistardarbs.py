@@ -4,8 +4,24 @@ from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup
 
-from spriditis.core.entities import MarketEntity
+from spriditis.core.entities import ExtractionEvidence, MarketEntity
 from spriditis.extraction.common import PRICE_RE, clean_text, meta, parse_price
+
+
+def _fact(
+    value,
+    *,
+    page_url: str,
+    confidence: float,
+    evidence: str,
+) -> ExtractionEvidence:
+    return ExtractionEvidence(
+        value=value,
+        source_url=page_url,
+        extraction_method="meistardarbs-html",
+        confidence=confidence,
+        evidence=evidence,
+    )
 
 
 def matches(page_url: str) -> bool:
@@ -33,11 +49,13 @@ def extract_product(
         return None
 
     price = None
+    price_currency = ""
     title_pos = page_text.find(title)
     scan = page_text[title_pos:title_pos + 1600] if title_pos >= 0 else page_text[:1600]
     match = PRICE_RE.search(scan)
     if match:
         price = parse_price(match.group(1))
+        price_currency = "EUR"
 
     seller = ""
     seller_header = soup.find(
@@ -71,6 +89,59 @@ def extract_product(
 
     image = meta(soup, prop="og:image")
 
+    image_url = urljoin(page_url, image) if image else ""
+
+    field_evidence: dict[str, ExtractionEvidence] = {
+        "title": _fact(
+            title,
+            page_url=page_url,
+            confidence=0.86,
+            evidence="meistardarbs:h1",
+        ),
+        "source_url": _fact(
+            page_url,
+            page_url=page_url,
+            confidence=0.90,
+            evidence="page_url",
+        ),
+    }
+
+    if description:
+        field_evidence["description"] = _fact(
+            description,
+            page_url=page_url,
+            confidence=0.82,
+            evidence="meistardarbs:Preces apraksts",
+        )
+    if price is not None:
+        field_evidence["price"] = _fact(
+            price,
+            page_url=page_url,
+            confidence=0.84,
+            evidence="meistardarbs:visible_price",
+        )
+    if price_currency:
+        field_evidence["currency"] = _fact(
+            price_currency,
+            page_url=page_url,
+            confidence=0.84,
+            evidence="meistardarbs:visible_price_currency",
+        )
+    if seller:
+        field_evidence["seller"] = _fact(
+            seller,
+            page_url=page_url,
+            confidence=0.78,
+            evidence="meistardarbs:Informācija par pārdevēju",
+        )
+    if image_url:
+        field_evidence["image_url"] = _fact(
+            image_url,
+            page_url=page_url,
+            confidence=0.88,
+            evidence="opengraph:og:image",
+        )
+
     return MarketEntity(
         title=title,
         entity_type="product",
@@ -80,7 +151,8 @@ def extract_product(
         price=price,
         currency="EUR",
         seller=seller,
-        image_url=urljoin(page_url, image) if image else "",
+        image_url=image_url,
         extraction_method="meistardarbs-html",
         evidence=clean_text(f"{title}. {description}", 800),
+        field_evidence=field_evidence,
     )
