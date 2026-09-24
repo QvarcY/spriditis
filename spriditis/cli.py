@@ -186,6 +186,23 @@ def _parser() -> argparse.ArgumentParser:
     cluster_merges.add_argument("--project", required=True)
     cluster_merges.add_argument("--limit", type=int, default=50)
 
+    review_queue = sub.add_parser(
+        "review-queue",
+        help="Parādīt neatrisinātos Entity Resolution gadījumus",
+    )
+    review_queue.add_argument("--project", required=True)
+    review_queue.add_argument(
+        "--kind",
+        choices=["all", "ambiguous", "conflict"],
+        default="all",
+    )
+    review_queue.add_argument("--limit", type=int, default=50)
+    review_queue.add_argument(
+        "--details",
+        action="store_true",
+        help="Parādīt pilnus cluster identifikatorus un signālus",
+    )
+
     trace = sub.add_parser(
         "trace",
         help="Parādīt viena research run provenance pēdas",
@@ -801,6 +818,85 @@ def main() -> int:
                     "   conflicts="
                     + ", ".join(row["conflicting_signals"])
                 )
+        return 0
+
+    if args.command == "review-queue":
+        from spriditis.storage.database import Database
+
+        settings = load_settings()
+        project = load_project(Path(args.project))
+        db = Database(
+            settings.db_path,
+            legacy_path=settings.legacy_db_path,
+        )
+        try:
+            rows = db.entity_resolution_review_queue(
+                project.id,
+                kind=args.kind,
+                limit=args.limit,
+            )
+        finally:
+            db.close()
+
+        if not rows:
+            print("Entity Resolution review queue ir tukša.")
+            return 0
+
+        print(
+            f"{'ID':>4} {'KIND':<10} {'DOMAIN':<22} "
+            f"{'TITLE':<42} {'CAND':>4} {'CONF':>4}"
+        )
+        print("-" * 96)
+
+        for row in rows:
+            kind = (
+                "ambiguous"
+                if row["decision"] == "deferred_ambiguous"
+                else "conflict"
+            )
+            print(
+                f"{row['event_id']:>4} "
+                f"{kind:<10} "
+                f"{row['source_domain'][:22]:<22} "
+                f"{row['title'][:42]:<42} "
+                f"{len(row['candidate_cluster_keys']):>4} "
+                f"{len(row['conflict_cluster_keys']):>4}"
+            )
+            print(
+                f"     source_cluster="
+                f"{row['selected_cluster_key'][:24]}..."
+            )
+
+            if args.details:
+                print(f"     entity_key={row['entity_key']}")
+                print(
+                    f"     source_cluster="
+                    f"{row['selected_cluster_key']}"
+                )
+                if row["candidate_cluster_keys"]:
+                    print("     candidates:")
+                    for key in row["candidate_cluster_keys"]:
+                        print(f"        {key}")
+                if row["conflict_cluster_keys"]:
+                    print("     conflicts:")
+                    for key in row["conflict_cluster_keys"]:
+                        print(f"        {key}")
+                signals = (
+                    row["matched_signals"]
+                    + row["supporting_signals"]
+                    + row["conflicting_signals"]
+                )
+                if signals:
+                    print("     signals=" + ", ".join(signals))
+                print(f"     source={row['source_url']}")
+
+        print("")
+        print(
+            "Risināšanai izmanto: "
+            "python -m spriditis.cli merge-clusters "
+            "--project <fails> --source <source_cluster> "
+            "--target <candidate_cluster>"
+        )
         return 0
 
     if args.command == "trace":
