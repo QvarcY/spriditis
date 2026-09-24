@@ -171,6 +171,13 @@ def _parser() -> argparse.ArgumentParser:
         help="Parādīt pilnus cluster/member identifikatorus",
     )
 
+    explain_cluster = sub.add_parser(
+        "explain-cluster",
+        help="Izskaidrot vienu canonical entity clusteri",
+    )
+    explain_cluster.add_argument("--project", required=True)
+    explain_cluster.add_argument("--cluster", required=True)
+
     merge_clusters = sub.add_parser(
         "merge-clusters",
         help="Explicit un auditējami sapludināt divus entity clusterus",
@@ -735,6 +742,169 @@ def main() -> int:
                         f"         entity_key={member['entity_key']} "
                         f"reason={member['match_reason']}"
                     )
+        return 0
+
+    if args.command == "explain-cluster":
+        from spriditis.storage.database import Database
+
+        settings = load_settings()
+        project = load_project(Path(args.project))
+        db = Database(
+            settings.db_path,
+            legacy_path=settings.legacy_db_path,
+        )
+        try:
+            info = db.explain_entity_cluster(
+                project.id,
+                args.cluster,
+            )
+        finally:
+            db.close()
+
+        if info is None:
+            print(
+                f"Canonical cluster nav atrasts projektā "
+                f"{project.id}: {args.cluster}"
+            )
+            return 1
+
+        print(
+            f"CLUSTER {info['cluster_key']} "
+            f"[{info['status']}]"
+        )
+        print(
+            f"   type={info['entity_type']} "
+            f"title={info['canonical_title']}"
+        )
+        print(
+            f"   members={info['member_count']} "
+            f"sources={info['source_count']} "
+            f"observations={info['observation_count']}"
+        )
+        print(
+            f"   first={info['first_seen']} "
+            f"last={info['last_seen']}"
+        )
+
+        if info["merged_into_cluster_key"]:
+            print(
+                f"   merged_into="
+                f"{info['merged_into_cluster_key']}"
+            )
+            print(f"   merged_at={info['merged_at']}")
+
+        if info["identity_signals"]:
+            print("")
+            print("IDENTITY SIGNALS")
+            for key, values in info["identity_signals"].items():
+                print(f"   {key}: {', '.join(values)}")
+
+        print("")
+        print(f"MEMBERS ({len(info['members'])})")
+        for member in info["members"]:
+            price = (
+                f"{member['last_price']} {member['currency']}"
+                if member["last_price"] is not None
+                else "-"
+            )
+            print(
+                f"   {member['source_domain'] or '-'} "
+                f"{member['title']} · {price}"
+            )
+            print(
+                f"      entity={member['entity_key']} "
+                f"reason={member['match_reason']}"
+            )
+            if member["attributes"]:
+                identity = []
+                for key in (
+                    "gtin",
+                    "brand",
+                    "manufacturer",
+                    "model",
+                    "mpn",
+                    "sku",
+                ):
+                    value = member["attributes"].get(key)
+                    if value not in (None, ""):
+                        identity.append(f"{key}={value}")
+                if identity:
+                    print("      identity=" + " · ".join(identity))
+            print(
+                f"      observations="
+                f"{len(member['observations'])}"
+            )
+            for obs in member["observations"]:
+                obs_price = (
+                    f"{obs['price']} {obs['currency']}"
+                    if obs["price"] is not None
+                    else "-"
+                )
+                print(
+                    f"         run={obs['run_id']} "
+                    f"{obs['observed_at']} · {obs_price}"
+                )
+            print(f"      {member['source_url']}")
+
+        print("")
+        print(
+            f"RESOLUTION EVENTS "
+            f"({len(info['resolution_events'])})"
+        )
+        for event in info["resolution_events"]:
+            print(
+                f"   #{event['id']} "
+                f"{event['decision']} "
+                f"reason={event['reason']}"
+            )
+            signals = (
+                event["matched_signals"]
+                + event["supporting_signals"]
+                + event["conflicting_signals"]
+            )
+            if signals:
+                print("      signals=" + ", ".join(signals))
+
+        print("")
+        print(f"MERGE EVENTS ({len(info['merge_events'])})")
+        for event in info["merge_events"]:
+            print(
+                f"   #{event['id']} "
+                f"{event['decision']} "
+                f"reason={event['reason']}"
+            )
+            print(
+                f"      {event['source_cluster_key']} -> "
+                f"{event['target_cluster_key']}"
+            )
+            signals = (
+                event["matched_signals"]
+                + event["conflicting_signals"]
+            )
+            if signals:
+                print("      signals=" + ", ".join(signals))
+
+        print("")
+        print(
+            f"REVIEW ITEMS ({len(info['review_items'])})"
+        )
+        for item in info["review_items"]:
+            print(
+                f"   #{item['event_id']} "
+                f"{item['decision']} "
+                f"reason={item['reason']}"
+            )
+            if item["candidate_cluster_keys"]:
+                print(
+                    "      candidates="
+                    + ", ".join(item["candidate_cluster_keys"])
+                )
+            if item["conflict_cluster_keys"]:
+                print(
+                    "      conflicts="
+                    + ", ".join(item["conflict_cluster_keys"])
+                )
+
         return 0
 
     if args.command == "merge-clusters":
