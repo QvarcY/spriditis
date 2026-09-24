@@ -1455,6 +1455,259 @@ class Database:
             )
         return result
 
+    def explain_entity_cluster(
+        self,
+        project_id: str,
+        cluster_key: str,
+    ) -> dict | None:
+        cluster = self.conn.execute(
+            """
+            SELECT cluster_key, entity_type, canonical_title,
+                   first_seen, last_seen,
+                   merged_into_cluster_key, merged_at
+            FROM entity_clusters
+            WHERE project_id=? AND cluster_key=?
+            """,
+            (project_id, cluster_key),
+        ).fetchone()
+
+        if cluster is None:
+            return None
+
+        status = "merged" if cluster[5] else "active"
+
+        member_rows = self.conn.execute(
+            """
+            SELECT m.entity_key, e.title, e.source_url, e.source_domain,
+                   e.last_price, e.currency, e.seller, e.attributes_json,
+                   e.first_seen, e.last_seen, m.match_reason,
+                   m.matched_signals_json, m.supporting_signals_json,
+                   m.linked_at
+            FROM entity_cluster_members m
+            JOIN entities e
+              ON e.project_id=m.project_id
+             AND e.entity_key=m.entity_key
+            WHERE m.project_id=? AND m.cluster_key=?
+            ORDER BY m.linked_at, m.entity_key
+            """,
+            (project_id, cluster_key),
+        ).fetchall()
+
+        members: list[dict] = []
+        entity_keys: list[str] = []
+
+        for row in member_rows:
+            entity_key = row[0]
+            entity_keys.append(entity_key)
+            observations = self.conn.execute(
+                """
+                SELECT run_id, observed_at, price, currency
+                FROM observations
+                WHERE project_id=? AND entity_key=?
+                ORDER BY observed_at, id
+                """,
+                (project_id, entity_key),
+            ).fetchall()
+
+            members.append(
+                {
+                    "entity_key": entity_key,
+                    "title": row[1],
+                    "source_url": row[2],
+                    "source_domain": row[3] or "",
+                    "last_price": row[4],
+                    "currency": row[5] or "",
+                    "seller": row[6] or "",
+                    "attributes": json.loads(row[7] or "{}"),
+                    "first_seen": row[8] or "",
+                    "last_seen": row[9] or "",
+                    "match_reason": row[10] or "",
+                    "matched_signals": json.loads(row[11] or "[]"),
+                    "supporting_signals": json.loads(row[12] or "[]"),
+                    "linked_at": row[13] or "",
+                    "observations": [
+                        {
+                            "run_id": int(obs[0]),
+                            "observed_at": obs[1] or "",
+                            "price": obs[2],
+                            "currency": obs[3] or "",
+                        }
+                        for obs in observations
+                    ],
+                }
+            )
+
+        resolution_events: list[dict] = []
+        if entity_keys:
+            placeholders = ",".join("?" for _ in entity_keys)
+            rows = self.conn.execute(
+                f"""
+                SELECT id, run_id, entity_key, decision, reason,
+                       selected_cluster_key,
+                       candidate_cluster_keys_json,
+                       conflict_cluster_keys_json,
+                       matched_signals_json,
+                       supporting_signals_json,
+                       conflicting_signals_json,
+                       compared_entities, resolved_at
+                FROM entity_resolution_events
+                WHERE project_id=?
+                  AND (
+                      entity_key IN ({placeholders})
+                      OR selected_cluster_key=?
+                  )
+                ORDER BY id
+                """,
+                (project_id, *entity_keys, cluster_key),
+            ).fetchall()
+
+            resolution_events = [
+                {
+                    "id": int(row[0]),
+                    "run_id": int(row[1]),
+                    "entity_key": row[2],
+                    "decision": row[3],
+                    "reason": row[4],
+                    "selected_cluster_key": row[5],
+                    "candidate_cluster_keys": json.loads(row[6] or "[]"),
+                    "conflict_cluster_keys": json.loads(row[7] or "[]"),
+                    "matched_signals": json.loads(row[8] or "[]"),
+                    "supporting_signals": json.loads(row[9] or "[]"),
+                    "conflicting_signals": json.loads(row[10] or "[]"),
+                    "compared_entities": int(row[11] or 0),
+                    "resolved_at": row[12] or "",
+                }
+                for row in rows
+            ]
+        else:
+            rows = self.conn.execute(
+                """
+                SELECT id, run_id, entity_key, decision, reason,
+                       selected_cluster_key,
+                       candidate_cluster_keys_json,
+                       conflict_cluster_keys_json,
+                       matched_signals_json,
+                       supporting_signals_json,
+                       conflicting_signals_json,
+                       compared_entities, resolved_at
+                FROM entity_resolution_events
+                WHERE project_id=? AND selected_cluster_key=?
+                ORDER BY id
+                """,
+                (project_id, cluster_key),
+            ).fetchall()
+            resolution_events = [
+                {
+                    "id": int(row[0]),
+                    "run_id": int(row[1]),
+                    "entity_key": row[2],
+                    "decision": row[3],
+                    "reason": row[4],
+                    "selected_cluster_key": row[5],
+                    "candidate_cluster_keys": json.loads(row[6] or "[]"),
+                    "conflict_cluster_keys": json.loads(row[7] or "[]"),
+                    "matched_signals": json.loads(row[8] or "[]"),
+                    "supporting_signals": json.loads(row[9] or "[]"),
+                    "conflicting_signals": json.loads(row[10] or "[]"),
+                    "compared_entities": int(row[11] or 0),
+                    "resolved_at": row[12] or "",
+                }
+                for row in rows
+            ]
+
+        merge_rows = self.conn.execute(
+            """
+            SELECT id, source_cluster_key, target_cluster_key,
+                   decision, reason, matched_signals_json,
+                   conflicting_signals_json, source_member_count,
+                   target_member_count, merged_member_count, requested_at
+            FROM entity_cluster_merge_events
+            WHERE project_id=?
+              AND (
+                  source_cluster_key=?
+                  OR target_cluster_key=?
+              )
+            ORDER BY id
+            """,
+            (project_id, cluster_key, cluster_key),
+        ).fetchall()
+
+        merge_events = [
+            {
+                "id": int(row[0]),
+                "source_cluster_key": row[1],
+                "target_cluster_key": row[2],
+                "decision": row[3],
+                "reason": row[4],
+                "matched_signals": json.loads(row[5] or "[]"),
+                "conflicting_signals": json.loads(row[6] or "[]"),
+                "source_member_count": int(row[7] or 0),
+                "target_member_count": int(row[8] or 0),
+                "merged_member_count": int(row[9] or 0),
+                "requested_at": row[10] or "",
+            }
+            for row in merge_rows
+        ]
+
+        review_rows = self.entity_resolution_review_queue(
+            project_id,
+            kind="all",
+            limit=1000,
+        )
+        review_items = [
+            item
+            for item in review_rows
+            if item["selected_cluster_key"] == cluster_key
+        ]
+
+        source_domains = {
+            member["source_domain"]
+            for member in members
+            if member["source_domain"]
+        }
+        observation_count = sum(
+            len(member["observations"])
+            for member in members
+        )
+
+        identity_signals: dict[str, list[str]] = {}
+        for member in members:
+            attributes = member["attributes"]
+            for key in (
+                "gtin",
+                "brand",
+                "manufacturer",
+                "model",
+                "mpn",
+                "sku",
+            ):
+                value = attributes.get(key)
+                if value in (None, ""):
+                    continue
+                text_value = str(value)
+                bucket = identity_signals.setdefault(key, [])
+                if text_value not in bucket:
+                    bucket.append(text_value)
+
+        return {
+            "cluster_key": cluster[0],
+            "entity_type": cluster[1],
+            "canonical_title": cluster[2],
+            "first_seen": cluster[3],
+            "last_seen": cluster[4],
+            "status": status,
+            "merged_into_cluster_key": cluster[5] or "",
+            "merged_at": cluster[6] or "",
+            "member_count": len(members),
+            "source_count": len(source_domains),
+            "observation_count": observation_count,
+            "identity_signals": identity_signals,
+            "members": members,
+            "resolution_events": resolution_events,
+            "merge_events": merge_events,
+            "review_items": review_items,
+        }
+
     def save_domain_registry(
         self,
         project: ResearchProject,
