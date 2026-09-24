@@ -11,8 +11,13 @@ CHANGE_TYPES = (
     "ENTITY_DISAPPEARED",
     "PRICE_DROP",
     "PRICE_INCREASE",
+    "SELLER_CHANGED",
+    "DESCRIPTION_CHANGED",
+    "IMAGE_CHANGED",
     "SOURCE_CHANGED",
 )
+
+FIELD_CHANGE_MIN_CONFIDENCE = 0.70
 
 
 class ChangeEvent(BaseModel):
@@ -34,6 +39,37 @@ def _decimal_price(value: Any) -> Decimal | None:
         return Decimal(str(value))
     except (InvalidOperation, ValueError):
         return None
+
+
+def _normalized_field_value(value: Any) -> Any:
+    if isinstance(value, str):
+        return " ".join(value.split())
+    return value
+
+
+def _supported_field_fact(
+    entity: dict[str, Any],
+    field: str,
+) -> dict[str, Any] | None:
+    field_evidence = entity.get("field_evidence") or {}
+    fact = field_evidence.get(field)
+    if not isinstance(fact, dict):
+        return None
+
+    if _normalized_field_value(fact.get("value")) != _normalized_field_value(
+        entity.get(field)
+    ):
+        return None
+
+    try:
+        confidence = float(fact.get("confidence") or 0.0)
+    except (TypeError, ValueError):
+        return None
+
+    if confidence < FIELD_CHANGE_MIN_CONFIDENCE:
+        return None
+
+    return fact
 
 
 def compare_run_snapshots(
@@ -155,53 +191,90 @@ def compare_run_snapshots(
         new_currency = new.get("currency") or ""
 
         if (
-            old_price is None
-            or new_price is None
-            or not old_currency
-            or old_currency != new_currency
-            or old_price == new_price
+            old_price is not None
+            and new_price is not None
+            and old_currency
+            and old_currency == new_currency
+            and old_price != new_price
         ):
-            continue
-
-        change_type = (
-            "PRICE_DROP"
-            if new_price < old_price
-            else "PRICE_INCREASE"
-        )
-        events.append(
-            ChangeEvent(
-                change_type=change_type,
-                cluster_key=new["cluster_key"],
-                entity_key=entity_key,
-                title=new["title"] or old["title"],
-                source_url=new["source_url"],
-                source_domain=new["source_domain"],
-                before={
-                    "price": float(old_price),
-                    "currency": old_currency,
-                },
-                after={
-                    "price": float(new_price),
-                    "currency": new_currency,
-                },
-                evidence={
-                    "before_observation_id": old["observation_id"],
-                    "after_observation_id": new["observation_id"],
-                    "before_run_id": before["run_id"],
-                    "after_run_id": after["run_id"],
-                    "before_field_evidence": {
-                        field: old["field_evidence"][field]
-                        for field in ("price", "currency")
-                        if field in old["field_evidence"]
-                    },
-                    "after_field_evidence": {
-                        field: new["field_evidence"][field]
-                        for field in ("price", "currency")
-                        if field in new["field_evidence"]
-                    },
-                },
+            change_type = (
+                "PRICE_DROP"
+                if new_price < old_price
+                else "PRICE_INCREASE"
             )
+            events.append(
+                ChangeEvent(
+                    change_type=change_type,
+                    cluster_key=new["cluster_key"],
+                    entity_key=entity_key,
+                    title=new["title"] or old["title"],
+                    source_url=new["source_url"],
+                    source_domain=new["source_domain"],
+                    before={
+                        "price": float(old_price),
+                        "currency": old_currency,
+                    },
+                    after={
+                        "price": float(new_price),
+                        "currency": new_currency,
+                    },
+                    evidence={
+                        "before_observation_id": old["observation_id"],
+                        "after_observation_id": new["observation_id"],
+                        "before_run_id": before["run_id"],
+                        "after_run_id": after["run_id"],
+                        "before_field_evidence": {
+                            field: old["field_evidence"][field]
+                            for field in ("price", "currency")
+                            if field in old["field_evidence"]
+                        },
+                        "after_field_evidence": {
+                            field: new["field_evidence"][field]
+                            for field in ("price", "currency")
+                            if field in new["field_evidence"]
+                        },
+                    },
+                )
+            )
+
+        field_changes = (
+            ("seller", "SELLER_CHANGED"),
+            ("description", "DESCRIPTION_CHANGED"),
+            ("image_url", "IMAGE_CHANGED"),
         )
+        for field, change_type in field_changes:
+            old_fact = _supported_field_fact(old, field)
+            new_fact = _supported_field_fact(new, field)
+            if old_fact is None or new_fact is None:
+                continue
+
+            old_value = _normalized_field_value(old.get(field))
+            new_value = _normalized_field_value(new.get(field))
+            if old_value == new_value:
+                continue
+
+            events.append(
+                ChangeEvent(
+                    change_type=change_type,
+                    cluster_key=new["cluster_key"],
+                    entity_key=entity_key,
+                    title=new["title"] or old["title"],
+                    source_url=new["source_url"],
+                    source_domain=new["source_domain"],
+                    before={field: old.get(field)},
+                    after={field: new.get(field)},
+                    evidence={
+                        "field": field,
+                        "minimum_confidence": FIELD_CHANGE_MIN_CONFIDENCE,
+                        "before_observation_id": old["observation_id"],
+                        "after_observation_id": new["observation_id"],
+                        "before_run_id": before["run_id"],
+                        "after_run_id": after["run_id"],
+                        "before_field_evidence": old_fact,
+                        "after_field_evidence": new_fact,
+                    },
+                )
+            )
 
     order = {name: index for index, name in enumerate(CHANGE_TYPES)}
     return sorted(
