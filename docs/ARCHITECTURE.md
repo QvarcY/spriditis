@@ -1,6 +1,6 @@
 # Sprīdītis — arhitektūra / Architecture
 
-Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.2**
+Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.3**
 
 > **Latviski pirmajā vietā, angļu valoda zemāk. / Latvian first, English below.**
 
@@ -32,7 +32,7 @@ Crawler
       ├── crawl budgets
       ├── sitemap discovery
       ├── external-link discovery
-      └── nākotnē: RSS / Atom / JSON Feed
+      └── RSS / Atom / JSON Feed
              ↓
 Structured Extraction
              ↓
@@ -51,7 +51,9 @@ Reports / service consumers
 Atkārtoti izmantojamie modeļi: `ResearchProject`, `MarketEntity`, run struktūras, Domain Registry ieraksti un discovery eventi.
 
 ### `spriditis/crawler`
-URL frontier, normalizācija, drošības politika, robots, crawl dziļums/budžeti, sitemap discovery, Domain Registry lēmumi un crawl engine.
+URL frontier, normalizācija, drošības politika, robots, crawl dziļums/budžeti, sitemap discovery, Feed Discovery, Domain Registry lēmumi un crawl engine.
+
+3.3.0-alpha.3 pievieno RSS 2.0, Atom un JSON Feed autodiscovery no HTML, kontekstuālu feed prioritizāciju, conditional HTTP pieprasījumus ar `ETag`/`Last-Modified` un `304 Not Modified`. Feed ierakstu URL neapiet crawlera drošības vai relevances politiku.
 
 ### `spriditis/search`
 Provider-neatkarīgs `SearchProvider`, query ģenerēšana, search rezultātu modeļi, FakeSearchProvider testiem un SearXNG provideris.
@@ -92,6 +94,8 @@ Statusi:
 
 Discovery eventiem jāsaglabā provenance: source URL, target URL, relevance signāli, darbība, iemesls un laiks.
 
+No 3.3.0-alpha.3 Domain Registry stāvoklis tiek hidratēts no SQLite **pirms** jaunā run discovery lēmumiem. `blocked` un `rejected` saglabājas sticky, `active` tiek atpazīts kā zināms, bet run-local lapu/entity skaitītāji sākas no nulles, lai vēsturiskie skaitītāji netiktu pieskaitīti atkārtoti.
+
 ## Research Memory virziens
 
 Plānotais lineage:
@@ -120,9 +124,9 @@ Svarīgs princips: **katram nozīmīgam lēmumam jābūt izskaidrojamam.** Tāp�
 
 ## Feed state un HTTP resursu stāvoklis
 
-RSS/Atom/JSON Feed dati netiks glabāti kā nejaušas kolonnas `domains` tabulā. Vienam domēnam var būt vairāki feedi, tāpēc vajadzīgs 1:N feed modelis.
+RSS/Atom/JSON Feed dati netiek glabāti kā nejaušas kolonnas `domains` tabulā. Vienam domēnam var būt vairāki feedi, tāpēc 3.3.0-alpha.3 izmanto atsevišķu 1:N `feeds` tabulu (DB schema v5).
 
-Paredzētais feed state:
+Feed state:
 - feed URL;
 - feed type;
 - status;
@@ -183,7 +187,7 @@ Crawler
       ├── crawl budgets
       ├── sitemap discovery
       ├── external-link discovery
-      └── future: RSS / Atom / JSON Feed
+      └── RSS / Atom / JSON Feed
              ↓
 Structured Extraction
              ↓
@@ -202,7 +206,9 @@ Reports / service consumers
 Reusable models: `ResearchProject`, `MarketEntity`, run structures, Domain Registry records and discovery events.
 
 ### `spriditis/crawler`
-URL frontier, normalization, safety policy, robots handling, crawl depth/budgets, sitemap discovery, Domain Registry decisions and crawl engine.
+URL frontier, normalization, safety policy, robots handling, crawl depth/budgets, sitemap discovery, Feed Discovery, Domain Registry decisions and crawl engine.
+
+3.3.0-alpha.3 adds RSS 2.0, Atom and JSON Feed autodiscovery from HTML, context-aware feed prioritization, conditional HTTP requests with `ETag`/`Last-Modified`, and `304 Not Modified`. Feed-entry URLs do not bypass crawler safety or relevance policy.
 
 ### `spriditis/search`
 Provider-neutral `SearchProvider`, query generation, search-result models, FakeSearchProvider for tests and SearXNG provider.
@@ -243,6 +249,8 @@ States:
 
 Discovery events preserve provenance: source URL, target URL, relevance signals, action, reason and timestamp.
 
+Since 3.3.0-alpha.3, Domain Registry state is hydrated from SQLite **before** discovery decisions for a new run. `blocked` and `rejected` remain sticky, `active` domains are recognized as known, while run-local page/entity counters start at zero so historical totals are not replayed.
+
 ## Research Memory direction
 
 Planned lineage:
@@ -271,9 +279,9 @@ Important principle: **every important decision should be explainable.** This ma
 
 ## Feed state and HTTP resource state
 
-RSS/Atom/JSON Feed data should not become random columns in `domains`. One domain may expose multiple feeds, so a 1:N feed model is preferred.
+RSS/Atom/JSON Feed data is not stored as random columns in `domains`. One domain may expose multiple feeds, so 3.3.0-alpha.3 uses a dedicated 1:N `feeds` table (database schema v5).
 
-Expected feed state:
+Feed state:
 - feed URL;
 - feed type;
 - status;

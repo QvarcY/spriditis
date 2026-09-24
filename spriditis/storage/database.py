@@ -6,12 +6,14 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
+from spriditis.core.domains import DomainRecord
 from spriditis.core.entities import MarketEntity
+from spriditis.core.feeds import FeedState
 from spriditis.core.projects import ResearchProject
 from spriditis.core.run import ResearchRunResult
 
 
-CURRENT_SCHEMA_VERSION = 4
+CURRENT_SCHEMA_VERSION = 5
 
 
 SCHEMA = """
@@ -42,6 +44,12 @@ CREATE TABLE IF NOT EXISTS runs (
     search_results_duplicates INTEGER DEFAULT 0,
     search_domains_activated INTEGER DEFAULT 0,
     search_provider_errors INTEGER DEFAULT 0,
+    feed_candidates_seen INTEGER DEFAULT 0,
+    feeds_found INTEGER DEFAULT 0,
+    feed_entries_seen INTEGER DEFAULT 0,
+    feed_entries_new INTEGER DEFAULT 0,
+    feed_not_modified INTEGER DEFAULT 0,
+    feed_errors INTEGER DEFAULT 0,
     FOREIGN KEY(project_id) REFERENCES projects(project_id)
 );
 
@@ -133,6 +141,31 @@ CREATE TABLE IF NOT EXISTS domain_discoveries (
 
 CREATE INDEX IF NOT EXISTS idx_domain_discoveries_target
 ON domain_discoveries(project_id, target_domain, discovered_at);
+
+
+CREATE TABLE IF NOT EXISTS feeds (
+    project_id TEXT NOT NULL,
+    feed_url TEXT NOT NULL,
+    domain TEXT NOT NULL,
+    feed_type TEXT NOT NULL DEFAULT 'unknown',
+    status TEXT NOT NULL DEFAULT 'unknown',
+    etag TEXT DEFAULT '',
+    last_modified TEXT DEFAULT '',
+    last_entry_id TEXT DEFAULT '',
+    last_published TEXT DEFAULT '',
+    last_checked TEXT DEFAULT '',
+    last_success TEXT DEFAULT '',
+    entries_seen INTEGER NOT NULL DEFAULT 0,
+    new_entries INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT DEFAULT '',
+    first_seen TEXT NOT NULL,
+    last_seen TEXT NOT NULL,
+    PRIMARY KEY(project_id, feed_url),
+    FOREIGN KEY(project_id) REFERENCES projects(project_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_feeds_project_domain
+ON feeds(project_id, domain, status);
 
 CREATE TABLE IF NOT EXISTS schema_meta (
     key TEXT PRIMARY KEY,
@@ -273,6 +306,36 @@ class Database:
         self._ensure_column(
             "runs",
             "search_provider_errors",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
+        self._ensure_column(
+            "runs",
+            "feed_candidates_seen",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
+        self._ensure_column(
+            "runs",
+            "feeds_found",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
+        self._ensure_column(
+            "runs",
+            "feed_entries_seen",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
+        self._ensure_column(
+            "runs",
+            "feed_entries_new",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
+        self._ensure_column(
+            "runs",
+            "feed_not_modified",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
+        self._ensure_column(
+            "runs",
+            "feed_errors",
             "INTEGER NOT NULL DEFAULT 0",
         )
         self._ensure_column(
@@ -580,6 +643,181 @@ class Database:
 
         self.conn.commit()
 
+
+
+    def load_domain_states(
+        self,
+        project_id: str,
+    ) -> dict[str, DomainRecord]:
+        rows = self.conn.execute(
+            """
+            SELECT domain, status, discovered_via, discovered_from_url,
+                   relevance_score, robots_status, sitemap_status,
+                   sitemap_urls_found, first_seen, last_seen,
+                   last_crawled, reason
+            FROM domains
+            WHERE project_id=?
+            """,
+            (project_id,),
+        ).fetchall()
+
+        states: dict[str, DomainRecord] = {}
+        for row in rows:
+            record = DomainRecord(
+                domain=row[0],
+                status=row[1],
+                discovered_via=row[2] or "link",
+                discovered_from_url=row[3] or "",
+                relevance_score=float(row[4] or 0.0),
+                robots_status=row[5] or "unknown",
+                sitemap_status=row[6] or "unknown",
+                sitemap_urls_found=int(row[7] or 0),
+                # Run-local counters intentionally start at zero. Historical
+                # totals remain in SQLite and are merged by save_domain_registry().
+                pages_seen=0,
+                entities_found=0,
+                first_seen=row[8],
+                last_seen=row[9],
+                last_crawled=row[10],
+                reason=row[11] or "",
+            )
+            states[record.domain] = record
+
+        return states
+
+    def load_feed_states(self, project_id: str) -> dict[str, FeedState]:
+        rows = self.conn.execute(
+            """
+            SELECT feed_url, domain, feed_type, status, etag,
+                   last_modified, last_entry_id, last_published,
+                   last_checked, last_success, entries_seen,
+                   new_entries, last_error, first_seen, last_seen
+            FROM feeds
+            WHERE project_id=?
+            """,
+            (project_id,),
+        ).fetchall()
+
+        states: dict[str, FeedState] = {}
+        for row in rows:
+            state = FeedState(
+                feed_url=row[0],
+                domain=row[1],
+                feed_type=row[2],
+                status=row[3],
+                etag=row[4] or "",
+                last_modified=row[5] or "",
+                last_entry_id=row[6] or "",
+                last_published=row[7] or "",
+                last_checked=row[8] or "",
+                last_success=row[9] or "",
+                entries_seen=int(row[10] or 0),
+                new_entries=int(row[11] or 0),
+                last_error=row[12] or "",
+                first_seen=row[13] or "",
+                last_seen=row[14] or "",
+            )
+            states[state.feed_url] = state
+        return states
+
+    def save_feed_states(
+        self,
+        project: ResearchProject,
+        result: ResearchRunResult,
+    ):
+        for state in result.feed_states.values():
+            now = datetime.now(timezone.utc).isoformat()
+            first_seen = state.first_seen or now
+            last_seen = state.last_seen or now
+
+            self.conn.execute(
+                """
+                INSERT INTO feeds(
+                    project_id, feed_url, domain, feed_type, status,
+                    etag, last_modified, last_entry_id, last_published,
+                    last_checked, last_success, entries_seen, new_entries,
+                    last_error, first_seen, last_seen
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(project_id, feed_url) DO UPDATE SET
+                    domain=excluded.domain,
+                    feed_type=excluded.feed_type,
+                    status=excluded.status,
+                    etag=excluded.etag,
+                    last_modified=excluded.last_modified,
+                    last_entry_id=excluded.last_entry_id,
+                    last_published=excluded.last_published,
+                    last_checked=excluded.last_checked,
+                    last_success=excluded.last_success,
+                    entries_seen=excluded.entries_seen,
+                    new_entries=excluded.new_entries,
+                    last_error=excluded.last_error,
+                    last_seen=excluded.last_seen
+                """,
+                (
+                    project.id,
+                    state.feed_url,
+                    state.domain,
+                    state.feed_type,
+                    state.status,
+                    state.etag,
+                    state.last_modified,
+                    state.last_entry_id,
+                    state.last_published,
+                    state.last_checked,
+                    state.last_success,
+                    state.entries_seen,
+                    state.new_entries,
+                    state.last_error,
+                    first_seen,
+                    last_seen,
+                ),
+            )
+
+        self.conn.commit()
+
+    def list_feeds(
+        self,
+        project_id: str,
+        *,
+        status: str | None = None,
+    ) -> list[dict]:
+        sql = """
+        SELECT feed_url, domain, feed_type, status, etag,
+               last_modified, last_entry_id, last_published,
+               last_checked, last_success, entries_seen,
+               new_entries, last_error, first_seen, last_seen
+        FROM feeds
+        WHERE project_id=?
+        """
+        params: list[object] = [project_id]
+
+        if status:
+            sql += " AND status=?"
+            params.append(status)
+
+        sql += " ORDER BY domain ASC, feed_url ASC"
+        rows = self.conn.execute(sql, params).fetchall()
+
+        keys = [
+            "feed_url",
+            "domain",
+            "feed_type",
+            "status",
+            "etag",
+            "last_modified",
+            "last_entry_id",
+            "last_published",
+            "last_checked",
+            "last_success",
+            "entries_seen",
+            "new_entries",
+            "last_error",
+            "first_seen",
+            "last_seen",
+        ]
+        return [dict(zip(keys, row)) for row in rows]
+
     def list_domains(
         self,
         project_id: str,
@@ -720,7 +958,13 @@ class Database:
                 search_results_unique=?,
                 search_results_duplicates=?,
                 search_domains_activated=?,
-                search_provider_errors=?
+                search_provider_errors=?,
+                feed_candidates_seen=?,
+                feeds_found=?,
+                feed_entries_seen=?,
+                feed_entries_new=?,
+                feed_not_modified=?,
+                feed_errors=?
             WHERE id=?
             """,
             (
@@ -736,6 +980,12 @@ class Database:
                 result.search_results_duplicates,
                 result.search_domains_activated,
                 result.search_provider_errors,
+                result.feed_candidates_seen,
+                result.feeds_found,
+                result.feed_entries_seen,
+                result.feed_entries_new,
+                result.feed_not_modified,
+                result.feed_errors,
                 run_id,
             ),
         )

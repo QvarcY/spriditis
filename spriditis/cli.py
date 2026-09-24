@@ -86,6 +86,13 @@ def _parser() -> argparse.ArgumentParser:
     )
     discoveries.add_argument("--limit", type=int, default=50)
 
+    feeds = sub.add_parser(
+        "feeds",
+        help="Parādīt projekta RSS/Atom/JSON Feed stāvokli",
+    )
+    feeds.add_argument("--project", required=True)
+    feeds.add_argument("--status")
+
     migrate = sub.add_parser(
         "migrate-db",
         help="Droši pārnest veco SQLite DB uz versiju-neitrālo DB",
@@ -275,6 +282,47 @@ def main() -> int:
         )
         return 0
 
+
+    if args.command == "feeds":
+        from spriditis.storage.database import Database
+
+        settings = load_settings()
+        project = load_project(Path(args.project))
+        db = Database(
+            settings.db_path,
+            legacy_path=settings.legacy_db_path,
+        )
+
+        try:
+            rows = db.list_feeds(project.id, status=args.status)
+        finally:
+            db.close()
+
+        if not rows:
+            print("Šim projektam vēl nav saglabātu feed.")
+            return 0
+
+        print(
+            f"{'TYPE':<9} {'STATUS':<13} {'DOMAIN':<28} "
+            f"{'SEEN':>6} {'NEW':>6} {'LAST CHECK':<25}"
+        )
+        print("-" * 96)
+
+        for row in rows:
+            print(
+                f"{row['feed_type']:<9} "
+                f"{row['status']:<13} "
+                f"{row['domain'][:28]:<28} "
+                f"{row['entries_seen']:>6} "
+                f"{row['new_entries']:>6} "
+                f"{(row['last_checked'] or '-')[:25]:<25}"
+            )
+            print(f"    {row['feed_url']}")
+            if row["last_error"]:
+                print(f"    error={row['last_error']}")
+
+        return 0
+
     if args.command == "migrate-db":
         from spriditis.storage.database import Database, sqlite_backup
 
@@ -397,7 +445,7 @@ def main() -> int:
             else f"{project.analysis.ai_provider}/{settings.gemini_model}"
         )
 
-        print("🚀 Sprīdītis 3.3.0-alpha.2 sāk pētījumu")
+        print("🚀 Sprīdītis 3.3.0-alpha.3 sāk pētījumu")
         print(f"   Projekts: {project.name}")
         print(f"   ID: {project.id}")
         print(f"   Tips: {project.research_type}")
@@ -437,6 +485,15 @@ def main() -> int:
             print(
                 f"      {status}: "
                 f"{artifacts.domain_status_counts.get(status, 0)}"
+            )
+        if project.crawl.discover_feeds:
+            print(
+                f"   Feed: {artifacts.feed_candidates_seen} kandidāti / "
+                f"{artifacts.feeds_found} atrasti / "
+                f"{artifacts.feed_entries_seen} ieraksti / "
+                f"{artifacts.feed_entries_new} jauni / "
+                f"{artifacts.feed_not_modified} nemainīti / "
+                f"{artifacts.feed_errors} kļūdas"
             )
         if project.crawl.mode == "expedition":
             print(

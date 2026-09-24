@@ -1,5 +1,48 @@
 # Izmaiņu vēsture / Changelog
 
+## [3.3.0-alpha.3]
+
+### Pievienots / Added
+
+- RSS 2.0, Atom un JSON Feed parseri / RSS 2.0, Atom and JSON Feed parsers
+- HTML `<link rel="alternate">` feed autodiscovery
+- kontekstuāla feed kandidātu prioritizācija / context-aware feed candidate ordering
+- atsevišķs `FeedState` modelis un `feeds` SQLite tabula / dedicated `FeedState` model and SQLite `feeds` table
+- `ETag`, `Last-Modified`, `If-None-Match`, `If-Modified-Since`
+- `304 Not Modified` incremental monitoring
+- `last_entry_id`, `last_published`, `last_checked`, `last_success`
+- feed provenance caur Domain Registry / feed provenance through Domain Registry
+- `feeds` CLI komanda
+- feed kandidātu, ierakstu, jauno ierakstu, 304 un kļūdu run skaitītāji / feed run counters
+- UTF-8 BOM toleranta project JSON ielāde / UTF-8 BOM tolerant project JSON loading
+
+### Uzlabots / Improved
+
+- feed ierakstu URL izmanto esošo safety → relevance → Domain Registry → frontier plūsmu / feed-entry URLs use the existing safety → relevance → Domain Registry → frontier path
+- sekcijai specifiski feedi tiek prioritizēti pirms generic/comment feediem / section-specific feeds outrank generic/comment feeds
+- feed redirect gadījumā persistentā resursa identitāte saglabā discovery URL, lai nezaudētu conditional-request state / persistent feed identity keeps the discovered URL across same-host redirects
+- `304` ir fetch iznākums, nevis feed lifecycle statuss / `304` is a fetch outcome, not a feed lifecycle state
+- Domain Registry tiek hidratēts no SQLite pirms atkārtota run discovery lēmumiem / Domain Registry is hydrated from SQLite before repeated-run discovery decisions
+- `blocked` un `rejected` stāvokļi paliek sticky; `active` tiek atpazīts kā zināms / sticky lifecycle behavior for `blocked`, `rejected`, and known `active`
+- vēsturiskie `pages_seen`/`entities_found` netiek replayoti jaunā run / historical run counters are not replayed
+
+### Mainīts / Changed
+
+- DB schema version 5
+- Feed Discovery ir pilnvērtīgs discovery slānis blakus SearchProvider, HTML linkiem un sitemap / Feed Discovery is a first-class discovery layer alongside SearchProvider, HTML links and sitemaps
+
+### Validācija / Validation
+
+- deterministiski RSS, Atom un JSON Feed parseru testi / deterministic RSS, Atom and JSON Feed parser tests
+- feed storage un DB migration testi / feed storage and DB migration tests
+- feed → frontier crawler integrācijas tests / feed-to-frontier crawler integration test
+- conditional request / `304` tests
+- repeat-run Domain Registry persistence tests
+- visi SearchProvider, Expedition, discovery, sitemap un smoke regression testi paliek zaļi / existing SearchProvider, Expedition, discovery, sitemap and smoke regressions remain green
+- reālā publiskā GitHub Changelog RSS pārbaudē divi feedi atkārtotā run atbildēja ar `304 Not Modified` / real public GitHub Changelog RSS validation confirmed `304 Not Modified` for both selected feeds
+
+---
+
 ## [3.3.0-alpha.2]
 
 ### Pievienots / Added

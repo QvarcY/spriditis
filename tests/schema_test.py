@@ -40,3 +40,26 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def _bom_project_load_test():
+    from pathlib import Path
+    from tempfile import TemporaryDirectory
+
+    from spriditis.core.projects import load_project
+
+    with TemporaryDirectory() as tmp:
+        path = Path(tmp) / "bom_project.json"
+        payload = """{
+  "id": "bom_project",
+  "name": "BOM project",
+  "research_type": "product_market",
+  "entity_type": "product",
+  "seed_urls": ["https://example.com"]
+}"""
+        path.write_text(payload, encoding="utf-8-sig")
+        project = load_project(path)
+        assert project.id == "bom_project"
+
+
+_bom_project_load_test()

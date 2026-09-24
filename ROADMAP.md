@@ -26,7 +26,7 @@
 
 # Latviski
 
-## ✅ Pašreizējā publiskā bāze — 3.3.0-alpha.2
+## ✅ Pašreizējā publiskā bāze — 3.3.0-alpha.3
 
 Ieviests un publiski pieejams:
 
@@ -67,7 +67,7 @@ Publicēts un validēts.
 - `search-check`;
 - reliability un dedupe testi.
 
-## 🚧 3.3.0-alpha.3 — Feed Discovery & Incremental Monitoring
+## ✅ 3.3.0-alpha.3 — Feed Discovery & Incremental Monitoring
 
 Mērķis: pārvērst katru vērtīgu domēnu par iespējamu efektīvu atkārtotas discovery avotu.
 
@@ -82,7 +82,14 @@ Mērķis: pārvērst katru vērtīgu domēnu par iespējamu efektīvu atkārtota
 - per-resource `ETag` / `Last-Modified` pamats;
 - `304 Not Modified`;
 - `last_entry_id`, `last_published`, `last_checked`, `last_success`;
-- incremental repeated-run testi.
+- kontekstuāla feed kandidātu prioritizācija;
+- DB schema v5 ar atsevišķu `feeds` tabulu;
+- `feeds` CLI inspekcija;
+- atkārtotu run Domain Registry hidratācija;
+- sticky `blocked`/`rejected` stāvokļi pirms discovery lēmumiem;
+- vēsturisko run skaitītāju ne-replay;
+- deterministiski RSS/Atom/JSON Feed, storage, 304 un repeat-run testi;
+- reāls publiska RSS tests ar apstiprinātu `304 Not Modified`.
 
 ## 🧭 3.3.0-alpha.4 — Research Memory
 
@@ -228,7 +235,7 @@ Tas ir **Research Memory + Adaptive Discovery + Evidence Confidence + Incrementa
 
 # English
 
-## ✅ Current public baseline — 3.3.0-alpha.2
+## ✅ Current public baseline — 3.3.0-alpha.3
 
 Implemented and public:
 
@@ -269,7 +276,7 @@ Published and validated.
 - `search-check`;
 - reliability and dedupe tests.
 
-## 🚧 3.3.0-alpha.3 — Feed Discovery & Incremental Monitoring
+## ✅ 3.3.0-alpha.3 — Feed Discovery & Incremental Monitoring
 
 Goal: turn every useful domain into a possible efficient recurring discovery source.
 
@@ -284,7 +291,14 @@ Goal: turn every useful domain into a possible efficient recurring discovery sou
 - per-resource `ETag` / `Last-Modified` foundation;
 - `304 Not Modified`;
 - `last_entry_id`, `last_published`, `last_checked`, `last_success`;
-- incremental repeated-run tests.
+- context-aware feed-candidate prioritization;
+- database schema v5 with a dedicated `feeds` table;
+- `feeds` CLI inspection;
+- Domain Registry hydration for repeated runs;
+- sticky `blocked`/`rejected` lifecycle states before discovery decisions;
+- no replay of historical run counters;
+- deterministic RSS/Atom/JSON Feed, storage, 304 and repeat-run tests;
+- real public RSS validation confirming `304 Not Modified`.
 
 ## 🧭 3.3.0-alpha.4 — Research Memory
 

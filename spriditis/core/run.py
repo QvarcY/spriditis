@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from .domains import DomainDiscovery, DomainRecord
 from .entities import MarketEntity
+from .feeds import FeedState
 
 
 @dataclass
@@ -27,6 +28,14 @@ class ResearchRunResult:
     search_results_duplicates: int = 0
     search_domains_activated: int = 0
     search_provider_errors: int = 0
+
+    feed_candidates_seen: int = 0
+    feeds_found: int = 0
+    feed_entries_seen: int = 0
+    feed_entries_new: int = 0
+    feed_not_modified: int = 0
+    feed_errors: int = 0
+    feed_states: dict[str, FeedState] = field(default_factory=dict)
 
     domains: dict[str, DomainRecord] = field(default_factory=dict)
     domain_discoveries: list[DomainDiscovery] = field(default_factory=list)

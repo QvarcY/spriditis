@@ -76,6 +76,17 @@ def main():
             columns = db._table_columns("domains")
             assert "sitemap_urls_found" in columns
             assert db.schema_version() == CURRENT_SCHEMA_VERSION
+            assert db.schema_version() == 5
+
+            feed_table = db.conn.execute(
+                "SELECT name FROM sqlite_master "
+                "WHERE type='table' AND name='feeds'"
+            ).fetchone()
+            assert feed_table == ("feeds",)
+
+            run_columns = db._table_columns("runs")
+            assert "feed_entries_new" in run_columns
+            assert "feed_not_modified" in run_columns
 
             row = db.conn.execute(
                 "SELECT domain FROM domains WHERE project_id='demo'"

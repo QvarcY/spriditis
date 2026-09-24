@@ -30,6 +30,10 @@ class CrawlConfig(BaseModel):
     external_link_threshold: int = Field(default=45, ge=0, le=100)
     discover_sitemaps: bool = True
     max_sitemap_urls_per_domain: int = Field(default=100, ge=0, le=5000)
+    discover_feeds: bool = True
+    probe_common_feed_paths: bool = False
+    max_feeds_per_domain: int = Field(default=3, ge=0, le=20)
+    max_feed_entries_per_feed: int = Field(default=50, ge=0, le=1000)
 
 
 class SearchConfig(BaseModel):
@@ -238,7 +242,7 @@ def project_from_preset(name: str) -> ResearchProject:
 
 
 def load_project(path: Path) -> ResearchProject:
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = json.loads(path.read_text(encoding="utf-8-sig"))
     project = ResearchProject.model_validate(data)
     if project.research_type not in IMPLEMENTED_RESEARCH_TYPES:
         raise NotImplementedError(
