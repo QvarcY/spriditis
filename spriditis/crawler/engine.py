@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 
 from spriditis.ai.base import AIProvider
 from spriditis.config import AppSettings
+from spriditis.core.feeds import FeedState
 from spriditis.core.projects import ResearchProject
 from spriditis.core.run import ResearchRunResult
 from spriditis.extraction.engine import extract_entities
@@ -17,6 +18,7 @@ from spriditis.search.base import SearchProvider, SearchProviderError
 from spriditis.search.query import build_search_queries
 
 from .discovery import DomainRegistry, SitemapDiscovery
+from .feed_discovery import FeedDiscovery
 from .frontier import URLFrontier
 from .policy import (
     host_key,
@@ -34,11 +36,13 @@ class ResearchCrawler:
         project: ResearchProject,
         ai: AIProvider,
         search_provider: SearchProvider | None = None,
+        feed_states: dict[str, FeedState] | None = None,
     ):
         self.settings = settings
         self.project = project
         self.ai = ai
         self.search_provider = search_provider
+        self.feed_states = dict(feed_states or {})
 
         self.session = requests.Session()
         self.session.headers.update(
@@ -69,6 +73,7 @@ class ResearchCrawler:
         entity_keys: set[str] = set()
         pages_by_domain: Counter[str] = Counter()
         sitemap_checked: set[str] = set()
+        feed_checked: set[str] = set()
 
         registry = DomainRegistry(self.project)
 
@@ -225,6 +230,100 @@ class ResearchCrawler:
                             priority=30 + score,
                             depth=min(item.depth + 1, self.project.crawl.max_depth),
                             source_url=final_url,
+                        )
+
+
+            if (
+                self.project.crawl.discover_feeds
+                and final_domain not in feed_checked
+            ):
+                feed_checked.add(final_domain)
+
+                feed_discovery = FeedDiscovery(
+                    self.session,
+                    user_agent=self.settings.user_agent,
+                    timeout=self.settings.request_timeout_seconds,
+                )
+
+                scan = feed_discovery.scan(
+                    final_url,
+                    response.text,
+                    previous_states=self.feed_states,
+                    max_entries=self.project.crawl.max_feed_entries_per_feed,
+                    max_feeds=self.project.crawl.max_feeds_per_domain,
+                    probe_common_paths=self.project.crawl.probe_common_feed_paths,
+                )
+
+                result.feed_candidates_seen += scan.candidate_count
+                result.feed_errors += scan.errors
+
+                for fetched in scan.fetches:
+                    state = fetched.state
+                    self.feed_states[state.feed_url] = state
+                    result.feed_states[state.feed_url] = state
+
+                    if fetched.not_modified:
+                        result.feed_not_modified += 1
+                        print(f"   📰 Feed nav mainījies: {state.feed_url}")
+                        continue
+
+                    if state.status != "active":
+                        continue
+
+                    result.feeds_found += 1
+                    result.feed_entries_seen += len(fetched.entries)
+                    result.feed_entries_new += len(fetched.new_entries)
+
+                    print(
+                        f"   📰 {state.feed_type}: "
+                        f"{len(fetched.entries)} ieraksti / "
+                        f"{len(fetched.new_entries)} jauni"
+                    )
+
+                    for entry in fetched.new_entries:
+                        normalized = normalize_url(
+                            urljoin(state.feed_url, entry.url)
+                        )
+
+                        if not normalized or normalized in visited:
+                            continue
+
+                        evidence = " ".join(
+                            part for part in [entry.title, entry.summary] if part
+                        )
+
+                        score = text_relevance_score(
+                            self.project,
+                            normalized,
+                            evidence,
+                        )
+
+                        record, feed_event = registry.observe_feed_entry(
+                            feed_url=state.feed_url,
+                            target_url=normalized,
+                            title=entry.title,
+                            summary=entry.summary,
+                            raw_score=score,
+                        )
+
+                        if (
+                            feed_event.action == "activated"
+                            and record.status == "active"
+                        ):
+                            print(
+                                f"      🧭 Feed aktivizēja domēnu: "
+                                f"{record.domain} "
+                                f"(score={record.relevance_score:.2f})"
+                            )
+
+                        if record.status != "active":
+                            continue
+
+                        frontier.add(
+                            normalized,
+                            priority=55 + score,
+                            depth=item.depth + 1,
+                            source_url=state.feed_url,
                         )
 
             try:

@@ -184,6 +184,84 @@ class DomainRegistry:
         self.discoveries.append(discovery)
         return record, discovery
 
+
+    def observe_feed_entry(
+        self,
+        *,
+        feed_url: str,
+        target_url: str,
+        title: str,
+        summary: str,
+        raw_score: int,
+    ) -> tuple[DomainRecord, DomainDiscovery]:
+        source_domain = host_key(feed_url)
+        target_domain = host_key(target_url)
+        ratio = score_to_ratio(raw_score)
+        safe, safety_reason = url_safety_reason(target_url)
+
+        if not safe:
+            status = "blocked"
+            action = "blocked"
+            reason = safety_reason
+        elif target_domain in self.records and self.records[target_domain].status == "active":
+            status = "active"
+            action = "known"
+            reason = "already_active"
+        elif self.project.crawl.mode == "domain":
+            status = "candidate"
+            action = "recorded"
+            reason = "domain_mode"
+        elif raw_score < self.project.crawl.external_link_threshold:
+            status = "candidate"
+            action = "recorded"
+            reason = "below_threshold"
+        elif self.active_count >= self.project.crawl.max_domains:
+            status = "candidate"
+            action = "recorded"
+            reason = "domain_budget_reached"
+        else:
+            status = "active"
+            action = "activated"
+            reason = "feed_relevance_threshold"
+
+        record = self._get_or_create(
+            target_domain,
+            status=status,
+            discovered_via="feed",
+            discovered_from_url=feed_url,
+            relevance_score=ratio,
+        )
+
+        if record.status != "active":
+            record.status = status
+        record.relevance_score = max(record.relevance_score, ratio)
+        record.last_seen = utc_now()
+
+        if action == "activated" and record.discovered_via != "seed":
+            record.discovered_via = "feed"
+            record.discovered_from_url = feed_url
+
+        if not record.reason or status in {"blocked", "active"}:
+            record.reason = reason
+
+        evidence = " ".join(
+            part for part in [title, summary] if part
+        ).strip()
+
+        discovery = DomainDiscovery(
+            source_domain=source_domain,
+            target_domain=target_domain,
+            source_url=feed_url,
+            target_url=target_url,
+            anchor_text=evidence[:500],
+            relevance_score=ratio,
+            action=action,
+            reason=reason,
+            discovered_via="feed",
+        )
+        self.discoveries.append(discovery)
+        return record, discovery
+
     def mark_page(self, domain: str):
         record = self._get_or_create(domain)
         record.pages_seen += 1
