@@ -428,6 +428,30 @@ class ResearchCrawler:
                             raw_score=score,
                             activation_block_reason=feed_block_reason,
                         )
+                        if feed_block_reason:
+                            result.adaptive_decisions.append(
+                                AdaptiveDecision(
+                                    stage="discovery_depth",
+                                    decision="deferred",
+                                    target=normalized,
+                                    signals={
+                                        "reason": feed_block_reason,
+                                        "source_domain": final_domain,
+                                        "target_domain": feed_target_domain,
+                                        "discovery_depth":
+                                            feed_discovery_depth,
+                                        "max_discovery_depth":
+                                            self.project.crawl
+                                            .max_discovery_depth,
+                                        "depth_budget":
+                                            self.project.crawl
+                                            .discovery_depth_budgets.get(
+                                                feed_discovery_depth
+                                            ),
+                                        "via": "feed",
+                                    },
+                                )
+                            )
 
                         if (
                             feed_event.action == "activated"
