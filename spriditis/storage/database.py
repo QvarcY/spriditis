@@ -6,6 +6,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
+from spriditis.core.changes import compare_run_snapshots
 from spriditis.core.domains import DomainRecord
 from spriditis.core.entities import (
     ExtractionEvidence,
@@ -2634,6 +2635,166 @@ class Database:
             for row in feeds
         ]
         return profile
+
+    def _change_run_snapshot(
+        self,
+        project_id: str,
+        run_id: int,
+    ) -> dict:
+        run = self.conn.execute(
+            """
+            SELECT id, started_at, finished_at
+            FROM runs
+            WHERE project_id=? AND id=?
+            """,
+            (project_id, run_id),
+        ).fetchone()
+        if run is None:
+            raise ValueError(
+                f"Run nav atrasts projektā {project_id}: {run_id}"
+            )
+
+        rows = self.conn.execute(
+            """
+            SELECT o.id, o.entity_key, o.snapshot_json, m.cluster_key
+            FROM observations o
+            LEFT JOIN entity_cluster_members m
+              ON m.project_id=o.project_id
+             AND m.entity_key=o.entity_key
+            WHERE o.project_id=? AND o.run_id=?
+            ORDER BY o.id
+            """,
+            (project_id, run_id),
+        ).fetchall()
+
+        entities: dict[str, dict] = {}
+        observation_ids_by_cluster: dict[str, list[int]] = {}
+
+        for row in rows:
+            observation_id = int(row[0])
+            entity_key = row[1]
+            snapshot = json.loads(row[2] or "{}")
+            cluster_key = row[3] or entity_key
+
+            entities[entity_key] = {
+                "observation_id": observation_id,
+                "entity_key": entity_key,
+                "cluster_key": cluster_key,
+                "title": snapshot.get("title") or "",
+                "source_url": snapshot.get("source_url") or "",
+                "source_domain": snapshot.get("source_domain") or "",
+                "price": snapshot.get("price"),
+                "currency": snapshot.get("currency") or "",
+            }
+            observation_ids_by_cluster.setdefault(
+                cluster_key,
+                [],
+            ).append(observation_id)
+
+        clusters: dict[str, dict] = {}
+        for entity in entities.values():
+            cluster_key = entity["cluster_key"]
+            cluster = clusters.setdefault(
+                cluster_key,
+                {
+                    "cluster_key": cluster_key,
+                    "title": entity["title"],
+                    "entity_keys": [],
+                    "sources": [],
+                    "observation_ids": observation_ids_by_cluster.get(
+                        cluster_key,
+                        [],
+                    ),
+                },
+            )
+            if not cluster["title"] and entity["title"]:
+                cluster["title"] = entity["title"]
+            cluster["entity_keys"].append(entity["entity_key"])
+            cluster["sources"].append(
+                {
+                    "source_domain": entity["source_domain"],
+                    "source_url": entity["source_url"],
+                }
+            )
+
+        for cluster in clusters.values():
+            cluster["entity_keys"] = sorted(set(cluster["entity_keys"]))
+            unique_sources = {
+                (
+                    source["source_domain"],
+                    source["source_url"],
+                )
+                for source in cluster["sources"]
+            }
+            cluster["sources"] = [
+                {
+                    "source_domain": domain,
+                    "source_url": url,
+                }
+                for domain, url in sorted(unique_sources)
+            ]
+            cluster["observation_ids"] = sorted(
+                set(cluster["observation_ids"])
+            )
+
+        return {
+            "run_id": int(run[0]),
+            "started_at": run[1] or "",
+            "finished_at": run[2] or "",
+            "entities": entities,
+            "clusters": clusters,
+        }
+
+    def compare_runs(
+        self,
+        project_id: str,
+        before_run_id: int,
+        after_run_id: int,
+    ) -> dict:
+        if before_run_id == after_run_id:
+            raise ValueError("Salīdzināmajiem run ID jābūt atšķirīgiem.")
+
+        before = self._change_run_snapshot(
+            project_id,
+            before_run_id,
+        )
+        after = self._change_run_snapshot(
+            project_id,
+            after_run_id,
+        )
+        events = compare_run_snapshots(before, after)
+
+        counts = {
+            "NEW_ENTITY": 0,
+            "ENTITY_DISAPPEARED": 0,
+            "PRICE_DROP": 0,
+            "PRICE_INCREASE": 0,
+            "SOURCE_CHANGED": 0,
+        }
+        for event in events:
+            counts[event.change_type] = (
+                counts.get(event.change_type, 0) + 1
+            )
+
+        return {
+            "project_id": project_id,
+            "before_run": {
+                "id": before["run_id"],
+                "started_at": before["started_at"],
+                "finished_at": before["finished_at"],
+                "entity_count": len(before["entities"]),
+                "cluster_count": len(before["clusters"]),
+            },
+            "after_run": {
+                "id": after["run_id"],
+                "started_at": after["started_at"],
+                "finished_at": after["finished_at"],
+                "entity_count": len(after["entities"]),
+                "cluster_count": len(after["clusters"]),
+            },
+            "counts": counts,
+            "events": [event.model_dump() for event in events],
+        }
 
     def trace_run(
         self,
