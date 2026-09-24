@@ -14,7 +14,7 @@ from spriditis.core.domains import DomainRecord
 from spriditis.core.feeds import FeedState
 from spriditis.core.memory import PageVisit
 from spriditis.core.projects import ResearchProject
-from spriditis.core.run import ResearchRunResult
+from spriditis.core.run import AdaptiveDecision, ResearchRunResult
 from spriditis.extraction.engine import extract_entities
 from spriditis.search.base import SearchProvider, SearchProviderError
 from spriditis.search.query import build_search_queries
@@ -534,6 +534,28 @@ class ResearchCrawler:
                         raw_score=score,
                         activation_block_reason=activation_block_reason,
                     )
+                    if activation_block_reason:
+                        result.adaptive_decisions.append(
+                            AdaptiveDecision(
+                                stage="discovery_depth",
+                                decision="deferred",
+                                target=absolute,
+                                signals={
+                                    "reason": activation_block_reason,
+                                    "source_domain": final_domain,
+                                    "target_domain": target_domain,
+                                    "discovery_depth":
+                                        next_discovery_depth,
+                                    "max_discovery_depth":
+                                        self.project.crawl.max_discovery_depth,
+                                    "depth_budget":
+                                        self.project.crawl
+                                        .discovery_depth_budgets.get(
+                                            next_discovery_depth
+                                        ),
+                                },
+                            )
+                        )
 
                     if (
                         discovery.action == "activated"
@@ -571,9 +593,31 @@ class ResearchCrawler:
                         registry,
                     )
                     if penalty:
+                        priority_before_penalty = priority
                         priority -= penalty
                         result.diversity_penalties_applied += 1
                         result.diversity_domains_penalized.add(final_domain)
+                        result.adaptive_decisions.append(
+                            AdaptiveDecision(
+                                stage="source_diversity",
+                                decision="priority_penalty",
+                                target=absolute,
+                                signals={
+                                    "domain": final_domain,
+                                    "soft_cap":
+                                        self.project.crawl
+                                        .entity_diversity_soft_cap,
+                                    "entities_found":
+                                        registry.records[
+                                            final_domain
+                                        ].entities_found,
+                                    "penalty": penalty,
+                                    "priority_before":
+                                        priority_before_penalty,
+                                    "priority_after": priority,
+                                },
+                            )
+                        )
 
                 frontier.add(
                     absolute,
@@ -614,6 +658,29 @@ class ResearchCrawler:
                 result.stop_reason = "max_domains"
             else:
                 result.stop_reason = "budget_exhausted"
+
+        result.adaptive_decisions.append(
+            AdaptiveDecision(
+                stage="stop",
+                decision=result.stop_reason,
+                target=self.project.id,
+                signals={
+                    "visited_pages": result.visited_pages,
+                    "max_pages_total":
+                        self.project.crawl.max_pages_total,
+                    "diminishing_returns_streak":
+                        result.diminishing_returns_streak,
+                    "diminishing_returns_window":
+                        self.project.crawl.diminishing_returns_window,
+                    "saturation_streak":
+                        result.saturation_streak,
+                    "saturation_window":
+                        self.project.crawl.saturation_window,
+                    "active_domains": registry.active_count,
+                    "max_domains": self.project.crawl.max_domains,
+                },
+            )
+        )
 
         self._enrich_entities(result)
 
@@ -856,6 +923,26 @@ class ResearchCrawler:
                 "Pievieno keywords vai search.queries."
             )
 
+        for position, query in enumerate(queries, start=1):
+            result.adaptive_decisions.append(
+                AdaptiveDecision(
+                    stage="query_priority",
+                    decision="scheduled",
+                    target=query.query,
+                    signals={
+                        "position": position,
+                        "reason": query.reason,
+                        "memory_state": query.memory_state,
+                        "productive_domain_rate":
+                            query.memory_productive_domain_rate,
+                        "productive_domains":
+                            query.memory_productive_domains,
+                        "unique_domains": query.memory_unique_domains,
+                        "runs": query.memory_runs,
+                    },
+                )
+            )
+
         language = self.project.languages[0] if self.project.languages else "all"
 
         print("")
@@ -891,6 +978,53 @@ class ResearchCrawler:
                     hits,
                     query.query,
                 )
+                for position, ranked_hit in enumerate(
+                    ranked_hits,
+                    start=1,
+                ):
+                    ranked_url = normalize_url(ranked_hit.hit.url)
+                    ranked_domain = (
+                        host_key(ranked_url) if ranked_url else ""
+                    )
+                    profile = self.source_profiles.get(ranked_domain)
+                    result.adaptive_decisions.append(
+                        AdaptiveDecision(
+                            stage="search_result_priority",
+                            decision="scheduled",
+                            target=ranked_hit.hit.url,
+                            signals={
+                                "position": position,
+                                "query": query.query,
+                                "source_memory_state":
+                                    self._source_memory_state(
+                                        ranked_domain
+                                    ),
+                                "productive_run_rate": float(
+                                    profile.get(
+                                        "productive_run_rate",
+                                        0.0,
+                                    ) or 0.0
+                                ) if profile else 0.0,
+                                "entity_yield": float(
+                                    profile.get(
+                                        "entity_yield",
+                                        0.0,
+                                    ) or 0.0
+                                ) if profile else 0.0,
+                                "bm25": ranked_hit.bm25,
+                                "title_matches":
+                                    ranked_hit.title_matches,
+                                "path_matches":
+                                    ranked_hit.path_matches,
+                                "domain_matches":
+                                    ranked_hit.domain_matches,
+                                "negative_matches":
+                                    ranked_hit.negative_matches,
+                                "provider_index":
+                                    ranked_hit.provider_index,
+                            },
+                        )
+                    )
             except SearchProviderError as exc:
                 result.search_provider_errors += 1
                 detail = f"kind={exc.kind}, attempts={exc.attempts}"
