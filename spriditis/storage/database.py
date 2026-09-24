@@ -6,6 +6,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
+from spriditis.core.domains import DomainRecord
 from spriditis.core.entities import MarketEntity
 from spriditis.core.feeds import FeedState
 from spriditis.core.projects import ResearchProject
@@ -642,6 +643,47 @@ class Database:
 
         self.conn.commit()
 
+
+
+    def load_domain_states(
+        self,
+        project_id: str,
+    ) -> dict[str, DomainRecord]:
+        rows = self.conn.execute(
+            """
+            SELECT domain, status, discovered_via, discovered_from_url,
+                   relevance_score, robots_status, sitemap_status,
+                   sitemap_urls_found, first_seen, last_seen,
+                   last_crawled, reason
+            FROM domains
+            WHERE project_id=?
+            """,
+            (project_id,),
+        ).fetchall()
+
+        states: dict[str, DomainRecord] = {}
+        for row in rows:
+            record = DomainRecord(
+                domain=row[0],
+                status=row[1],
+                discovered_via=row[2] or "link",
+                discovered_from_url=row[3] or "",
+                relevance_score=float(row[4] or 0.0),
+                robots_status=row[5] or "unknown",
+                sitemap_status=row[6] or "unknown",
+                sitemap_urls_found=int(row[7] or 0),
+                # Run-local counters intentionally start at zero. Historical
+                # totals remain in SQLite and are merged by save_domain_registry().
+                pages_seen=0,
+                entities_found=0,
+                first_seen=row[8],
+                last_seen=row[9],
+                last_crawled=row[10],
+                reason=row[11] or "",
+            )
+            states[record.domain] = record
+
+        return states
 
     def load_feed_states(self, project_id: str) -> dict[str, FeedState]:
         rows = self.conn.execute(
