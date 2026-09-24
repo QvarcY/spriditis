@@ -98,7 +98,7 @@ def main():
             columns = db._table_columns("domains")
             assert "sitemap_urls_found" in columns
             assert db.schema_version() == CURRENT_SCHEMA_VERSION
-            assert db.schema_version() == 6
+            assert db.schema_version() == 7
 
             feed_table = db.conn.execute(
                 "SELECT name FROM sqlite_master "
@@ -111,6 +111,12 @@ def main():
                 "WHERE type='table' AND name='page_visits'"
             ).fetchone()
             assert page_visit_table == ("page_visits",)
+
+            adaptive_table = db.conn.execute(
+                "SELECT name FROM sqlite_master "
+                "WHERE type='table' AND name='adaptive_decisions'"
+            ).fetchone()
+            assert adaptive_table == ("adaptive_decisions",)
 
             run_columns = db._table_columns("runs")
             assert "feed_entries_new" in run_columns
