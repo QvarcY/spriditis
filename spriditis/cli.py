@@ -764,6 +764,45 @@ def main() -> int:
                     print(f"      reason={event['reason']}")
 
         print("")
+        print(
+            f"ENTITY RESOLUTION "
+            f"({len(trace['entity_resolution_events'])})"
+        )
+        for event in trace["entity_resolution_events"]:
+            print(
+                f"   {event['decision']:<20} "
+                f"reason={event['reason']:<28} "
+                f"compared={event['compared_entities']}"
+            )
+            print(
+                f"      entity={event['entity_key'][:20]}... "
+                f"cluster={event['selected_cluster_key'][:20]}..."
+            )
+            if event["candidate_cluster_keys"]:
+                print(
+                    "      candidates="
+                    + ", ".join(
+                        key[:16] + "..."
+                        for key in event["candidate_cluster_keys"]
+                    )
+                )
+            if event["conflict_cluster_keys"]:
+                print(
+                    "      conflicts="
+                    + ", ".join(
+                        key[:16] + "..."
+                        for key in event["conflict_cluster_keys"]
+                    )
+                )
+            signals = (
+                event["matched_signals"]
+                + event["supporting_signals"]
+                + event["conflicting_signals"]
+            )
+            if signals:
+                print("      signals=" + ", ".join(signals))
+
+        print("")
         print(f"OBSERVATIONS ({len(trace['observations'])})")
         for obs in trace["observations"]:
             price = (
@@ -779,6 +818,11 @@ def main() -> int:
                 f"      method={obs['extraction_method'] or '-'} "
                 f"relevance={obs['relevance_score']:.2f}"
             )
+            if obs["cluster_key"]:
+                print(
+                    f"      cluster={obs['cluster_key'][:20]}... "
+                    f"reason={obs['cluster_match_reason'] or '-'}"
+                )
             print(f"      {obs['source_url']}")
         return 0
 
