@@ -124,6 +124,12 @@ def compare_run_snapshots(
                         ]
                     },
                     evidence={
+                        "before_observation_ids": old_cluster[
+                            "observation_ids"
+                        ],
+                        "after_observation_ids": new_cluster[
+                            "observation_ids"
+                        ],
                         "added_sources": [
                             {"source_domain": domain, "source_url": url}
                             for domain, url in added
