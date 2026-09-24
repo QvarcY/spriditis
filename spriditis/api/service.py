@@ -39,6 +39,8 @@ class RunArtifacts:
     stop_reason: str = ""
     diminishing_returns_streak: int = 0
     saturation_streak: int = 0
+    diversity_penalties_applied: int = 0
+    diversity_domain_count: int = 0
     database_migrated_from: Path | None = None
 
     @property
@@ -140,6 +142,8 @@ def run_project(
             stop_reason=result.stop_reason,
             diminishing_returns_streak=result.diminishing_returns_streak,
             saturation_streak=result.saturation_streak,
+            diversity_penalties_applied=result.diversity_penalties_applied,
+            diversity_domain_count=len(result.diversity_domains_penalized),
             database_migrated_from=migrated_from,
         )
     finally:
