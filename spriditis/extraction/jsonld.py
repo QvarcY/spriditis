@@ -40,6 +40,52 @@ def _seller_name(node: dict[str, Any]) -> str:
     return ""
 
 
+def _identity_value(value: Any) -> str:
+    if isinstance(value, (str, int, float)):
+        return clean_text(str(value), 200)
+    if isinstance(value, dict):
+        return clean_text(
+            value.get("name")
+            or value.get("model")
+            or value.get("value"),
+            200,
+        )
+    if isinstance(value, list):
+        for item in value:
+            resolved = _identity_value(item)
+            if resolved:
+                return resolved
+    return ""
+
+
+def _identity_attributes(node: dict[str, Any]) -> dict[str, str]:
+    attributes: dict[str, str] = {}
+
+    mappings = {
+        "brand": ("brand",),
+        "manufacturer": ("manufacturer",),
+        "model": ("model",),
+        "mpn": ("mpn",),
+        "sku": ("sku",),
+        "gtin": (
+            "gtin14",
+            "gtin13",
+            "gtin12",
+            "gtin8",
+            "gtin",
+        ),
+    }
+
+    for target, source_keys in mappings.items():
+        for key in source_keys:
+            value = _identity_value(node.get(key))
+            if value:
+                attributes[target] = value
+                break
+
+    return attributes
+
+
 def extract_jsonld_products(
     soup: BeautifulSoup,
     page_url: str,
@@ -103,6 +149,7 @@ def extract_jsonld_products(
                     currency=currency or "EUR",
                     seller=_seller_name(node),
                     image_url=absolute_image(node.get("image"), page_url),
+                    attributes=_identity_attributes(node),
                     extraction_method="json-ld",
                     evidence=clean_text(f"{title}. {description}", 800),
                 )
