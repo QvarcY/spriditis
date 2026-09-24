@@ -1281,7 +1281,9 @@ def main() -> int:
         )
         basis = diff["comparison_basis"]
         print(
-            f"   basis={basis['facts']} + {basis['identity']}"
+            f"   basis=entities:{basis['entity_facts']} + "
+            f"domains:{basis['domain_health']} + "
+            f"identity:{basis['identity']}"
         )
         print(
             "   "
