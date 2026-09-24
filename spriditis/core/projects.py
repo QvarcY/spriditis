@@ -34,6 +34,8 @@ class CrawlConfig(BaseModel):
     probe_common_feed_paths: bool = False
     max_feeds_per_domain: int = Field(default=3, ge=0, le=20)
     max_feed_entries_per_feed: int = Field(default=50, ge=0, le=1000)
+    diminishing_returns_window: int = Field(default=0, ge=0, le=10000)
+    saturation_window: int = Field(default=0, ge=0, le=10000)
 
 
 class SearchConfig(BaseModel):
