@@ -439,15 +439,17 @@ def main() -> int:
         else:
             print(
                 f"{'DOMAIN':<30} {'STATE':<10} {'REL':>5} "
-                f"{'PAGES':>5} {'ENT':>4} {'YIELD':>7} "
-                f"{'OK%':>6} {'FEED':>4}"
+                f"{'RUNS':>4} {'USE%':>6} {'PAGES':>5} "
+                f"{'ENT':>4} {'YIELD':>7} {'OK%':>6} {'FEED':>4}"
             )
-            print("-" * 88)
+            print("-" * 106)
             for row in sources:
                 print(
                     f"{row['domain'][:30]:<30} "
                     f"{row['status']:<10} "
                     f"{row['relevance_score']:>5.2f} "
+                    f"{row['crawl_runs']:>4} "
+                    f"{row['productive_run_rate'] * 100:>5.1f}% "
                     f"{row['pages_seen']:>5} "
                     f"{row['entities_found']:>4} "
                     f"{row['entity_yield']:>7.2f} "
@@ -499,6 +501,12 @@ def main() -> int:
             f"ok={row['successful_visits']} "
             f"failed={row['failed_visits']} "
             f"success_rate={row['success_rate']:.1%}"
+        )
+        print(
+            f"   crawl_runs={row['crawl_runs']} "
+            f"productive_runs={row['productive_runs']} "
+            f"productive_run_rate={row['productive_run_rate']:.1%} "
+            f"observations={row['observation_count']}"
         )
         print(
             f"   robots={row['robots_status']} "
