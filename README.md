@@ -18,6 +18,140 @@
 </p>
 
 ---
+## ✨ Project at a glance / Projekts īsumā
+
+> **A small research engine with a big journey:** it goes out into the web, follows evidence, remembers how it found things, and is being built to make every next research run smarter than the previous one.
+
+| | Status |
+|---|---|
+| **Public baseline / Publiskā versija** | ✅ `v3.3.0-alpha.1` — SearchProvider + zero-seed Expedition |
+| **Current work / Šobrīd** | 🧪 `3.3.0-alpha.2` — SearchProvider reliability + dedupe; locally validated, preparing publication |
+| **Next / Nākamais** | 🚧 `3.3.0-alpha.3` — Feed Discovery & Incremental Monitoring |
+| **North star / Galvenais virziens** | 🧠 **Research Memory + Adaptive Discovery** |
+| **Core principle / Pamatprincips** | 🔎 **source-backed facts > AI guesses** |
+| **Cost direction / Izmaksu princips** | 🌱 Prefer local, open, self-hostable and zero-cost building blocks where practical |
+
+### Status legend / Statusu leģenda
+
+**✅ Released** — public and implemented  
+**🧪 Validating** — implemented locally / under validation or publication preparation  
+**🚧 In progress next** — next active development step  
+**🧭 Planned** — accepted roadmap direction
+
+## 🧭 Development journey / Attīstības ceļš
+
+> This is a working roadmap, not a promise of fixed release dates. Version boundaries may move as testing reveals better architecture.
+
+| Status | Version | Milestone | What it adds |
+|---|---|---|---|
+| ✅ | **3.1** | Configurable research core | `ResearchProject`, generic entities, structured extraction, optional AI enrichment |
+| ✅ | **3.2** | Domain Registry + Discovery Engine | persistent domain memory, sitemap discovery, controlled multi-domain crawling, DB migrations |
+| ✅ | **3.3.0-alpha.1** | SearchProvider + zero-seed Expedition | provider abstraction, query generation, search provenance, search → activation → crawl |
+| 🧪 | **3.3.0-alpha.2** | SearchProvider hardening | retry/backoff, `Retry-After`, structured provider errors, result dedupe, `search-check`, schema v4 |
+| 🚧 | **3.3.0-alpha.3** | Feed Discovery & Incremental Monitoring | RSS 2.0, Atom, JSON Feed, autodiscovery, ETag / Last-Modified, feed provenance |
+| 🧭 | **3.3.0-alpha.4** | Research Memory | query yield, source yield, discovery provenance, source quality metrics |
+| 🧭 | **3.3.0-alpha.5** | Adaptive Expedition | BM25 relevance, query prioritization, coverage saturation, controlled multi-hop discovery |
+| 🧭 | **3.3.0-alpha.6** | Entity Resolution | cross-source matching, duplicate clustering, one entity with many source observations |
+| 🧭 | **3.3.0-alpha.7** | Fallback Extraction + Evidence Confidence | schema.org microdata, DOM heuristics, field-level extraction method + confidence |
+| 🧭 | **3.3.0-alpha.8** | Change Detection | price changes, new/disappeared entities, source/domain change events |
+| 🧭 | **3.3.0-alpha.9** | Watch mode | incremental repeated research, scheduling hooks, change-driven notifications |
+| 🧭 | **3.3.0-alpha.10** | Async crawler | bounded concurrency, adaptive politeness, faster crawling without abandoning safety |
+
+<details>
+<summary><strong>🔭 Longer-term backlog / Ilgtermiņa plāns</strong></summary>
+
+### Discovery and research intelligence
+- additional SearchProvider adapters, prioritizing no-cost/self-hostable options;
+- query-yield learning and automatic reuse of productive searches;
+- source-value scoring;
+- coverage saturation / diminishing-returns stopping;
+- controlled multi-hop research;
+- reusable research templates.
+
+### Extraction and data quality
+- richer price normalization;
+- images and specification-table extraction;
+- source adapters for high-value marketplaces/sites where appropriate;
+- entity resolution by GTIN/EAN, manufacturer + model, normalized title and fuzzy signals;
+- field-level provenance and confidence.
+
+### Monitoring and analytics
+- longitudinal price/category trends;
+- “new on market” / “disappeared” events;
+- source recovery/failure events;
+- CSV / JSONL / Parquet export;
+- project-to-project comparisons.
+
+### Product and automation layers
+- REST API;
+- project/run UI;
+- scheduler and background jobs;
+- webhooks / notifications;
+- CLI commands such as `diff`, `watch`, `export`.
+
+### Engineering quality
+- stronger typing and static checks;
+- broader automated test coverage;
+- CI/CD;
+- Docker / docker-compose;
+- project JSON Schema;
+- plugin entry points for providers and adapters.
+
+### Optional future AI
+- additional AI providers behind the existing abstraction;
+- local-model support where practical;
+- structured AI output;
+- cost tracking;
+- evaluation datasets;
+- RAG over collected observations only when the deterministic data layer is mature.
+
+</details>
+
+## 📖 Why the name “Sprīdītis”? / Kāpēc “Sprīdītis”?
+
+The project name is inspired by **Anna Brigadere’s “Sprīdītis”**. In the play, Sprīdītis is a small boy who leaves home to search for happiness, meets one trial after another, and grows through the experience gained on the road. His determination and ingenuity matter, and what he learns or receives in earlier encounters helps him in later ones.
+
+That journey is the project metaphor: **a small research engine goes out into the wider web, gathers useful tools and experience, remembers the path, and comes back with structured evidence instead of guesses.**
+
+Nosaukums ir apzināta atsauce uz **Annas Brigaderes “Sprīdīti”** — mazu, apņēmīgu un atjautīgu ceļotāju, kurš dodas pasaulē, sastop pārbaudījumus un katrā nākamajā solī izmanto iepriekš gūto pieredzi. Sprīdīša tēls šajā projektā nav “jautrs dārznieks ar lāpstu”; tas ir **mazs pētnieks, kurš dodas plašajā pasaulē un mācās no ceļa**.
+
+Background: [Nacionālā enciklopēdija — “Sprīdītis”](https://enciklopedija.lv/skirklis/128907-%E2%80%9CSpr%C4%ABd%C4%ABtis%E2%80%9D)
+
+## 🧠 North star: Research Memory
+
+Sprīdītis is intended to remember not only **what** it found, but **how** it found it:
+
+```text
+ResearchProject
+      ↓
+Query / Seed
+      ↓
+SearchProvider
+      ↓
+Domain
+      ↓
+HTML link / Sitemap / RSS / Atom / JSON Feed
+      ↓
+Page
+      ↓
+Extraction method + confidence
+      ↓
+MarketEntity
+      ↓
+Observation
+      ↓
+Change event
+      ↓
+Research Memory
+      ↓
+next run becomes more selective
+```
+
+The long-term differentiator is therefore not “crawl more pages”. It is:
+
+> **find useful sources, remember which paths worked, avoid repeated work, detect meaningful change, and stop when additional crawling no longer adds enough new evidence.**
+
+---
 
 ## English
 
@@ -99,18 +233,9 @@ Sprīdītis is not tied to one industry. The same core is intended to support ve
 
 The public alpha deliberately does not pretend unfinished features are complete.
 
-Planned directions include:
+The accepted direction is shown in the **Development journey** above. The immediate sequence is SearchProvider hardening → Feed Discovery → Research Memory → Adaptive Expedition → Entity Resolution → evidence-aware fallback extraction → change detection → watch mode → bounded async crawling.
 
-- additional SearchProvider integrations and real-provider hardening
-- stronger query/result quality controls for Expedition
-- competitor-research extractors
-- service-market extractors
-- longitudinal price/trend analysis
-- web UI
-- REST API
-- scheduler and background jobs
-
-See [ROADMAP.md](ROADMAP.md).
+See the detailed [ROADMAP.md](ROADMAP.md).
 
 ### Quick start
 
@@ -297,7 +422,7 @@ This checkpoint adds the first true Expedition bootstrap. A project can start wi
 
 The current implementation includes an offline fake provider for deterministic validation and a SearXNG JSON API provider for real search integration. Search-provider and query provenance are kept auditable instead of bypassing the Domain Registry.
 
-The next development work is focused on hardening real-provider execution and improving Expedition query/result quality before moving further up the research stack.
+The SearchProvider-hardening work for **3.3.0-alpha.2** has been validated locally and is being prepared for publication. The next accepted milestone is **3.3.0-alpha.3 — Feed Discovery & Incremental Monitoring**.
 
 This is alpha software. Expect breaking changes before a stable release.
 
@@ -406,18 +531,9 @@ Sprīdītis nav piesaistīts vienai nozarei. Ideja ir vienu un to pašu kodolu p
 
 ### Kas vēl nav gatavs?
 
-Plānotie attīstības virzieni:
+Pieņemtais attīstības virziens ir redzams README sākumā sadaļā **Development journey / Attīstības ceļš**. Tuvākā secība ir SearchProvider stabilizācija → Feed Discovery → Research Memory → Adaptive Expedition → Entity Resolution → fallback ekstrakcija ar evidence confidence → izmaiņu noteikšana → watch režīms → kontrolēts async crawleris.
 
-- papildu SearchProvider integrācijas un reālo provideru stabilizācija
-- kvalitatīvāka Expedition vaicājumu un rezultātu atlase
-- konkurentu izpētes ekstraktori
-- pakalpojumu tirgus ekstraktori
-- cenu un tendenču analīze laikā
-- web UI
-- REST API
-- scheduleris un background jobs
-
-Skatīt [ROADMAP.md](ROADMAP.md).
+Detalizēti skatīt [ROADMAP.md](ROADMAP.md).
 
 ### Ātrais sākums
 
@@ -575,7 +691,7 @@ Pašreizējais publiskais atskaites punkts: **Sprīdītis 3.3.0-alpha.1**.
 
 Pašlaik ir pieejams offline fake provideris deterministiskiem testiem un SearXNG JSON API provideris reālai meklēšanas integrācijai. Providera un vaicājuma izcelsme tiek saglabāta auditam un neapiet Domain Registry.
 
-Nākamais darbs ir reālo provideru izpildes stabilizācija un Expedition vaicājumu/rezultātu kvalitātes uzlabošana.
+**3.3.0-alpha.2** SearchProvider stabilizācijas darbi ir lokāli pārbaudīti un tiek gatavoti publicēšanai. Nākamais apstiprinātais pieturas punkts ir **3.3.0-alpha.3 — Feed Discovery & Incremental Monitoring**.
 
 Šis ir alpha projekts, tāpēc līdz stabilai versijai iespējamas arī nesavietojamas izmaiņas.
 
