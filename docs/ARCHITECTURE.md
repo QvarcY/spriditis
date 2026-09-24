@@ -1,7 +1,6 @@
 # Sprīdītis — arhitektūra / Architecture
 
-Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.4 — Research Memory**  
-Validējamais kandidāts / Validating candidate: **3.3.0-alpha.5 — Adaptive Expedition**
+Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.5 — Adaptive Expedition**
 
 > **Latviski pirmajā vietā, angļu valoda zemāk. / Latvian first, English below.**
 
@@ -76,7 +75,7 @@ Avotiem specifiski adapteri, izolējot konkrētas vietnes īpatnības no crawler
 Izvēles MI enrichment. Crawler/extraction plūsmai jāstrādā arī bez MI.
 
 ### `spriditis/storage`
-SQLite persistence un schema evolution. Alpha4 izmanto DB schema v6 un pievieno `page_visits` tabulu Research Memory lineage auditam. Alpha5 release candidate pāriet uz DB schema v7 un pievieno `adaptive_decisions` tabulu izskaidrojamai adaptīvo lēmumu secībai. Esošie `runs` search skaitītāji tiek izmantoti arī duplicate-rate atmiņai, tāpēc šim signālam nav vajadzīga paralēla dublējoša tabula.
+SQLite persistence un schema evolution. Alpha4 izmanto DB schema v6 un pievieno `page_visits` tabulu Research Memory lineage auditam. Alpha5 pāriet uz DB schema v7 un pievieno `adaptive_decisions` tabulu izskaidrojamai adaptīvo lēmumu secībai. Esošie `runs` search skaitītāji tiek izmantoti arī duplicate-rate atmiņai, tāpēc šim signālam nav vajadzīga paralēla dublējoša tabula.
 
 Noklusējuma DB:
 ```text
@@ -144,7 +143,7 @@ Svarīga robeža: alpha4 **krāj un izskaidro** pieredzi. Automātiska šo sign�
 
 Svarīgs princips: **katram nozīmīgam lēmumam jābūt izskaidrojamam.**
 
-## Adaptive Expedition — 3.3.0-alpha.5 release candidate
+## Adaptive Expedition — 3.3.0-alpha.5
 
 Alpha5 sāk **patērēt** alpha4 Research Memory un lokālos relevance signālus, bet saglabā tos atsevišķi auditējamus.
 
@@ -294,7 +293,7 @@ Source-specific adapters isolate site quirks from crawler core.
 Optional AI enrichment. Crawling/extraction must remain usable without AI.
 
 ### `spriditis/storage`
-SQLite persistence and schema evolution. Alpha4 uses database schema v6 and adds a `page_visits` table for Research Memory lineage auditing. The alpha5 release candidate moves to database schema v7 and adds an `adaptive_decisions` table for explainable adaptive-decision sequences. Existing search counters in `runs` also back duplicate-rate memory, avoiding a parallel duplicate source of truth.
+SQLite persistence and schema evolution. Alpha4 uses database schema v6 and adds a `page_visits` table for Research Memory lineage auditing. Alpha5 moves to database schema v7 and adds an `adaptive_decisions` table for explainable adaptive-decision sequences. Existing search counters in `runs` also back duplicate-rate memory, avoiding a parallel duplicate source of truth.
 
 Default DB:
 ```text
@@ -362,7 +361,7 @@ The milestone boundary is deliberate: alpha4 **records and explains** experience
 
 Important principle: **every important decision should be explainable.**
 
-## Adaptive Expedition — 3.3.0-alpha.5 release candidate
+## Adaptive Expedition — 3.3.0-alpha.5
 
 Alpha5 begins to **consume** alpha4 Research Memory together with local relevance signals while keeping the underlying evidence separate and auditable.
 
