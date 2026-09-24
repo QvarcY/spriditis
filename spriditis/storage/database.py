@@ -6,7 +6,10 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-from spriditis.core.changes import compare_run_snapshots
+from spriditis.core.changes import (
+    classify_domain_visits,
+    compare_run_snapshots,
+)
 from spriditis.core.domains import DomainRecord
 from spriditis.core.entities import (
     ExtractionEvidence,
@@ -2695,6 +2698,42 @@ class Database:
                 [],
             ).append(observation_id)
 
+        visit_rows = self.conn.execute(
+            """
+            SELECT id, url, final_url, domain, outcome,
+                   http_status, content_type
+            FROM page_visits
+            WHERE project_id=? AND run_id=?
+            ORDER BY id
+            """,
+            (project_id, run_id),
+        ).fetchall()
+
+        visits_by_domain: dict[str, list[dict]] = {}
+        for row in visit_rows:
+            domain = row[3] or ""
+            if not domain:
+                continue
+            visits_by_domain.setdefault(domain, []).append(
+                {
+                    "id": int(row[0]),
+                    "url": row[1] or "",
+                    "final_url": row[2] or "",
+                    "domain": domain,
+                    "outcome": row[4] or "unknown",
+                    "http_status": row[5],
+                    "content_type": row[6] or "",
+                }
+            )
+
+        domains = {
+            domain: {
+                "domain": domain,
+                **classify_domain_visits(visits),
+            }
+            for domain, visits in sorted(visits_by_domain.items())
+        }
+
         clusters: dict[str, dict] = {}
         for entity in entities.values():
             cluster_key = entity["cluster_key"]
@@ -2747,6 +2786,7 @@ class Database:
             "finished_at": run[2] or "",
             "entities": entities,
             "clusters": clusters,
+            "domains": domains,
         }
 
     def compare_runs(
@@ -2777,6 +2817,8 @@ class Database:
             "DESCRIPTION_CHANGED": 0,
             "IMAGE_CHANGED": 0,
             "SOURCE_CHANGED": 0,
+            "DOMAIN_FAILED": 0,
+            "DOMAIN_RECOVERED": 0,
         }
         for event in events:
             counts[event.change_type] = (
@@ -2795,6 +2837,7 @@ class Database:
                 "finished_at": before["finished_at"],
                 "entity_count": len(before["entities"]),
                 "cluster_count": len(before["clusters"]),
+                "domain_count": len(before["domains"]),
             },
             "after_run": {
                 "id": after["run_id"],
@@ -2802,6 +2845,7 @@ class Database:
                 "finished_at": after["finished_at"],
                 "entity_count": len(after["entities"]),
                 "cluster_count": len(after["clusters"]),
+                "domain_count": len(after["domains"]),
             },
             "counts": counts,
             "events": [event.model_dump() for event in events],
