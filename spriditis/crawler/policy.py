@@ -84,7 +84,11 @@ def same_site(a: str, b: str) -> bool:
     return host_key(a) == host_key(b)
 
 
-def url_safety_reason(url: str) -> tuple[bool, str]:
+def url_safety_reason(
+    url: str,
+    *,
+    allow_feed_resource: bool = False,
+) -> tuple[bool, str]:
     parsed = urlparse(url)
 
     if parsed.scheme not in {"http", "https"}:
@@ -124,7 +128,11 @@ def url_safety_reason(url: str) -> tuple[bool, str]:
         return False, "blocked_path"
 
     if BINARY_EXTENSIONS.search(path):
-        return False, "binary_or_static_file"
+        if not (
+            allow_feed_resource
+            and path.endswith((".xml", ".rss", ".atom"))
+        ):
+            return False, "binary_or_static_file"
 
     return True, "ok"
 
