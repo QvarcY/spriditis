@@ -1601,7 +1601,11 @@ class Database:
             "entity_count": len(rows),
             "entities_with_evidence": entities_with_evidence,
             "entities_without_evidence": len(rows) - entities_with_evidence,
-            "field_count": sum(band_counts.values()),
+            "evidence_fact_count": sum(
+                item["field_count"]
+                for item in entity_summaries
+            ),
+            "supported_field_count": sum(band_counts.values()),
             "confidence_bands": band_counts,
             "methods": dict(
                 sorted(
