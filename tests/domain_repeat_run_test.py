@@ -102,6 +102,18 @@ def main():
             registry = DomainRegistry(project, initial_records=states)
             registry.add_seed("https://seed.example/catalog")
 
+            # A persisted safe blocked domain must not be reactivated merely
+            # because it is later configured as a seed.
+            blocked_seed_registry = DomainRegistry(
+                project,
+                initial_records=states,
+            )
+            blocked_seed = blocked_seed_registry.add_seed(
+                "https://blocked.example/start"
+            )
+            assert blocked_seed.status == "blocked"
+            assert blocked_seed_registry.active_count == 0
+
             blocked, blocked_event = registry.observe_link(
                 source_url="https://seed.example/catalog",
                 target_url="https://blocked.example/product/ergonomic-chair",
