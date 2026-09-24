@@ -38,6 +38,8 @@ class CrawlConfig(BaseModel):
     saturation_window: int = Field(default=0, ge=0, le=10000)
     max_discovery_depth: int = Field(default=20, ge=0, le=20)
     discovery_depth_budgets: dict[int, int] = Field(default_factory=dict)
+    entity_diversity_soft_cap: int = Field(default=0, ge=0, le=100000)
+    entity_diversity_priority_penalty: int = Field(default=30, ge=0, le=100)
 
 
 class SearchConfig(BaseModel):
