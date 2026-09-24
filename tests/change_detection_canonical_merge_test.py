@@ -85,7 +85,8 @@ with TemporaryDirectory() as tmp:
 
         pre_merge = db.compare_runs(project.id, run_a, run_b)
         assert pre_merge["comparison_basis"] == {
-            "facts": "historical_observation_snapshots",
+            "entity_facts": "historical_observation_snapshots",
+            "domain_health": "historical_page_visits",
             "identity": "current_canonical_membership",
         }
         assert pre_merge["counts"]["NEW_ENTITY"] == 1
@@ -158,7 +159,8 @@ with TemporaryDirectory() as tmp:
         # identity-normalized using current canonical membership, while all
         # field facts still come from immutable historical observations.
         assert post_merge["comparison_basis"] == {
-            "facts": "historical_observation_snapshots",
+            "entity_facts": "historical_observation_snapshots",
+            "domain_health": "historical_page_visits",
             "identity": "current_canonical_membership",
         }
     finally:
