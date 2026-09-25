@@ -25,8 +25,8 @@
 
 | | Status |
 |---|---|
-| **Publiskā versija / Public baseline** | ✅ `v3.3.0-alpha.8` — Change Detection |
-| **Šobrīd / Current work** | 🚧 `3.3.0-alpha.9` — Watch mode |
+| **Publiskā versija / Public baseline** | ✅ `v3.3.0-alpha.9` — Watch mode |
+| **Šobrīd / Current work** | 🚧 `3.3.0-alpha.10` — Async crawler |
 | **Galvenais virziens / North star** | 🧠 **Research Memory + Adaptive Discovery** |
 | **Pamatprincips / Core principle** | 🔎 **source-backed facts > AI guesses** |
 | **Izmaksu princips / Cost direction** | 🌱 Priekšroka lokāliem, atvērtiem, pašhostējamiem un bezmaksas risinājumiem / Prefer local, open, self-hostable and zero-cost building blocks |
@@ -55,8 +55,8 @@
 | ✅ | **3.3.0-alpha.6** | Entity Resolution | deterministic cross-source identity, canonical clusters, resolution audit, guarded merge, review queue, cluster explain |
 | ✅ | **3.3.0-alpha.7** | Fallback Extraction + Evidence Confidence | JSON-LD → microdata → OpenGraph → conservative DOM fallback, field provenance/confidence, schema v11, evidence-quality inspection |
 | ✅ | **3.3.0-alpha.8** | Change Detection | entity/price/field/source/domain/feed lifecycle events, historical provenance, `diff` between runs, schema v12 |
-| 🚧 | **3.3.0-alpha.9** | Watch mode | incremental repeated research, scheduling hooks, change-only output, JSONL export |
-| 🧭 | **3.3.0-alpha.10** | Async crawler | bounded concurrency, adaptive politeness, faster crawling without abandoning safety |
+| ✅ | **3.3.0-alpha.9** | Watch mode | coverage-aware repeated research, change-only JSONL, hooks, ETag/304 + Research Memory reuse |
+| 🚧 | **3.3.0-alpha.10** | Async crawler | bounded concurrency, adaptive politeness, faster crawling without abandoning safety |
 
 <details>
 <summary><strong>🔭 Longer-term backlog / Ilgtermiņa plāns</strong></summary>
@@ -88,7 +88,7 @@
 - project/run UI;
 - scheduler and background jobs;
 - webhooks / notifications;
-- CLI commands such as `diff`, `watch`, `export`.
+- additional export surfaces such as CSV / Parquet.
 
 ### Engineering quality
 - stronger typing and static checks;
@@ -249,6 +249,12 @@ Sprīdītis nav piesaistīts vienai nozarei. Ideja ir vienu un to pašu kodolu p
 - `diff` CLI divu research run jēgpilnu izmaiņu salīdzināšanai ar before/after/evidence detaļām
 - Change Detection entity, price, seller/description/image, source, domain un feed lifecycle izmaiņām
 - DB schema v12 ar vēsturiskiem run-scoped `feed_snapshots` un trace sasaisti
+- `watch` CLI inkrementālai atkārtotai izpētei ar `--once`, `--interval-seconds` un `--max-cycles`
+- coverage-aware Watch presence/source-change filtrēšana ar auditējamu `suppressed_uncertain`
+- change-only `spriditis.watch.change.v1` JSONL eksports
+- cycle/change hook kontrakti ārējiem scheduling/notifikāciju adapteriem; change hook saņem verificētu event payload
+- Watch feed refresh atkārtoti izmanto DB saglabātos `ETag` / `Last-Modified` un korekti apstrādā `304 Not Modified`
+- Watch atkārtoti izmanto Research Memory query/source prioritizācijai un saglabā lēmumus Decision Trace
 - search duplicate rate ar atsevišķiem raw / unique / duplicate / filtered skaitītājiem
 - freshness/staleness signāli ar skaidru `last_useful_at → last_crawled → last_seen` pamatu un konfigurējamu stale slieksni
 - page lineage `page_visits` audita dati ar source type, source URL, depth, outcome un HTTP statusu
@@ -272,7 +278,7 @@ Sprīdītis nav piesaistīts vienai nozarei. Ideja ir vienu un to pašu kodolu p
 
 ### Kas vēl nav gatavs?
 
-Pieņemtais attīstības virziens ir redzams README sākumā sadaļā **Development journey / Attīstības ceļš**. Publiskā bāze ir `3.3.0-alpha.8` Change Detection; nākamais aktīvais posms ir `3.3.0-alpha.9` Watch mode, pēc tam seko kontrolēts async crawleris.
+Pieņemtais attīstības virziens ir redzams README sākumā sadaļā **Development journey / Attīstības ceļš**. Publiskā bāze ir `3.3.0-alpha.9` Watch mode; nākamais aktīvais posms ir `3.3.0-alpha.10` kontrolēts async crawleris. Iebūvēts daemon scheduler, background-job rinda un webhook serveris apzināti paliek ārpus alpha9 publiskā kodola robežas.
 
 Detalizēti skatīt [ROADMAP.md](ROADMAP.md).
 
@@ -326,6 +332,20 @@ Palaid ar Gemini:
 ```powershell
 python main.py run --project projects\mans_tirgus.json --max-pages 10 --no-email
 ```
+
+Palaid vienu inkrementālu Watch ciklu bez MI:
+
+```powershell
+python main.py watch --project projects\mans_tirgus.json --once --no-ai --jsonl data\watch_changes.jsonl
+```
+
+Atkārtotam Watch režīmam:
+
+```powershell
+python main.py watch --project projects\mans_tirgus.json --interval-seconds 3600 --max-cycles 6 --no-ai --jsonl data\watch_changes.jsonl
+```
+
+Watch JSONL satur tikai verificētus change eventus; baseline un no-change cikli nerada tukšus heartbeat ierakstus. Presence/source-change kandidāti bez salīdzināma URL coverage tiek auditējami apspiesti kā `suppressed_uncertain`.
 
 Apskati Domain Registry:
 
@@ -436,11 +456,13 @@ Sprīdīti nevajadzētu izmantot autentifikācijas, piekļuves kontroles, paywal
 
 ### Projekta statuss
 
-Pašreizējais publiskais atskaites punkts ir **Sprīdītis 3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence**.
+Pašreizējais publiskais atskaites punkts ir **Sprīdītis 3.3.0-alpha.9 — Watch mode**.
 
-**3.3.0-alpha.7 — Fallback Extraction + Evidence Confidence** ir publicēts un pilnībā validēts. Tas pievieno schema.org microdata, konservatīvu DOM fallback, field-level extraction provenance/confidence, DB schema v11 current evidence persistence, `evidence-quality` inspekciju un target-cluster-aware identity conflict hard veto.
+**3.3.0-alpha.9 — Watch mode** ir pilnībā validēts. Tas pievieno coverage-aware inkrementālu atkārtotu izpēti, change-only JSONL, cycle/change hook kontraktus ar verificētu event payload, DB-persistētu ETag/Last-Modified/304 feed refresh un Research Memory atkārtotu izmantošanu nākamajos Watch ciklos.
 
-Pilnais alpha7 regression gate ir izpildīts: **43/43 deterministiskie testi iziet**, ieskaitot Adaptive Expedition, Research Memory, Search/Discovery/Feed, Entity Resolution, extraction evidence un schema v11 regresijas.
+Pilnais alpha9 regression gate ir izpildīts: **55/55 deterministiskie testi iziet**. Reālā 60-lapu Watch pārbaudē coverage-aware slānis apspieda 42 nepietiekami pierādītus presence kandidātus un neizveidoja nevienu viltus change eventu.
+
+Alpha9 neievieš iebūvētu daemon scheduler, background-job rindu vai webhook serveri; publiskā kodola integrācijas virsmas ir CLI loop, JSONL un hook kontrakti.
 
 Šis ir alpha projekts, tāpēc līdz stabilai versijai iespējamas arī nesavietojamas izmaiņas.
 
@@ -562,7 +584,7 @@ Sprīdītis is not tied to one industry. The same core is intended to support ve
 
 The public alpha deliberately does not pretend unfinished features are complete.
 
-The accepted direction is shown in the **Development journey** above. The public baseline is `3.3.0-alpha.8` Change Detection; the next active milestone is `3.3.0-alpha.9` Watch mode, followed by bounded async crawling.
+The accepted direction is shown in the **Development journey** above. The public baseline is `3.3.0-alpha.9` Watch mode; the next active milestone is `3.3.0-alpha.10` bounded async crawling. A built-in daemon scheduler, background-job queue and webhook server are deliberately outside the alpha9 public-core boundary.
 
 See the detailed [ROADMAP.md](ROADMAP.md).
 
@@ -618,6 +640,20 @@ Run with Gemini:
 ```powershell
 python main.py run --project projects\my_market.json --max-pages 10 --no-email
 ```
+
+Run one incremental Watch cycle without AI:
+
+```powershell
+python main.py watch --project projects\my_market.json --once --no-ai --jsonl data\watch_changes.jsonl
+```
+
+For bounded repeated Watch execution:
+
+```powershell
+python main.py watch --project projects\my_market.json --interval-seconds 3600 --max-cycles 6 --no-ai --jsonl data\watch_changes.jsonl
+```
+
+Watch JSONL contains only verified change events; baseline and no-change cycles do not emit empty heartbeat records. Presence/source-change candidates without comparable URL coverage are audited separately as `suppressed_uncertain`.
 
 Inspect the Domain Registry:
 
@@ -755,11 +791,13 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ### Project status
 
-The current public baseline is **Sprīdītis 3.3.0-alpha.8 — Change Detection**.
+The current public baseline is **Sprīdītis 3.3.0-alpha.9 — Watch mode**.
 
-**3.3.0-alpha.8 — Change Detection** is released and fully validated. It turns historical observations, page visits and feed snapshots into auditable entity, price, field, source, domain and feed-lifecycle events, with explicit comparison basis and provenance through `diff` and `trace`.
+**3.3.0-alpha.9 — Watch mode** is fully validated. It adds coverage-aware incremental repeated research, change-only JSONL, cycle/change hook contracts with verified event payloads, persisted ETag/Last-Modified/304 feed refresh, and Research Memory reuse across Watch cycles.
 
-The complete alpha8 regression gate passed: **48/48 deterministic tests**, including Adaptive Expedition, Research Memory, Search/Discovery/Feed, Entity Resolution, extraction evidence, schema-v12 persistence and all Change Detection safety regressions.
+The complete alpha9 regression gate passed: **55/55 deterministic tests**. In a real 60-page Watch validation, coverage-aware comparison suppressed 42 insufficiently proven presence candidates and emitted zero false change events.
+
+Alpha9 does not include a built-in daemon scheduler, background-job queue or webhook server; the public-core integration surfaces are the CLI loop, JSONL and hook contracts.
 
 This is alpha software. Expect breaking changes before a stable release.
 
