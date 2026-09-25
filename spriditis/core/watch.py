@@ -12,6 +12,7 @@ class WatchCycleResult:
     previous_run_id: int | None
     baseline: bool
     change_count: int
+    events: tuple[dict, ...] = field(default_factory=tuple)
     counts: dict[str, int] = field(default_factory=dict)
     suppressed_uncertain: int = 0
     suppressed_counts: dict[str, int] = field(default_factory=dict)
