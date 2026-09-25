@@ -108,6 +108,7 @@ class AdaptivePolitenessController:
 
         self._states: dict[str, DomainPolitenessState] = {}
         self._locks: dict[str, asyncio.Lock] = {}
+        self._lock_loops: dict[str, asyncio.AbstractEventLoop] = {}
 
     @staticmethod
     def domain_for(url: str) -> str:
@@ -123,10 +124,15 @@ class AdaptivePolitenessController:
         return state
 
     def _lock(self, domain: str) -> asyncio.Lock:
+        loop = asyncio.get_running_loop()
         lock = self._locks.get(domain)
-        if lock is None:
+        if (
+            lock is None
+            or self._lock_loops.get(domain) is not loop
+        ):
             lock = asyncio.Lock()
             self._locks[domain] = lock
+            self._lock_loops[domain] = loop
         return lock
 
     async def before_request(self, url: str) -> float:
