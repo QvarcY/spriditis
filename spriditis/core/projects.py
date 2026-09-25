@@ -47,6 +47,13 @@ class CrawlConfig(BaseModel):
     async_global_concurrency: int = Field(default=4, ge=1, le=32)
     async_per_domain_concurrency: int = Field(default=1, ge=1, le=8)
     async_max_pending: int = Field(default=8, ge=1, le=128)
+    async_max_retries: int = Field(default=2, ge=0, le=8)
+    async_retry_base_seconds: float = Field(default=1.0, ge=0.0, le=60.0)
+    async_max_domain_delay_seconds: float = Field(
+        default=120.0,
+        ge=0.0,
+        le=300.0,
+    )
 
     @model_validator(mode="after")
     def validate_limits(self) -> "CrawlConfig":
@@ -57,6 +64,16 @@ class CrawlConfig(BaseModel):
             raise ValueError(
                 "async_per_domain_concurrency nevar pārsniegt "
                 "async_global_concurrency."
+            )
+
+        if (
+            self.async_enabled
+            and self.async_max_domain_delay_seconds
+            < self.delay_seconds
+        ):
+            raise ValueError(
+                "async_max_domain_delay_seconds nevar būt mazāks par "
+                "delay_seconds, ja async režīms ir ieslēgts."
             )
 
         for depth, budget in self.discovery_depth_budgets.items():
