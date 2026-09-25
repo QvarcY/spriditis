@@ -135,10 +135,13 @@ class AsyncCrawlCoordinator:
 
         domain_semaphore = self._domain_semaphore(domain)
 
-        async with self._global_semaphore:
-            async with domain_semaphore:
-                await self._wait_for_domain_slot(domain)
+        # Take the domain permit first so same-domain waiters never occupy
+        # scarce global slots. Domain delay is also paid before acquiring
+        # the global execution slot.
+        async with domain_semaphore:
+            await self._wait_for_domain_slot(domain)
 
+            async with self._global_semaphore:
                 self._active += 1
                 self._peak_active = max(
                     self._peak_active,
