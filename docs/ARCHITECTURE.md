@@ -1,7 +1,7 @@
 # Sprīdītis — arhitektūra / Architecture
 
-Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.9 — Watch mode**  
-Nākamais aktīvais posms / Next active milestone: **3.3.0-alpha.10 — Async crawler + adaptive politeness**
+Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.10 — Async crawler + adaptive politeness**  
+Nākamais aktīvais posms / Next active milestone: **vēl nav izvēlēts / not selected yet**
 
 > **Latviski pirmajā vietā, angļu valoda zemāk. / Latvian first, English below.**
 
@@ -31,6 +31,8 @@ ResearchProject
 Crawler
       ├── robots / URL safety
       ├── crawl budgets
+      ├── opt-in bounded async prefetch
+      ├── retry budgets + adaptive politeness
       ├── sitemap discovery
       ├── external-link discovery
       └── RSS / Atom / JSON Feed
@@ -359,6 +361,64 @@ Galvenās robežas:
 Alpha9 apzināti **neievieš** daemon scheduler, background-job queue vai webhook serveri. Publiskā kodola automatizācijas robeža ir bounded CLI loop + JSONL + hook kontrakti.
 
 Pilnais alpha9 regression gate ir izpildīts: **55/55 deterministiskie testi iziet**.
+
+## Async crawler + adaptive politeness — 3.3.0-alpha.10 released
+
+Alpha10 paātrina tīkla gaidīšanu, nepārvēršot research-state mutācijas par paralēlu sacensību.
+
+Plūsma:
+
+```text
+URL Frontier
+      ↓
+deterministic fetch-wave planning
+  ├── total/per-domain budget reservation
+  ├── preserve priority/tie order
+  └── bounded pending work
+      ↓
+domain-aware async coordinator
+  ├── global concurrency cap
+  └── per-domain concurrency cap
+      ↓
+thread-local requests transport
+(asyncio.to_thread)
+      ↓
+retry + adaptive politeness
+  ├── Retry-After
+  ├── bounded exponential backoff
+  └── per-domain pressure/recovery delay
+      ↓
+prefetch cache
+      ↓
+URL restored to Frontier
+      ↓
+sequential deterministic processing
+(Domain Registry / extraction / decisions)
+```
+
+Galvenās robežas:
+
+- async režīms ir opt-in; sequential crawleris paliek noklusējuma baseline;
+- viena domēna gaidītāji nedrīkst aizņemt visus globālos execution slotus;
+- wave planneris rezervē total/per-domain crawl capacity pirms fetch un saglabā sākotnējo frontier tie-order;
+- prefetched URL tiek atgriezts frontierī, tāpēc jaunatklāts augstākas prioritātes URL var to apsteigt;
+- `requests.Session` netiek koplietots starp worker threadiem — transports lieto thread-local session;
+- transient pressure ir `408/429/500/502/503/504` vai network error; retry skaitu ierobežo explicit budžets;
+- `Retry-After` ir prioritārs pār exponential backoff un tiek capped;
+- adaptīvā politeness state ir per-domain un run-scoped: pressure palielina delay, success to samazina uz bāzi;
+- coordinator statiskais delay async crawler ceļā ir 0, lai pacing netiktu piemērots divreiz;
+- transporta kļūme netiek klusām pārfetchota caur sync session;
+- run diagnostics atdala logical fetch jobs no faktiskajiem HTTP attempts/retries;
+- robots, URL/private-network safety, budgets un provenance semantika paliek esošajā crawlera kontrolē;
+- alpha10 nemaina SQLite schema.
+
+Validācija:
+
+- async foundation testi pārbauda coordinator fairness, transport isolation un deterministic wave planning;
+- retry/politeness tests pārbauda `Retry-After`, exponential backoff, hard retry budget, non-retryable HTTP un domēnu neatkarību;
+- integrācijas tests pārbauda async main-page fetch bez sync fallback, deterministisku `PageVisit` secību un auditējamas kļūmes;
+- sequential/async salīdzinājums ar identisku URL kopu pierāda vienādu observable crawl semantiku un izmērāmu paralēla I/O ātruma ieguvumu;
+- pilnais regression gate: **60/60 deterministiskie testi iziet**.
 
 ## Feed state un HTTP resursu stāvoklis
 
@@ -744,6 +804,64 @@ Key boundaries:
 Alpha9 deliberately does **not** include a daemon scheduler, background-job queue or webhook server. The public-core automation boundary is a bounded CLI loop + JSONL + hook contracts.
 
 The complete alpha9 regression gate passed: **55/55 deterministic tests**.
+
+## Async crawler + adaptive politeness — 3.3.0-alpha.10 released
+
+Alpha10 overlaps network waiting without turning research-state mutation into a parallel race.
+
+Flow:
+
+```text
+URL Frontier
+      ↓
+deterministic fetch-wave planning
+  ├── total/per-domain budget reservation
+  ├── preserve priority/tie order
+  └── bounded pending work
+      ↓
+domain-aware async coordinator
+  ├── global concurrency cap
+  └── per-domain concurrency cap
+      ↓
+thread-local requests transport
+(asyncio.to_thread)
+      ↓
+retry + adaptive politeness
+  ├── Retry-After
+  ├── bounded exponential backoff
+  └── per-domain pressure/recovery delay
+      ↓
+prefetch cache
+      ↓
+URL restored to Frontier
+      ↓
+sequential deterministic processing
+(Domain Registry / extraction / decisions)
+```
+
+Key boundaries:
+
+- async mode is opt-in; the sequential crawler remains the default baseline;
+- same-domain waiters cannot consume all global execution slots;
+- the wave planner reserves total/per-domain crawl capacity before fetch and preserves original frontier tie order;
+- prefetched URLs return to the frontier, so newly discovered higher-priority work can still overtake them;
+- `requests.Session` is not shared across worker threads; the transport uses thread-local sessions;
+- transient pressure is `408/429/500/502/503/504` or a network error, with an explicit retry budget;
+- `Retry-After` takes precedence over exponential backoff and is capped;
+- adaptive politeness is per-domain and run-scoped: pressure raises delay while successful responses decay it toward the base;
+- the coordinator's static delay is zero in the integrated async path so pacing is not applied twice;
+- transport failures are not silently fetched again through the synchronous session;
+- run diagnostics distinguish logical fetch jobs from actual HTTP attempts/retries;
+- robots, URL/private-network safety, crawl budgets and provenance remain under the existing crawler policy;
+- alpha10 does not change the SQLite schema.
+
+Validation:
+
+- async foundation tests cover coordinator fairness, transport isolation and deterministic wave planning;
+- retry/politeness coverage verifies `Retry-After`, exponential backoff, hard retry budgets, non-retryable HTTP and domain independence;
+- crawler integration verifies async main-page fetch without sync fallback, deterministic `PageVisit` ordering and auditable failures;
+- sequential/async comparison over an identical URL set proves equivalent observable crawl semantics plus measurable parallel-I/O speedup;
+- complete regression gate: **60/60 deterministic tests pass**.
 
 ## Feed state and HTTP resource state
 
