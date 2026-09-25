@@ -23,6 +23,11 @@ from spriditis.search.relevance import LocalRelevance, local_relevance_signals
 
 from .async_coordinator import AsyncCrawlCoordinator, AsyncCrawlPolicy
 from .async_http import AsyncHTTPResult, AsyncHTTPTransport
+from .async_politeness import (
+    AdaptivePolitenessController,
+    AsyncRetryPolicy,
+    AsyncRetryingFetcher,
+)
 from .async_wave import AsyncWavePlanner
 from .discovery import DomainRegistry, SitemapDiscovery
 from .feed_discovery import FeedDiscovery
@@ -147,6 +152,8 @@ class ResearchCrawler:
 
         async_cache: dict[str, AsyncHTTPResult] = {}
         async_planner = None
+        async_fetcher = None
+        async_politeness = None
         if self.project.crawl.async_enabled:
             async_planner = AsyncWavePlanner(
                 wave_size=min(
@@ -155,6 +162,28 @@ class ResearchCrawler:
                 ),
                 max_pages_per_domain=
                     self.project.crawl.max_pages_per_domain,
+            )
+            async_politeness = AdaptivePolitenessController(
+                base_delay_seconds=
+                    self.project.crawl.delay_seconds,
+                max_delay_seconds=
+                    self.project.crawl
+                    .async_max_domain_delay_seconds,
+                retry_base_seconds=
+                    self.project.crawl.async_retry_base_seconds,
+            )
+            async_fetcher = AsyncRetryingFetcher(
+                transport=self._ensure_async_transport(),
+                retry_policy=AsyncRetryPolicy(
+                    max_retries=
+                        self.project.crawl.async_max_retries,
+                    retry_base_seconds=
+                        self.project.crawl.async_retry_base_seconds,
+                    max_retry_delay_seconds=
+                        self.project.crawl
+                        .async_max_domain_delay_seconds,
+                ),
+                politeness=async_politeness,
             )
 
         while (
@@ -170,6 +199,7 @@ class ResearchCrawler:
                     pages_by_domain=pages_by_domain,
                     registry=registry,
                     result=result,
+                    fetcher=async_fetcher,
                 )
                 if not frontier:
                     break
@@ -793,6 +823,17 @@ class ResearchCrawler:
 
         self._enrich_entities(result)
 
+        if async_politeness is not None:
+            politeness_snapshot = async_politeness.snapshot()
+            result.async_pressure_events = sum(
+                state.pressure_events
+                for state in politeness_snapshot.values()
+            )
+            result.async_final_domain_delay_seconds = {
+                domain: state.current_delay_seconds
+                for domain, state in politeness_snapshot.items()
+            }
+
         result.domains = registry.current_run_records()
         result.domain_discoveries = registry.discoveries
         result.finished_at = datetime.now(timezone.utc).isoformat()
@@ -818,6 +859,7 @@ class ResearchCrawler:
         pages_by_domain: Counter[str],
         registry: DomainRegistry,
         result: ResearchRunResult,
+        fetcher,
     ) -> None:
         remaining_total = (
             self.project.crawl.max_pages_total
@@ -895,17 +937,19 @@ class ResearchCrawler:
                     self.project.crawl.async_global_concurrency,
                 per_domain_concurrency=
                     self.project.crawl.async_per_domain_concurrency,
-                min_domain_delay_seconds=
-                    self.project.crawl.delay_seconds,
+                min_domain_delay_seconds=0.0,
                 max_pending=self.project.crawl.async_max_pending,
             )
         )
-        transport = self._ensure_async_transport()
+        if fetcher is None:
+            raise RuntimeError(
+                "Async fetcher nav inicializēts async crawl režīmam."
+            )
 
         async def fetch_all():
             return await coordinator.run(
                 [item.url for item in fetch_items],
-                transport.fetch,
+                fetcher.fetch,
             )
 
         task_results, stats = asyncio.run(fetch_all())
@@ -932,8 +976,8 @@ class ResearchCrawler:
         }
 
         for task_result in task_results:
-            fetch_result = task_result.value
-            if fetch_result is None:
+            outcome = task_result.value
+            if outcome is None:
                 fetch_result = AsyncHTTPResult(
                     requested_url=task_result.url,
                     final_url=task_result.url,
@@ -944,6 +988,16 @@ class ResearchCrawler:
                     ),
                     error_message=task_result.error_message,
                 )
+                result.async_http_attempts += 1
+            else:
+                fetch_result = outcome.result
+                result.async_http_attempts += outcome.attempts
+                result.async_retries += outcome.retries
+                result.async_politeness_wait_seconds += (
+                    outcome.waited_seconds
+                )
+                if outcome.retry_exhausted:
+                    result.async_retry_exhausted += 1
 
             if not fetch_result.ok:
                 result.async_fetch_failures += 1
