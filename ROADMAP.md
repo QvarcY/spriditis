@@ -248,17 +248,25 @@ Secība paliek apzināta: **Entity Resolution → Evidence Confidence → Change
 
 Apzināta robeža: alpha9 nepievieno iebūvētu daemon scheduler, background-job rindu vai webhook serveri. CLI loop, JSONL un hook kontrakti ir publiskā kodola integrācijas virsma.
 
-## 🚧 3.3.0-alpha.10 — Async crawler + adaptive politeness
+## ✅ 3.3.0-alpha.10 — Async crawler + adaptive politeness
 
-Tikai pēc tam, kad research loģika jau prot būt selektīva.
+**Statuss:** pilnībā validēts; 60/60 regression gate iziet.
 
-- bounded async requests;
-- per-domain semaphore 1–2 kā konservatīvs sākumpunkts;
-- global concurrency cap;
-- adaptive delay;
-- retry budgets;
-- backpressure;
-- bez drošības/robots/private-network aizsardzības vājināšanas.
+- opt-in bounded async page prefetch virs esošā crawlera;
+- domain-aware global/per-domain concurrency bez head-of-line starvation;
+- bounded pending queue un backpressure;
+- deterministisks fetch-wave planneris ar total/per-domain crawl budžeta rezervāciju;
+- thread-local `requests.Session` izmantošana caur `asyncio.to_thread()`;
+- frontier priority/tie-order saglabāšana pēc prefetch;
+- research-state apstrāde paliek secīga un deterministiska;
+- bounded retry budžets transient HTTP/network pressure;
+- `Retry-After` un bounded exponential backoff;
+- run-scoped adaptive per-domain delay ar pressure-up / success-down semantiku;
+- auditējami async run skaitītāji un per-domain final delay;
+- sequential vs async semantic parity un izmērāms paralēla I/O ātruma ieguvums;
+- robots/URL/private-network drošība, crawl budžeti un provenance netiek vājināti.
+
+Apzināta robeža: alpha10 async režīms paliek **opt-in**; tas nemaina persistence shēmu un nepievieno background worker/distributed queue infrastruktūru.
 
 ## 🔭 Vēlāk / Backlog
 
@@ -298,7 +306,7 @@ Tas ir **Research Memory + Adaptive Discovery + Evidence Confidence + Incrementa
 
 # English
 
-## ✅ Current public baseline — 3.3.0-alpha.9
+## ✅ Current public baseline — 3.3.0-alpha.10
 
 Implemented and public:
 
@@ -497,17 +505,25 @@ The sequence is intentional: **Entity Resolution → Evidence Confidence → Cha
 - reuse of Research Memory;
 - JSONL export as a simple integration format.
 
-## 🚧 3.3.0-alpha.10 — Async crawler + adaptive politeness
+## ✅ 3.3.0-alpha.10 — Async crawler + adaptive politeness
 
-Only after the research logic is selective enough.
+**Status:** fully validated; the 60/60 regression gate passes.
 
-- bounded async requests;
-- per-domain semaphore 1–2 as a conservative starting point;
-- global concurrency cap;
-- adaptive delay;
-- retry budgets;
-- backpressure;
-- no weakening of robots/URL/private-network protections.
+- opt-in bounded async page prefetch on top of the existing crawler;
+- domain-aware global/per-domain concurrency without head-of-line starvation;
+- bounded pending work and backpressure;
+- deterministic fetch-wave planning with total/per-domain crawl-budget reservation;
+- thread-local `requests.Session` transport via `asyncio.to_thread()`;
+- preserved frontier priority/tie ordering after prefetch;
+- sequential and deterministic research-state processing;
+- bounded retry budgets for transient HTTP/network pressure;
+- `Retry-After` plus bounded exponential backoff;
+- run-scoped adaptive per-domain pacing with pressure-up / success-down behavior;
+- auditable async run counters and final per-domain delay;
+- proven sequential/async semantic parity plus measurable parallel-I/O speedup;
+- no weakening of robots/URL/private-network safety, crawl budgets or provenance.
+
+Deliberate boundary: alpha10 async mode remains **opt-in**; it does not change the persistence schema or add a background-worker/distributed-queue platform.
 
 ## 🔭 Later backlog
 
