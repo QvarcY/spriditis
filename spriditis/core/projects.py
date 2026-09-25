@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 ResearchType = Literal[
@@ -47,6 +47,30 @@ class CrawlConfig(BaseModel):
     async_global_concurrency: int = Field(default=4, ge=1, le=32)
     async_per_domain_concurrency: int = Field(default=1, ge=1, le=8)
     async_max_pending: int = Field(default=8, ge=1, le=128)
+
+    @model_validator(mode="after")
+    def validate_limits(self) -> "CrawlConfig":
+        if (
+            self.async_per_domain_concurrency
+            > self.async_global_concurrency
+        ):
+            raise ValueError(
+                "async_per_domain_concurrency nevar pārsniegt "
+                "async_global_concurrency."
+            )
+
+        for depth, budget in self.discovery_depth_budgets.items():
+            if depth < 1 or depth > 20:
+                raise ValueError(
+                    "discovery_depth_budgets hop jābūt diapazonā 1..20."
+                )
+            if budget < 0:
+                raise ValueError(
+                    "discovery_depth_budgets budžets nevar būt negatīvs."
+                )
+
+        return self
+
 
 
 class SearchConfig(BaseModel):
@@ -93,29 +117,6 @@ class ResearchProject(BaseModel):
             raise ValueError(
                 "Project id drīkst saturēt tikai a-z, 0-9, _ un -, 2-64 zīmes."
             )
-        return value
-
-    @field_validator("crawl")
-    @classmethod
-    def validate_crawl(cls, value: CrawlConfig) -> CrawlConfig:
-        if (
-            value.async_per_domain_concurrency
-            > value.async_global_concurrency
-        ):
-            raise ValueError(
-                "async_per_domain_concurrency nevar pārsniegt "
-                "async_global_concurrency."
-            )
-
-        for depth, budget in value.discovery_depth_budgets.items():
-            if depth < 1 or depth > 20:
-                raise ValueError(
-                    "discovery_depth_budgets hop jābūt diapazonā 1..20."
-                )
-            if budget < 0:
-                raise ValueError(
-                    "discovery_depth_budgets budžets nevar būt negatīvs."
-                )
         return value
 
     @field_validator("seed_urls")
