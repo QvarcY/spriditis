@@ -72,7 +72,9 @@ wave = planner.plan(
     frontier,
     remaining_total=10,
     pages_by_domain=pages,
-    eligible=lambda item: "blocked" not in item.url,
+    classify=lambda item: (
+        "defer" if "blocked" in item.url else "eligible"
+    ),
 )
 
 # a.example has one page already, so only one additional URL may be
@@ -94,6 +96,29 @@ first_deferred = frontier.pop()
 second_deferred = frontier.pop()
 assert first_deferred.url == "https://a.example/high-2"
 assert second_deferred.url == "https://c.example/blocked"
+
+# Permanently invalid work can be dropped instead of requeued.
+drop_frontier = URLFrontier()
+drop_frontier.add(
+    "https://drop.example/invalid",
+    priority=100,
+    depth=0,
+)
+drop_frontier.add(
+    "https://keep.example/valid",
+    priority=90,
+    depth=0,
+)
+drop_wave = planner.plan(
+    drop_frontier,
+    remaining_total=2,
+    pages_by_domain=Counter(),
+    classify=lambda item: (
+        "drop" if "invalid" in item.url else "eligible"
+    ),
+)
+assert drop_wave.urls == ("https://keep.example/valid",)
+assert not drop_frontier
 
 # remaining_total caps the wave independently from configured wave_size.
 small_frontier = URLFrontier()
@@ -138,4 +163,5 @@ print("wave_size=bounded")
 print("remaining_total=reserved")
 print("per_domain_page_budget=reserved")
 print("temporarily_ineligible=deferred")
+print("permanently_ineligible=dropped")
 print("frontier_tie_order=preserved")
