@@ -102,6 +102,27 @@ class FakeAsyncTransport:
         self.closed = True
 
 
+class SequenceAsyncTransport:
+    def __init__(self, responses):
+        self.responses = {
+            url: list(items)
+            for url, items in responses.items()
+        }
+        self.calls: list[str] = []
+        self.closed = False
+
+    async def fetch(self, url: str) -> AsyncHTTPResult:
+        self.calls.append(url)
+        await asyncio.sleep(0)
+        items = self.responses[url]
+        if not items:
+            raise AssertionError(f"No fake response left for {url}")
+        return items.pop(0)
+
+    def close(self) -> None:
+        self.closed = True
+
+
 def settings() -> AppSettings:
     return AppSettings(
         gemini_api_key="",
@@ -201,6 +222,10 @@ assert all(
 assert result.async_fetch_waves == 2
 assert result.async_fetch_submitted == 4
 assert result.async_fetch_failures == 0
+assert result.async_http_attempts == 4
+assert result.async_retries == 0
+assert result.async_retry_exhausted == 0
+assert result.async_pressure_events == 0
 assert result.async_peak_active >= 2
 assert result.async_peak_active <= 3
 assert all(
@@ -236,6 +261,7 @@ failure_project = ResearchProject.model_validate(
             "async_global_concurrency": 2,
             "async_per_domain_concurrency": 1,
             "async_max_pending": 2,
+            "async_max_retries": 0,
         },
         "search": {
             "provider": "none",
@@ -265,6 +291,10 @@ assert failure_result.visited_pages == 1
 assert failure_result.failed_pages == 1
 assert failure_result.async_fetch_submitted == 2
 assert failure_result.async_fetch_failures == 1
+assert failure_result.async_http_attempts == 2
+assert failure_result.async_retries == 0
+assert failure_result.async_retry_exhausted == 1
+assert failure_result.async_pressure_events == 1
 assert [visit.url for visit in failure_result.page_visits] == [
     good_url,
     bad_url,
@@ -272,6 +302,94 @@ assert [visit.url for visit in failure_result.page_visits] == [
 assert [visit.outcome for visit in failure_result.page_visits] == [
     "html_ok",
     "http_error:ConnectionError",
+]
+
+
+# Retry/politeness is integrated into the real async crawler worker.
+retry_url = "https://retry.example/item"
+retry_transport = SequenceAsyncTransport(
+    {
+        retry_url: [
+            AsyncHTTPResult(
+                requested_url=retry_url,
+                final_url=retry_url,
+                status_code=429,
+                headers={"Retry-After": "0"},
+                text="",
+            ),
+            AsyncHTTPResult(
+                requested_url=retry_url,
+                final_url=retry_url,
+                status_code=200,
+                headers={
+                    "Content-Type": "text/html; charset=utf-8",
+                },
+                text="<html><body><h1>Recovered</h1></body></html>",
+            ),
+        ],
+    }
+)
+retry_project = ResearchProject.model_validate(
+    {
+        "id": "async_crawler_retry",
+        "name": "Async crawler retry",
+        "keywords": ["test"],
+        "seed_urls": [retry_url],
+        "crawl": {
+            "mode": "domain",
+            "max_pages_total": 1,
+            "max_pages_per_domain": 1,
+            "max_domains": 1,
+            "max_depth": 0,
+            "delay_seconds": 0,
+            "respect_robots": False,
+            "discover_sitemaps": False,
+            "discover_feeds": False,
+            "async_enabled": True,
+            "async_global_concurrency": 1,
+            "async_per_domain_concurrency": 1,
+            "async_max_pending": 1,
+            "async_max_retries": 2,
+            "async_retry_base_seconds": 0.01,
+            "async_max_domain_delay_seconds": 1.0,
+        },
+        "search": {
+            "provider": "none",
+            "max_queries": 0,
+        },
+        "analysis": {
+            "ai_enabled": False,
+            "ai_provider": "none",
+        },
+    }
+)
+
+retry_crawler = ResearchCrawler(
+    settings(),
+    retry_project,
+    NoOpAI(),
+    async_transport=retry_transport,
+)
+retry_sync = ForbiddenSyncSession()
+retry_crawler.session = retry_sync
+
+retry_result = retry_crawler.crawl()
+
+assert retry_sync.calls == []
+assert retry_transport.calls == [retry_url, retry_url]
+assert retry_result.visited_pages == 1
+assert retry_result.failed_pages == 0
+assert retry_result.async_fetch_submitted == 1
+assert retry_result.async_http_attempts == 2
+assert retry_result.async_retries == 1
+assert retry_result.async_retry_exhausted == 0
+assert retry_result.async_pressure_events == 1
+assert (
+    retry_result.async_final_domain_delay_seconds["retry.example"]
+    > 0
+)
+assert [visit.outcome for visit in retry_result.page_visits] == [
+    "html_ok",
 ]
 
 
@@ -284,3 +402,7 @@ print("research_processing_order=deterministic")
 print("frontier_priority=processed_after_prefetch_restore")
 print("async_run_diagnostics=exposed")
 print("async_transport_error=audited_without_sync_retry")
+print("retry_budget=integrated")
+print("retry_after=integrated")
+print("adaptive_politeness=run_scoped")
+print("pressure_diagnostics=exposed")
