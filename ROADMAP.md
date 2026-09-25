@@ -416,7 +416,7 @@ Goal: choose better research paths without requiring paid AI.
 - database schema v7 with an `adaptive_decisions` audit table;
 - the full alpha5 regression gate passed: 32/32 deterministic tests.
 
-## 🚧 3.3.0-alpha.6 — Entity Resolution
+## ✅ 3.3.0-alpha.6 — Entity Resolution
 
 Goal: represent the same real-world product/service as one canonical entity with multiple source observations.
 
@@ -478,7 +478,7 @@ Design boundaries:
 
 The complete alpha7 regression gate passed: **43/43 deterministic tests**.
 
-## 🧭 3.3.0-alpha.8 — Change Detection
+## ✅ 3.3.0-alpha.8 — Change Detection
 
 Goal: turn observations into meaningful events.
 
@@ -494,7 +494,7 @@ Goal: turn observations into meaningful events.
 
 The sequence is intentional: **Entity Resolution → Evidence Confidence → Change Detection**.
 
-## 🧭 3.3.0-alpha.9 — Watch mode
+## ✅ 3.3.0-alpha.9 — Watch mode
 
 - incremental repeated research;
 - `spriditis watch`;
