@@ -52,6 +52,21 @@ class URLFrontier:
         self._queued.add(url)
         return True
 
+
+    def restore(self, item: FrontierItem) -> bool:
+        """
+        Requeue an existing item without changing its original tie-break
+        order. Used by async wave planning for temporarily deferred work.
+        """
+        if item.url in self._queued:
+            return False
+        heapq.heappush(
+            self._queue,
+            (-item.priority, item.order, item),
+        )
+        self._queued.add(item.url)
+        return True
+
     def pop(self) -> FrontierItem:
         _, _, item = heapq.heappop(self._queue)
         self._queued.discard(item.url)
