@@ -573,6 +573,7 @@ def _run_watch_cycle(
         previous_run_id=before_run["id"],
         baseline=False,
         change_count=len(events),
+        events=tuple(events),
         counts=dict(diff["counts"]),
         suppressed_uncertain=suppressed_count,
         suppressed_counts=dict(
