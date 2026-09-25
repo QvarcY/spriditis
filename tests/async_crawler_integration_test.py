@@ -123,6 +123,52 @@ class SequenceAsyncTransport:
         self.closed = True
 
 
+class SlowSyncResponse:
+    def __init__(self, url: str):
+        self.url = url
+        self.text = f"<html><body><h1>{url}</h1></body></html>"
+        self.status_code = 200
+        self.headers = {
+            "Content-Type": "text/html; charset=utf-8",
+        }
+
+
+class SlowSyncSession:
+    def __init__(self, delay_seconds: float):
+        self.delay_seconds = delay_seconds
+        self.headers = {}
+        self.calls: list[str] = []
+
+    def get(self, url, **kwargs):
+        self.calls.append(url)
+        time.sleep(self.delay_seconds)
+        return SlowSyncResponse(url)
+
+
+class SlowAsyncTransport:
+    def __init__(self, delay_seconds: float):
+        self.delay_seconds = delay_seconds
+        self.calls: list[str] = []
+        self.closed = False
+
+    async def fetch(self, url: str) -> AsyncHTTPResult:
+        self.calls.append(url)
+        await asyncio.sleep(self.delay_seconds)
+        return AsyncHTTPResult(
+            requested_url=url,
+            final_url=url,
+            status_code=200,
+            headers={
+                "Content-Type": "text/html; charset=utf-8",
+            },
+            text=f"<html><body><h1>{url}</h1></body></html>",
+            elapsed_seconds=self.delay_seconds,
+        )
+
+    def close(self) -> None:
+        self.closed = True
+
+
 def settings() -> AppSettings:
     return AppSettings(
         gemini_api_key="",
@@ -393,6 +439,145 @@ assert [visit.outcome for visit in retry_result.page_visits] == [
 ]
 
 
+# Sequential and async execution must preserve observable crawl
+# semantics while async overlaps independent network waits.
+PERF_SEEDS = [
+    "https://pa.example/1",
+    "https://pb.example/1",
+    "https://pc.example/1",
+    "https://pa.example/2",
+    "https://pb.example/2",
+    "https://pc.example/2",
+]
+PERF_DELAY = 0.05
+
+base_perf_config = {
+    "mode": "domain",
+    "max_pages_total": 6,
+    "max_pages_per_domain": 2,
+    "max_domains": 3,
+    "max_depth": 0,
+    "delay_seconds": 0,
+    "respect_robots": False,
+    "discover_sitemaps": False,
+    "discover_feeds": False,
+}
+
+sequential_project = ResearchProject.model_validate(
+    {
+        "id": "sequential_perf_baseline",
+        "name": "Sequential performance baseline",
+        "keywords": ["test"],
+        "seed_urls": PERF_SEEDS,
+        "crawl": {
+            **base_perf_config,
+            "async_enabled": False,
+        },
+        "search": {
+            "provider": "none",
+            "max_queries": 0,
+        },
+        "analysis": {
+            "ai_enabled": False,
+            "ai_provider": "none",
+        },
+    }
+)
+async_perf_project = ResearchProject.model_validate(
+    {
+        "id": "async_perf_candidate",
+        "name": "Async performance candidate",
+        "keywords": ["test"],
+        "seed_urls": PERF_SEEDS,
+        "crawl": {
+            **base_perf_config,
+            "async_enabled": True,
+            "async_global_concurrency": 3,
+            "async_per_domain_concurrency": 1,
+            "async_max_pending": 3,
+            "async_max_retries": 0,
+        },
+        "search": {
+            "provider": "none",
+            "max_queries": 0,
+        },
+        "analysis": {
+            "ai_enabled": False,
+            "ai_provider": "none",
+        },
+    }
+)
+
+sequential_crawler = ResearchCrawler(
+    settings(),
+    sequential_project,
+    NoOpAI(),
+)
+sequential_session = SlowSyncSession(PERF_DELAY)
+sequential_crawler.session = sequential_session
+
+sequential_started = time.perf_counter()
+sequential_result = sequential_crawler.crawl()
+sequential_elapsed = time.perf_counter() - sequential_started
+
+async_perf_transport = SlowAsyncTransport(PERF_DELAY)
+async_perf_crawler = ResearchCrawler(
+    settings(),
+    async_perf_project,
+    NoOpAI(),
+    async_transport=async_perf_transport,
+)
+async_perf_sync = ForbiddenSyncSession()
+async_perf_crawler.session = async_perf_sync
+
+async_started = time.perf_counter()
+async_perf_result = async_perf_crawler.crawl()
+async_elapsed = time.perf_counter() - async_started
+
+
+def page_signature(run_result):
+    return [
+        (
+            visit.url,
+            visit.final_url,
+            visit.domain,
+            visit.source_url,
+            visit.source_type,
+            visit.depth,
+            visit.priority,
+            visit.outcome,
+            visit.http_status,
+            visit.content_type,
+        )
+        for visit in run_result.page_visits
+    ]
+
+
+assert sequential_session.calls == PERF_SEEDS
+assert set(async_perf_transport.calls) == set(PERF_SEEDS)
+assert len(async_perf_transport.calls) == len(PERF_SEEDS)
+assert async_perf_sync.calls == []
+
+assert page_signature(async_perf_result) == page_signature(
+    sequential_result
+)
+assert async_perf_result.visited_pages == sequential_result.visited_pages == 6
+assert async_perf_result.failed_pages == sequential_result.failed_pages == 0
+assert async_perf_result.stop_reason == sequential_result.stop_reason == "max_pages"
+
+# Six 50 ms blocking fetches take roughly 300 ms sequentially. With three
+# independent domains, async should complete the same I/O in roughly two
+# waves. Keep a generous threshold so this remains stable on busy systems.
+assert async_elapsed < sequential_elapsed * 0.75, (
+    sequential_elapsed,
+    async_elapsed,
+)
+assert sequential_elapsed - async_elapsed >= 0.08, (
+    sequential_elapsed,
+    async_elapsed,
+)
+
+
 print("ASYNC CRAWLER INTEGRATION TEST OK")
 print("async_mode=main_page_fetch_enabled")
 print("sync_main_page_fallback=unused")
@@ -406,3 +591,5 @@ print("retry_budget=integrated")
 print("retry_after=integrated")
 print("adaptive_politeness=run_scoped")
 print("pressure_diagnostics=exposed")
+print("sequential_async_semantics=equivalent")
+print("parallel_io=measurable_speedup")
