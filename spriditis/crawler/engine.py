@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from collections import Counter
 from datetime import datetime, timezone
@@ -20,6 +21,9 @@ from spriditis.search.base import SearchProvider, SearchProviderError
 from spriditis.search.query import build_search_queries
 from spriditis.search.relevance import LocalRelevance, local_relevance_signals
 
+from .async_coordinator import AsyncCrawlCoordinator, AsyncCrawlPolicy
+from .async_http import AsyncHTTPResult, AsyncHTTPTransport
+from .async_wave import AsyncWavePlanner
 from .discovery import DomainRegistry, SitemapDiscovery
 from .feed_discovery import FeedDiscovery
 from .frontier import URLFrontier
@@ -30,6 +34,14 @@ from .policy import (
     text_relevance_score,
 )
 from .robots import RobotsCache
+
+
+class _AsyncResponseAdapter:
+    def __init__(self, result: AsyncHTTPResult):
+        self.url = result.final_url
+        self.text = result.text
+        self.status_code = int(result.status_code or 0)
+        self.headers = result.headers
 
 
 class ResearchCrawler:
@@ -43,6 +55,7 @@ class ResearchCrawler:
         domain_states: dict[str, DomainRecord] | None = None,
         query_memory: list[dict] | None = None,
         source_profiles: list[dict] | None = None,
+        async_transport=None,
     ):
         self.settings = settings
         self.project = project
@@ -56,6 +69,8 @@ class ResearchCrawler:
             for row in (source_profiles or [])
             if row.get("domain")
         }
+        self.async_transport = async_transport
+        self._owns_async_transport = async_transport is None
 
         self.session = requests.Session()
         self.session.headers.update(
@@ -79,6 +94,17 @@ class ResearchCrawler:
         )
 
     def crawl(self) -> ResearchRunResult:
+        try:
+            return self._crawl_impl()
+        finally:
+            if (
+                self._owns_async_transport
+                and self.async_transport is not None
+            ):
+                self.async_transport.close()
+                self.async_transport = None
+
+    def _crawl_impl(self) -> ResearchRunResult:
         result = ResearchRunResult(project_id=self.project.id)
 
         frontier = URLFrontier()
@@ -119,10 +145,35 @@ class ResearchCrawler:
                 )
             raise ValueError("Projektam nav neviena derīga seed URL.")
 
+        async_cache: dict[str, AsyncHTTPResult] = {}
+        async_planner = None
+        if self.project.crawl.async_enabled:
+            async_planner = AsyncWavePlanner(
+                wave_size=min(
+                    self.project.crawl.async_global_concurrency,
+                    self.project.crawl.async_max_pending,
+                ),
+                max_pages_per_domain=
+                    self.project.crawl.max_pages_per_domain,
+            )
+
         while (
             frontier
             and result.visited_pages < self.project.crawl.max_pages_total
         ):
+            if async_planner is not None:
+                self._prefetch_async_wave(
+                    frontier=frontier,
+                    planner=async_planner,
+                    cache=async_cache,
+                    visited=visited,
+                    pages_by_domain=pages_by_domain,
+                    registry=registry,
+                    result=result,
+                )
+                if not frontier:
+                    break
+
             item = frontier.pop()
             url = item.url
 
@@ -173,16 +224,16 @@ class ResearchCrawler:
                 f"{self.project.crawl.max_pages_total}] {url}"
             )
 
-            try:
-                response = self.session.get(
-                    url,
-                    timeout=self.settings.request_timeout_seconds,
-                    allow_redirects=True,
-                )
-            except requests.RequestException as exc:
+            prefetched = async_cache.pop(url, None)
+
+            if prefetched is not None and not prefetched.ok:
                 visited.add(url)
                 result.failed_pages += 1
-                registry.mark_failed(domain, f"http_error:{type(exc).__name__}")
+                error_type = prefetched.error_type or "AsyncFetchError"
+                registry.mark_failed(
+                    domain,
+                    f"http_error:{error_type}",
+                )
                 result.page_visits.append(
                     PageVisit(
                         url=url,
@@ -192,11 +243,45 @@ class ResearchCrawler:
                         source_type=item.source_type,
                         depth=item.depth,
                         priority=item.priority,
-                        outcome=f"http_error:{type(exc).__name__}",
+                        outcome=f"http_error:{error_type}",
                     )
                 )
-                print(f"⚠️ HTTP kļūda: {exc}")
+                print(
+                    f"⚠️ HTTP kļūda: "
+                    f"{prefetched.error_message or error_type}"
+                )
                 continue
+
+            if prefetched is not None:
+                response = _AsyncResponseAdapter(prefetched)
+            else:
+                try:
+                    response = self.session.get(
+                        url,
+                        timeout=self.settings.request_timeout_seconds,
+                        allow_redirects=True,
+                    )
+                except requests.RequestException as exc:
+                    visited.add(url)
+                    result.failed_pages += 1
+                    registry.mark_failed(
+                        domain,
+                        f"http_error:{type(exc).__name__}",
+                    )
+                    result.page_visits.append(
+                        PageVisit(
+                            url=url,
+                            final_url=url,
+                            domain=domain,
+                            source_url=item.source_url,
+                            source_type=item.source_type,
+                            depth=item.depth,
+                            priority=item.priority,
+                            outcome=f"http_error:{type(exc).__name__}",
+                        )
+                    )
+                    print(f"⚠️ HTTP kļūda: {exc}")
+                    continue
 
             final_url = normalize_url(response.url) or url
 
@@ -713,6 +798,159 @@ class ResearchCrawler:
         result.finished_at = datetime.now(timezone.utc).isoformat()
         return result
 
+    def _ensure_async_transport(self):
+        if self.async_transport is None:
+            self.async_transport = AsyncHTTPTransport(
+                user_agent=self.settings.user_agent,
+                timeout_seconds=self.settings.request_timeout_seconds,
+                accept_language=",".join(self.project.languages)
+                + ",en;q=0.7",
+            )
+        return self.async_transport
+
+    def _prefetch_async_wave(
+        self,
+        *,
+        frontier: URLFrontier,
+        planner: AsyncWavePlanner,
+        cache: dict[str, AsyncHTTPResult],
+        visited: set[str],
+        pages_by_domain: Counter[str],
+        registry: DomainRegistry,
+        result: ResearchRunResult,
+    ) -> None:
+        remaining_total = (
+            self.project.crawl.max_pages_total
+            - result.visited_pages
+        )
+        if remaining_total <= 0:
+            return
+
+        def classify(item):
+            if item.url in cache:
+                return "defer"
+            if item.url in visited:
+                return "drop"
+            if item.depth > self.project.crawl.max_depth:
+                return "drop"
+
+            domain = host_key(item.url)
+            record = registry.records.get(domain)
+            if record is None or record.status != "active":
+                return "drop"
+
+            if (
+                pages_by_domain[domain]
+                >= self.project.crawl.max_pages_per_domain
+            ):
+                return "drop"
+
+            return "eligible"
+
+        wave = planner.plan(
+            frontier,
+            remaining_total=remaining_total,
+            pages_by_domain=pages_by_domain,
+            classify=classify,
+        )
+        if not wave.items:
+            return
+
+        fetch_items = []
+        for item in wave.items:
+            url = item.url
+            domain = host_key(url)
+
+            if (
+                self.project.crawl.respect_robots
+                and not self.robots.can_fetch(url)
+            ):
+                result.skipped_by_robots += 1
+                visited.add(url)
+                registry.mark_robots(domain, "blocked")
+                result.page_visits.append(
+                    PageVisit(
+                        url=url,
+                        final_url=url,
+                        domain=domain,
+                        source_url=item.source_url,
+                        source_type=item.source_type,
+                        depth=item.depth,
+                        priority=item.priority,
+                        outcome="robots_blocked",
+                    )
+                )
+                print(f"🤖 robots.txt neļauj: {url}")
+                continue
+
+            registry.mark_robots(domain, "allowed")
+            fetch_items.append(item)
+
+        if not fetch_items:
+            return
+
+        coordinator = AsyncCrawlCoordinator(
+            AsyncCrawlPolicy(
+                global_concurrency=
+                    self.project.crawl.async_global_concurrency,
+                per_domain_concurrency=
+                    self.project.crawl.async_per_domain_concurrency,
+                min_domain_delay_seconds=
+                    self.project.crawl.delay_seconds,
+                max_pending=self.project.crawl.async_max_pending,
+            )
+        )
+        transport = self._ensure_async_transport()
+
+        async def fetch_all():
+            return await coordinator.run(
+                [item.url for item in fetch_items],
+                transport.fetch,
+            )
+
+        task_results, stats = asyncio.run(fetch_all())
+
+        result.async_fetch_waves += 1
+        result.async_fetch_submitted += stats.submitted
+        result.async_peak_active = max(
+            result.async_peak_active,
+            stats.peak_active,
+        )
+        result.async_peak_pending = max(
+            result.async_peak_pending,
+            stats.peak_pending,
+        )
+        for domain, peak in stats.peak_domain_active.items():
+            result.async_peak_domain_active[domain] = max(
+                result.async_peak_domain_active.get(domain, 0),
+                peak,
+            )
+
+        by_url = {
+            item.url: item
+            for item in fetch_items
+        }
+
+        for task_result in task_results:
+            fetch_result = task_result.value
+            if fetch_result is None:
+                fetch_result = AsyncHTTPResult(
+                    requested_url=task_result.url,
+                    final_url=task_result.url,
+                    status_code=None,
+                    error_type=(
+                        task_result.error_type
+                        or "AsyncWorkerError"
+                    ),
+                    error_message=task_result.error_message,
+                )
+
+            if not fetch_result.ok:
+                result.async_fetch_failures += 1
+
+            cache[task_result.url] = fetch_result
+            frontier.restore(by_url[task_result.url])
+
     def _source_diversity_penalty(
         self,
         domain: str,
@@ -1157,5 +1395,7 @@ class ResearchCrawler:
         result.entities = enriched_entities
 
     def _sleep(self):
+        if self.project.crawl.async_enabled:
+            return
         if self.project.crawl.delay_seconds > 0:
             time.sleep(self.project.crawl.delay_seconds)
