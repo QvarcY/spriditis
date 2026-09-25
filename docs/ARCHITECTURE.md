@@ -1,7 +1,7 @@
 # Sprīdītis — arhitektūra / Architecture
 
-Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.8 — Change Detection**  
-Nākamais aktīvais posms / Next active milestone: **3.3.0-alpha.9 — Watch mode**
+Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.9 — Watch mode**  
+Nākamais aktīvais posms / Next active milestone: **3.3.0-alpha.10 — Async crawler + adaptive politeness**
 
 > **Latviski pirmajā vietā, angļu valoda zemāk. / Latvian first, English below.**
 
@@ -45,6 +45,13 @@ SQLite persistence
              ↓
 Research Memory
 (memory / explain / trace)
+             ↓
+Change Detection
+             ↓
+Watch mode
+  ├── coverage-aware comparison
+  ├── change-only JSONL
+  └── cycle/change hooks
              ↓
 Reports / service consumers
 ```
@@ -308,6 +315,50 @@ Galvenās robežas:
 - `diff --project ... --run-a ... --run-b ... [--details]` rāda before/after/evidence un explicit comparison basis.
 
 Pilnais alpha8 regression gate ir izpildīts: **48/48 deterministiskie testi iziet**.
+
+## Watch mode — 3.3.0-alpha.9 released
+
+Alpha9 pārvērš alpha8 Change Detection par atkārtojamu, konservatīvu monitoringa plūsmu, nepievienojot smagu background infrastruktūru.
+
+Plūsma:
+
+```text
+completed run N
+      ↓
+Research Memory / Domain / Feed state
+      ↓
+next research cycle
+      ↓
+completed run N+1
+      ↓
+coverage-aware comparison
+      ├── verified ChangeEvent[]
+      └── suppressed_uncertain[]
+      ↓
+WatchCycleResult
+      ├── change-only JSONL
+      ├── cycle hooks
+      └── change hooks (verified event payload)
+```
+
+Galvenās robežas:
+
+- `compare_with_previous_run` Watch ceļā lieto coverage-aware semantiku, bet tiešais `compare_runs` pēc noklusējuma saglabā alpha8 raw historical diff uzvedību;
+- `NEW_ENTITY` prasa, lai attiecīgais source URL būtu salīdzināmi pārbaudīts iepriekšējā runā;
+- `ENTITY_DISAPPEARED` prasa salīdzināmu source URL pārbaudi vēlākajā runā;
+- `SOURCE_CHANGED` pievienotajiem/noņemtajiem avotiem prasa salīdzināmu coverage;
+- nepietiekams coverage tiek saglabāts kā auditējams `suppressed_uncertain`, nevis pārvērsts par change eventu;
+- baseline un no-change cikli nerada JSONL heartbeat rindas;
+- cycle hook tiek izsaukts pēc katra pabeigta cikla; change hook tikai tad, ja ir verificētas izmaiņas;
+- change hook saņem tos pašus verificētos eventus, ko Watch rāda un eksportē JSONL;
+- hook adaptera kļūme ir izolēta un nepadara jau pabeigtu research run par neveiksmīgu;
+- atkārtots Watch cikls no SQLite ielādē feed state, Domain Registry, query memory un source profiles;
+- feed conditional refresh atkārtoti izmanto `ETag`/`Last-Modified`; `304 Not Modified` paliek `active` un neveido viltus lifecycle eventu;
+- Research Memory ietekmē nākamā cikla query/source prioritāti un paliek auditējama Adaptive Decision Trace.
+
+Alpha9 apzināti **neievieš** daemon scheduler, background-job queue vai webhook serveri. Publiskā kodola automatizācijas robeža ir bounded CLI loop + JSONL + hook kontrakti.
+
+Pilnais alpha9 regression gate ir izpildīts: **55/55 deterministiskie testi iziet**.
 
 ## Feed state un HTTP resursu stāvoklis
 
@@ -649,6 +700,50 @@ Key boundaries:
 - `diff --project ... --run-a ... --run-b ... [--details]` exposes before/after/evidence plus the explicit comparison basis.
 
 The complete alpha8 regression gate passed: **48/48 deterministic tests**.
+
+## Watch mode — 3.3.0-alpha.9 released
+
+Alpha9 turns alpha8 Change Detection into a repeatable, conservative monitoring flow without introducing heavy background infrastructure.
+
+Flow:
+
+```text
+completed run N
+      ↓
+Research Memory / Domain / Feed state
+      ↓
+next research cycle
+      ↓
+completed run N+1
+      ↓
+coverage-aware comparison
+      ├── verified ChangeEvent[]
+      └── suppressed_uncertain[]
+      ↓
+WatchCycleResult
+      ├── change-only JSONL
+      ├── cycle hooks
+      └── change hooks (verified event payload)
+```
+
+Key boundaries:
+
+- `compare_with_previous_run` uses coverage-aware Watch semantics while direct `compare_runs` keeps alpha8 raw historical diff behavior by default;
+- `NEW_ENTITY` requires comparable prior-run rechecking of the relevant source URL;
+- `ENTITY_DISAPPEARED` requires comparable source-URL rechecking in the later run;
+- `SOURCE_CHANGED` requires comparable coverage for added/removed sources;
+- insufficient coverage is retained as auditable `suppressed_uncertain` rather than promoted to a change event;
+- baseline and no-change cycles emit no JSONL heartbeat records;
+- cycle hooks run after every completed cycle; change hooks run only for verified changes;
+- change hooks receive the same verified events shown by Watch and exported to JSONL;
+- hook-adapter failures are isolated and do not retroactively fail an already completed research run;
+- repeated Watch cycles hydrate feed state, Domain Registry, query memory and source profiles from SQLite;
+- feed refresh reuses `ETag`/`Last-Modified`; `304 Not Modified` remains `active` and does not create a false lifecycle event;
+- Research Memory affects next-cycle query/source priority and remains visible in the Adaptive Decision Trace.
+
+Alpha9 deliberately does **not** include a daemon scheduler, background-job queue or webhook server. The public-core automation boundary is a bounded CLI loop + JSONL + hook contracts.
+
+The complete alpha9 regression gate passed: **55/55 deterministic tests**.
 
 ## Feed state and HTTP resource state
 
