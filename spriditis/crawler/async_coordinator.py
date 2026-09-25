@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Generic, Iterable, TypeVar
 
@@ -64,168 +64,220 @@ Worker = Callable[[str], Awaitable[T]]
 
 class AsyncCrawlCoordinator:
     """
-    Small async orchestration primitive for alpha10.
+    Domain-aware bounded async dispatcher for alpha10.
 
-    This class deliberately does not know about requests, extraction,
-    Domain Registry, or persistence. It only enforces concurrency,
-    per-domain politeness, and bounded pending work.
+    Pending work is bounded, but blocked same-domain items do not consume
+    global execution slots. The dispatcher may skip over temporarily
+    ineligible pending items so other domains can continue making progress.
+    Results are returned in original input order.
     """
 
     def __init__(self, policy: AsyncCrawlPolicy):
         self.policy = policy
 
-        self._global_semaphore = asyncio.Semaphore(
-            policy.global_concurrency
-        )
-        self._domain_semaphores: dict[str, asyncio.Semaphore] = {}
-        self._domain_start_locks: dict[str, asyncio.Lock] = {}
-        self._last_domain_start: dict[str, float] = {}
-
-        self._active = 0
-        self._peak_active = 0
-        self._domain_active: dict[str, int] = defaultdict(int)
-        self._peak_domain_active: dict[str, int] = defaultdict(int)
-
-    def _domain_semaphore(self, domain: str) -> asyncio.Semaphore:
-        semaphore = self._domain_semaphores.get(domain)
-        if semaphore is None:
-            semaphore = asyncio.Semaphore(
-                self.policy.per_domain_concurrency
-            )
-            self._domain_semaphores[domain] = semaphore
-        return semaphore
-
-    def _domain_start_lock(self, domain: str) -> asyncio.Lock:
-        lock = self._domain_start_locks.get(domain)
-        if lock is None:
-            lock = asyncio.Lock()
-            self._domain_start_locks[domain] = lock
-        return lock
-
-    async def _wait_for_domain_slot(self, domain: str) -> None:
-        delay = self.policy.min_domain_delay_seconds
-        if delay <= 0:
-            return
-
-        async with self._domain_start_lock(domain):
-            now = time.monotonic()
-            previous = self._last_domain_start.get(domain)
-
-            if previous is not None:
-                wait_for = delay - (now - previous)
-                if wait_for > 0:
-                    await asyncio.sleep(wait_for)
-
-            self._last_domain_start[domain] = time.monotonic()
-
-    async def _execute(
+    async def _run_worker(
         self,
         index: int,
         url: str,
         worker: Worker[T],
     ) -> AsyncTaskResult[T]:
-        domain = host_key(url)
-        if not domain:
+        try:
+            value = await worker(url)
             return AsyncTaskResult(
                 index=index,
                 url=url,
-                error_type="InvalidURL",
-                error_message="URL nav nosakāms domēns.",
+                value=value,
             )
-
-        domain_semaphore = self._domain_semaphore(domain)
-
-        # Take the domain permit first so same-domain waiters never occupy
-        # scarce global slots. Domain delay is also paid before acquiring
-        # the global execution slot.
-        async with domain_semaphore:
-            await self._wait_for_domain_slot(domain)
-
-            async with self._global_semaphore:
-                self._active += 1
-                self._peak_active = max(
-                    self._peak_active,
-                    self._active,
-                )
-                self._domain_active[domain] += 1
-                self._peak_domain_active[domain] = max(
-                    self._peak_domain_active[domain],
-                    self._domain_active[domain],
-                )
-
-                try:
-                    value = await worker(url)
-                    return AsyncTaskResult(
-                        index=index,
-                        url=url,
-                        value=value,
-                    )
-                except Exception as exc:
-                    return AsyncTaskResult(
-                        index=index,
-                        url=url,
-                        error_type=type(exc).__name__,
-                        error_message=str(exc),
-                    )
-                finally:
-                    self._domain_active[domain] -= 1
-                    self._active -= 1
+        except Exception as exc:
+            return AsyncTaskResult(
+                index=index,
+                url=url,
+                error_type=type(exc).__name__,
+                error_message=str(exc),
+            )
 
     async def run(
         self,
         urls: Iterable[str],
         worker: Worker[T],
     ) -> tuple[list[AsyncTaskResult[T]], AsyncRunStats]:
-        queue: asyncio.Queue[tuple[int, str] | None] = asyncio.Queue(
-            maxsize=self.policy.max_pending
-        )
+        iterator = iter(urls)
+        pending: deque[tuple[int, str, str]] = deque()
+        active: dict[
+            asyncio.Task[AsyncTaskResult[T]],
+            tuple[int, str, str],
+        ] = {}
+
         results: list[AsyncTaskResult[T]] = []
+        domain_active: dict[str, int] = defaultdict(int)
+        peak_domain_active: dict[str, int] = defaultdict(int)
+        next_domain_start: dict[str, float] = {}
+
         submitted = 0
         completed = 0
         failed = 0
+        peak_active = 0
         peak_pending = 0
+        exhausted = False
 
-        async def consume() -> None:
-            nonlocal completed, failed
+        def fill_pending() -> None:
+            nonlocal submitted, peak_pending, exhausted
 
-            while True:
-                item = await queue.get()
+            while (
+                not exhausted
+                and len(pending) < self.policy.max_pending
+            ):
                 try:
-                    if item is None:
-                        return
+                    url = next(iterator)
+                except StopIteration:
+                    exhausted = True
+                    return
 
-                    index, url = item
-                    result = await self._execute(
-                        index,
-                        url,
-                        worker,
-                    )
-                    results.append(result)
-                    completed += 1
-                    if not result.ok:
-                        failed += 1
-                finally:
-                    queue.task_done()
-
-        consumers = [
-            asyncio.create_task(consume())
-            for _ in range(self.policy.global_concurrency)
-        ]
-
-        try:
-            for index, url in enumerate(urls):
-                await queue.put((index, url))
+                index = submitted
                 submitted += 1
+                domain = host_key(url)
+
+                if not domain:
+                    results.append(
+                        AsyncTaskResult(
+                            index=index,
+                            url=url,
+                            error_type="InvalidURL",
+                            error_message="URL nav nosakāms domēns.",
+                        )
+                    )
+                    continue
+
+                pending.append((index, url, domain))
                 peak_pending = max(
                     peak_pending,
-                    queue.qsize(),
+                    len(pending),
                 )
 
-            await queue.join()
-        finally:
-            for _ in consumers:
-                await queue.put(None)
-            await asyncio.gather(*consumers)
+        def find_eligible(now: float) -> int | None:
+            if len(active) >= self.policy.global_concurrency:
+                return None
+
+            for offset, (_, _, domain) in enumerate(pending):
+                if (
+                    domain_active[domain]
+                    >= self.policy.per_domain_concurrency
+                ):
+                    continue
+
+                if now < next_domain_start.get(domain, 0.0):
+                    continue
+
+                return offset
+
+            return None
+
+        def pop_offset(offset: int) -> tuple[int, str, str]:
+            pending.rotate(-offset)
+            item = pending.popleft()
+            pending.rotate(offset)
+            return item
+
+        fill_pending()
+
+        while pending or active or not exhausted:
+            made_progress = False
+
+            while len(active) < self.policy.global_concurrency:
+                fill_pending()
+                if not pending:
+                    break
+
+                now = time.monotonic()
+                offset = find_eligible(now)
+                if offset is None:
+                    break
+
+                index, url, domain = pop_offset(offset)
+
+                domain_active[domain] += 1
+                peak_domain_active[domain] = max(
+                    peak_domain_active[domain],
+                    domain_active[domain],
+                )
+
+                next_domain_start[domain] = (
+                    now + self.policy.min_domain_delay_seconds
+                )
+
+                task = asyncio.create_task(
+                    self._run_worker(index, url, worker)
+                )
+                active[task] = (index, url, domain)
+                peak_active = max(peak_active, len(active))
+                made_progress = True
+
+            fill_pending()
+
+            if not active:
+                if not pending and exhausted:
+                    break
+
+                if pending:
+                    now = time.monotonic()
+                    waits = [
+                        max(
+                            0.0,
+                            next_domain_start.get(domain, 0.0) - now,
+                        )
+                        for _, _, domain in pending
+                        if (
+                            domain_active[domain]
+                            < self.policy.per_domain_concurrency
+                        )
+                    ]
+                    wait_for = min(waits) if waits else 0.001
+                    await asyncio.sleep(max(wait_for, 0.001))
+                    continue
+
+            if made_progress and len(active) < self.policy.global_concurrency:
+                continue
+
+            now = time.monotonic()
+            delay_waits = [
+                max(
+                    0.0,
+                    next_domain_start.get(domain, 0.0) - now,
+                )
+                for _, _, domain in pending
+                if (
+                    domain_active[domain]
+                    < self.policy.per_domain_concurrency
+                )
+            ]
+            timeout = min(delay_waits) if delay_waits else None
+            if timeout is not None and timeout <= 0:
+                timeout = 0.001
+
+            done, _ = await asyncio.wait(
+                set(active),
+                timeout=timeout,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+
+            for task in done:
+                _, _, domain = active.pop(task)
+                domain_active[domain] -= 1
+
+                result = task.result()
+                results.append(result)
+                completed += 1
+                if not result.ok:
+                    failed += 1
+
+        # Invalid URLs are completed synchronously during submission.
+        invalid_count = sum(
+            1
+            for item in results
+            if item.error_type == "InvalidURL"
+        )
+        completed += invalid_count
+        failed += invalid_count
 
         results.sort(key=lambda item: item.index)
 
@@ -233,7 +285,7 @@ class AsyncCrawlCoordinator:
             submitted=submitted,
             completed=completed,
             failed=failed,
-            peak_active=self._peak_active,
+            peak_active=peak_active,
             peak_pending=peak_pending,
-            peak_domain_active=dict(self._peak_domain_active),
+            peak_domain_active=dict(peak_domain_active),
         )
