@@ -58,6 +58,13 @@ class ResearchRunResult:
     feed_errors: int = 0
     feed_states: dict[str, FeedState] = field(default_factory=dict)
 
+    async_fetch_waves: int = 0
+    async_fetch_submitted: int = 0
+    async_fetch_failures: int = 0
+    async_peak_active: int = 0
+    async_peak_pending: int = 0
+    async_peak_domain_active: dict[str, int] = field(default_factory=dict)
+
     domains: dict[str, DomainRecord] = field(default_factory=dict)
     domain_discoveries: list[DomainDiscovery] = field(default_factory=list)
 
