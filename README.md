@@ -25,8 +25,8 @@
 
 | | Status |
 |---|---|
-| **Publiskā versija / Public baseline** | ✅ `v3.3.0-alpha.9` — Watch mode |
-| **Šobrīd / Current work** | 🚧 `3.3.0-alpha.10` — Async crawler |
+| **Publiskā versija / Public baseline** | ✅ `v3.3.0-alpha.10` — Async crawler + adaptive politeness |
+| **Šobrīd / Current work** | 🧭 Nākamais numurētais posms vēl nav izvēlēts / Next numbered milestone not selected yet |
 | **Galvenais virziens / North star** | 🧠 **Research Memory + Adaptive Discovery** |
 | **Pamatprincips / Core principle** | 🔎 **source-backed facts > AI guesses** |
 | **Izmaksu princips / Cost direction** | 🌱 Priekšroka lokāliem, atvērtiem, pašhostējamiem un bezmaksas risinājumiem / Prefer local, open, self-hostable and zero-cost building blocks |
@@ -56,7 +56,7 @@
 | ✅ | **3.3.0-alpha.7** | Fallback Extraction + Evidence Confidence | JSON-LD → microdata → OpenGraph → conservative DOM fallback, field provenance/confidence, schema v11, evidence-quality inspection |
 | ✅ | **3.3.0-alpha.8** | Change Detection | entity/price/field/source/domain/feed lifecycle events, historical provenance, `diff` between runs, schema v12 |
 | ✅ | **3.3.0-alpha.9** | Watch mode | coverage-aware repeated research, change-only JSONL, hooks, ETag/304 + Research Memory reuse |
-| 🚧 | **3.3.0-alpha.10** | Async crawler | bounded concurrency, adaptive politeness, faster crawling without abandoning safety |
+| ✅ | **3.3.0-alpha.10** | Async crawler | bounded async prefetch, retry budgets, adaptive per-domain politeness, deterministic processing |
 
 <details>
 <summary><strong>🔭 Longer-term backlog / Ilgtermiņa plāns</strong></summary>
@@ -255,6 +255,13 @@ Sprīdītis nav piesaistīts vienai nozarei. Ideja ir vienu un to pašu kodolu p
 - cycle/change hook kontrakti ārējiem scheduling/notifikāciju adapteriem; change hook saņem verificētu event payload
 - Watch feed refresh atkārtoti izmanto DB saglabātos `ETag` / `Last-Modified` un korekti apstrādā `304 Not Modified`
 - Watch atkārtoti izmanto Research Memory query/source prioritizācijai un saglabā lēmumus Decision Trace
+- opt-in async crawler ar bounded global/per-domain concurrency un bounded pending/backpressure
+- deterministisks async fetch-wave planneris, kas saglabā frontier prioritāti un crawl budžetus
+- thread-local `requests` transports caur `asyncio.to_thread()`, nepievienojot jaunu HTTP dependency
+- bounded retry budžeti transient HTTP/network kļūdām ar `Retry-After` un exponential backoff
+- run-scoped adaptive per-domain politeness ar pressure-up / success-down delay semantiku
+- async diagnostika: logical fetch jobs, HTTP attempts, retries, exhausted retries, pressure events, wait time, peak concurrency un final domain delay
+- sequential/async semantic parity tests un izmērāms paralēla I/O ātruma ieguvums
 - search duplicate rate ar atsevišķiem raw / unique / duplicate / filtered skaitītājiem
 - freshness/staleness signāli ar skaidru `last_useful_at → last_crawled → last_seen` pamatu un konfigurējamu stale slieksni
 - page lineage `page_visits` audita dati ar source type, source URL, depth, outcome un HTTP statusu
@@ -278,7 +285,7 @@ Sprīdītis nav piesaistīts vienai nozarei. Ideja ir vienu un to pašu kodolu p
 
 ### Kas vēl nav gatavs?
 
-Pieņemtais attīstības virziens ir redzams README sākumā sadaļā **Development journey / Attīstības ceļš**. Publiskā bāze ir `3.3.0-alpha.9` Watch mode; nākamais aktīvais posms ir `3.3.0-alpha.10` kontrolēts async crawleris. Iebūvēts daemon scheduler, background-job rinda un webhook serveris apzināti paliek ārpus alpha9 publiskā kodola robežas.
+Pieņemtais attīstības virziens ir redzams README sākumā sadaļā **Development journey / Attīstības ceļš**. Publiskā bāze ir `3.3.0-alpha.10` Async crawler + adaptive politeness. Nākamais numurētais milestone vēl nav izvēlēts; kandidāti paliek detalizētajā backlogā. Iebūvēts daemon scheduler, background-job rinda un webhook serveris joprojām apzināti nav daļa no publiskā kodola.
 
 Detalizēti skatīt [ROADMAP.md](ROADMAP.md).
 
@@ -558,6 +565,13 @@ Sprīdītis is not tied to one industry. The same core is intended to support ve
 - persistent feed state with `ETag`, `Last-Modified`, `304 Not Modified`, `last_entry_id` and `last_published`
 - `feeds` CLI inspection
 - Domain Registry hydration before repeated runs, preserving sticky `blocked`/`rejected` lifecycle states
+- opt-in async crawler with bounded global/per-domain concurrency and bounded pending/backpressure
+- deterministic async fetch-wave planning that preserves frontier priority and crawl budgets
+- thread-local `requests` transport via `asyncio.to_thread()` without adding a second HTTP dependency
+- bounded retry budgets for transient HTTP/network failures with `Retry-After` and exponential backoff
+- run-scoped adaptive per-domain politeness with pressure-up / success-down delay behavior
+- async diagnostics for logical fetch jobs, HTTP attempts, retries, exhausted retries, pressure events, wait time, peak concurrency and final domain delay
+- sequential/async semantic-parity coverage plus measurable parallel-I/O speedup
 - Research Memory with query yield, source profiles, HTTP success and productive-run signals
 - search duplicate rate with separate raw / unique / duplicate / filtered counters
 - freshness/staleness signals with an explicit `last_useful_at → last_crawled → last_seen` basis and configurable stale threshold
@@ -584,7 +598,7 @@ Sprīdītis is not tied to one industry. The same core is intended to support ve
 
 The public alpha deliberately does not pretend unfinished features are complete.
 
-The accepted direction is shown in the **Development journey** above. The public baseline is `3.3.0-alpha.9` Watch mode; the next active milestone is `3.3.0-alpha.10` bounded async crawling. A built-in daemon scheduler, background-job queue and webhook server are deliberately outside the alpha9 public-core boundary.
+The accepted direction is shown in the **Development journey** above. The public baseline is `3.3.0-alpha.10` Async crawler + adaptive politeness. The next numbered milestone has not been selected yet; candidates remain in the detailed backlog. A built-in daemon scheduler, background-job queue and webhook server are still deliberately outside the public core.
 
 See the detailed [ROADMAP.md](ROADMAP.md).
 
