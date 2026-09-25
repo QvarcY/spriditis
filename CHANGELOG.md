@@ -1,5 +1,55 @@
 # Izmaiņu vēsture / Changelog
 
+## [3.3.0-alpha.9]
+
+> **Statuss / Status:** release baseline pilnībā validēts; pilnais regression gate izpildīts ar 55/55 testiem.  
+> Release baseline fully validated; the complete regression gate passed 55/55 tests.
+
+### Pievienots / Added
+
+- `watch --project ... --once` vienam inkrementālam research ciklam / single-cycle incremental Watch execution
+- atkārtots Watch režīms ar `--interval-seconds` un izvēles `--max-cycles`; minimums 60 sekundes un bez pārklājošiem cikliem / bounded repeated Watch loop with a 60-second minimum and no overlapping cycles
+- graceful `Ctrl+C` apstāšanās, nepieskaitot nepabeigtu ciklu kā pabeigtu / graceful interruption without counting an unfinished cycle
+- change-only JSONL eksports ar shēmu `spriditis.watch.change.v1`; baseline un no-change cikli neveido tukšus heartbeat ierakstus / change-only JSONL export with no baseline/no-change noise
+- coverage-aware Watch salīdzināšana entity presence/source-set eventiem / coverage-aware Watch comparison for entity-presence and source-set events
+- auditējams `suppressed_uncertain` slānis, kas atdala nepietiekami pārbaudītu coverage churn no pierādītām izmaiņām / auditable suppression of coverage uncertainty
+- `WatchCycleResult`, cycle hooks un change hooks kā stabils integrācijas līgums / stable cycle/change hook contract
+- change hooks saņem pašus verificētos change eventus, ne tikai skaitītājus / verified change-event payloads are available to notification adapters
+- Watch-specifiska ETag/`Last-Modified`/304 validācija pāri DB-persistētam feed state / persisted conditional-feed refresh validated across Watch cycles
+- Watch-specifiska Research Memory reuse validācija: query memory un source profiles ietekmē nākamā cikla prioritizāciju un paliek Decision Trace / repeated Watch cycles reuse Research Memory and preserve the decision trail
+
+### Uzlabots / Improved
+
+- `compare_with_previous_run(...)` Watch ceļā izmanto konservatīvu coverage-aware semantiku, kamēr tiešais alpha8 `compare_runs(...)` noklusējums paliek backward-compatible raw historical diff / Watch uses conservative coverage-aware comparison while direct historical diff semantics stay backward-compatible
+- `NEW_ENTITY` Watch režīmā prasa iepriekšējā runā salīdzināmi pārbaudītu source URL; `ENTITY_DISAPPEARED` prasa vēlākajā runā pārbaudītu source URL / entity presence changes require comparable URL rechecks
+- `SOURCE_CHANGED` prasa salīdzināmi pārbaudītus pievienotos/noņemtos avotus / source-set changes require comparable source coverage
+- feed `304 Not Modified` paliek `active`, saglabā iepriekšējo successful state un nerada viltus feed lifecycle eventu / 304 is a fetch outcome, not a failure/lifecycle transition
+- Watch atkārtoti izmanto DB `query_memory`, `source_profiles`, Domain Registry un feed state, nevis sāk katru ciklu no nulles / repeated runs consume persisted research state
+- hook kļūmes ir izolētas un nepadara jau pabeigtu research ciklu par neveiksmīgu / hook-adapter failures are isolated and non-fatal to completed research runs
+
+### Dizaina robežas / Design boundaries
+
+- alpha9 neievieš iebūvētu daemon scheduler, background-job sistēmu vai webhook serveri; tas dod CLI loopu un stabilus integrācijas hookus ārējiem adapteriem / no built-in daemon scheduler, job queue or webhook server
+- coverage uncertainty netiek pārdēvēta par market change; nepārbaudīts URL nav pierādījums pazušanai vai jaunam tirgus objektam / unvisited coverage is not treated as market change evidence
+- change hooks saņem tikai jau coverage-filtrētus/verificētus eventus / notification adapters receive only verified Watch events
+- JSONL ir vienkāršs integrācijas formāts, nevis pilna event-bus infrastruktūra / JSONL remains a simple integration surface
+- Watch saglabā alpha8 Change Detection pierādījumu/provenance semantiku un nepārraksta vēsturiskos observation/page/feed faktus / historical evidence remains immutable
+
+### Validācija / Validation
+
+- `watch_incremental_test.py`
+- `watch_loop_test.py`
+- `watch_jsonl_test.py`
+- `watch_coverage_test.py`
+- `watch_hooks_test.py`
+- `watch_feed_refresh_test.py`
+- `watch_research_memory_test.py`
+- visi alpha8 Change Detection, alpha5 Adaptive Expedition, Research Memory, Search/Discovery/Feed, Entity Resolution un Evidence Quality regression testi paliek zaļi
+- reāls Watch crawl ar mainīgu 60-lapu coverage suppressēja 42 nepietiekami pierādītus presence kandidātus un eksportēja 0 viltus change eventus
+- pilnais **55/55** testu regression gate izpildīts sekmīgi / complete **55/55** regression gate passed
+
+---
+
 ## [3.3.0-alpha.8]
 
 > **Statuss / Status:** release baseline pilnībā validēts; pilnais regression gate izpildīts ar 48/48 testiem.  
