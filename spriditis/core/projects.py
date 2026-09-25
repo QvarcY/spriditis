@@ -41,6 +41,13 @@ class CrawlConfig(BaseModel):
     entity_diversity_soft_cap: int = Field(default=0, ge=0, le=100000)
     entity_diversity_priority_penalty: int = Field(default=30, ge=0, le=100)
 
+    # Alpha10 async crawler is deliberately opt-in while its semantics are
+    # validated against the sequential baseline.
+    async_enabled: bool = False
+    async_global_concurrency: int = Field(default=4, ge=1, le=32)
+    async_per_domain_concurrency: int = Field(default=1, ge=1, le=8)
+    async_max_pending: int = Field(default=8, ge=1, le=128)
+
 
 class SearchConfig(BaseModel):
     provider: Literal["none", "searxng"] = "none"
@@ -91,6 +98,15 @@ class ResearchProject(BaseModel):
     @field_validator("crawl")
     @classmethod
     def validate_crawl(cls, value: CrawlConfig) -> CrawlConfig:
+        if (
+            value.async_per_domain_concurrency
+            > value.async_global_concurrency
+        ):
+            raise ValueError(
+                "async_per_domain_concurrency nevar pārsniegt "
+                "async_global_concurrency."
+            )
+
         for depth, budget in value.discovery_depth_budgets.items():
             if depth < 1 or depth > 20:
                 raise ValueError(
