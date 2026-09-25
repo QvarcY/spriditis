@@ -18,8 +18,8 @@ from spriditis.storage.database import Database
 
 
 QUERY = "ergonomic chair"
-PRODUCTIVE_URL = "https://productive.example/product/ergonomic-chair"
-UNTESTED_URL = "https://untested.example/product/ergonomic-chair"
+PRODUCTIVE_URL = "https://productive.example/product/ergonomic-chair/item"
+UNTESTED_URL = "https://untested.example/product/ergonomic-chair/item"
 
 
 @dataclass
