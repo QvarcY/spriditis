@@ -96,6 +96,54 @@ async def main() -> None:
                 current - previous,
             )
 
+    # A same-domain burst must not occupy all global permits while
+    # waiting for its per-domain semaphore. Another domain must make
+    # progress concurrently.
+    fairness = AsyncCrawlCoordinator(
+        AsyncCrawlPolicy(
+            global_concurrency=3,
+            per_domain_concurrency=1,
+            max_pending=4,
+        )
+    )
+
+    fairness_active: set[str] = set()
+    overlap_seen = False
+    overlap_lock = asyncio.Lock()
+
+    async def fairness_worker(url: str) -> str:
+        nonlocal overlap_seen
+        domain = url.split("/", 3)[2]
+
+        async with overlap_lock:
+            fairness_active.add(domain)
+            if (
+                "burst.example" in fairness_active
+                and "other.example" in fairness_active
+            ):
+                overlap_seen = True
+
+        try:
+            await asyncio.sleep(0.04)
+            return url
+        finally:
+            async with overlap_lock:
+                fairness_active.discard(domain)
+
+    fairness_results, fairness_stats = await fairness.run(
+        [
+            "https://burst.example/1",
+            "https://burst.example/2",
+            "https://burst.example/3",
+            "https://other.example/1",
+        ],
+        fairness_worker,
+    )
+
+    assert all(item.ok for item in fairness_results)
+    assert fairness_stats.peak_active >= 2
+    assert overlap_seen is True
+
     # Worker failures are isolated and returned as structured results.
     failing = AsyncCrawlCoordinator(
         AsyncCrawlPolicy(
@@ -139,5 +187,7 @@ print("global_concurrency=bounded")
 print("per_domain_concurrency=bounded")
 print("domain_start_delay=enforced")
 print("pending_queue=bounded")
+print("same_domain_waiters=do_not_consume_global_slots")
+print("cross_domain_progress=preserved")
 print("result_order=input_order")
 print("worker_failure=isolated_structured")
