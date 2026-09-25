@@ -1,5 +1,52 @@
 # Izmaiņu vēsture / Changelog
 
+## [3.3.0-alpha.10]
+
+> **Statuss / Status:** release baseline pilnībā validēts; pilnais regression gate izpildīts ar 60/60 testiem.  
+> Release baseline fully validated; the complete regression gate passed 60/60 tests.
+
+### Pievienots / Added
+
+- opt-in async crawler režīms ar bounded globālo concurrency, per-domain concurrency un bounded pending/backpressure / opt-in async crawler with bounded global concurrency, per-domain concurrency and bounded pending work
+- domain-aware async dispatcher, kas neļauj viena domēna gaidītājiem aizņemt visus globālos slotus / domain-aware dispatch that prevents same-domain waiters from starving other domains
+- deterministisks async fetch-wave planneris ar total/per-domain crawl budžeta rezervāciju un frontier tie-order saglabāšanu / deterministic fetch-wave planning with crawl-budget reservation and preserved frontier tie ordering
+- thread-local async HTTP transports virs esošā `requests` ar `asyncio.to_thread()`; nav pievienota jauna HTTP bibliotēka / thread-local async HTTP transport over existing `requests`, without adding another HTTP dependency
+- speculatīvs async prefetch cache: tīkls gaida paralēli, bet URL tiek atgriezti frontierī un research lēmumi joprojām tiek apstrādāti deterministiski / speculative async prefetch while research decisions remain sequential and deterministic
+- bounded retry budgeti transient HTTP/network kļūdām: `408`, `429`, `500`, `502`, `503`, `504` / bounded retry budgets for transient HTTP/network pressure
+- `Retry-After` atbalsts un bounded exponential backoff / `Retry-After` support and bounded exponential backoff
+- run-scoped adaptive per-domain politeness: pressure palielina delay, veiksmīgas atbildes to pakāpeniski samazina līdz konfigurētajai bāzei / run-scoped adaptive per-domain pacing with recovery toward the configured base delay
+- async run diagnostika: logical fetch jobs, HTTP attempts, retries, exhausted retries, pressure events, politeness wait, peak concurrency un final per-domain delay / auditable async run diagnostics
+
+### Uzlabots / Improved
+
+- async crawl saglabā esošo URL frontier prioritāti un ļauj jaunatklātam augstākas prioritātes URL apsteigt jau prefetched zemākas prioritātes darbu / async prefetch preserves live frontier priority
+- per-domain politeness state saglabājas starp fetch wave, bet event-loop locki tiek droši atjaunoti katram jaunam `asyncio.run()` / politeness state persists across waves without leaking event-loop-bound locks
+- async transport kļūmes nonāk tajā pašā auditējamā `PageVisit` kļūdu plūsmā bez klusa sync retry / async failures use the same auditable page-visit path without silent synchronous fallback
+- async režīmā statiskais coordinator delay netiek dubultots; request startu tempu kontrolē viens `AdaptivePolitenessController` / one pacing controller owns async request timing
+- konfigurācija pati validē neiespējamu per-domain/global concurrency attiecību un max-delay robežas / crawl configuration self-validates async concurrency and delay constraints
+
+### Dizaina robežas / Design boundaries
+
+- async režīms alpha10 ir **opt-in**; secīgais crawleris paliek noklusējuma etalons / async mode remains opt-in while the sequential crawler stays the default baseline
+- paralēla ir HTTP gaidīšana, nevis Domain Registry, extraction, frontier mutation vai Decision Trace mutācija / network waiting is parallel; research-state mutation remains deterministic
+- robots, URL/private-network safety, crawl budgets un provenance netiek vājināti / robots, URL/private-network safety, crawl budgets and provenance are not weakened
+- alpha10 neievieš background worker sistēmu, distributed queue vai jaunu scheduler infrastruktūru / no background-worker platform or distributed queue is introduced
+- alpha10 neveic DB schema bump; milestone maina crawl izpildi, nevis persistence modeli / no database-schema bump
+
+### Validācija / Validation
+
+- `async_coordinator_test.py`
+- `async_http_transport_test.py`
+- `async_wave_planner_test.py`
+- `async_retry_politeness_test.py`
+- `async_crawler_integration_test.py`
+- sequential vs async tests pierāda vienādu `PageVisit` semantiku, vienādu processing order/stop reason un izmērāmu paralēla I/O ātruma ieguvumu
+- retry integrācija pierāda `429 → Retry-After → retry → 200` ceļu bez sync fallback
+- visi Watch, Research Memory, Adaptive Expedition, Change Detection, Entity Resolution, Evidence Quality, Search/Discovery/Feed un DB regression testi paliek zaļi
+- pilnais **60/60** testu regression gate izpildīts sekmīgi / complete **60/60** regression gate passed
+
+---
+
 ## [3.3.0-alpha.9]
 
 > **Statuss / Status:** release baseline pilnībā validēts; pilnais regression gate izpildīts ar 55/55 testiem.  
