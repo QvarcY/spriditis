@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import Callable, Literal
 
 from .frontier import FrontierItem, URLFrontier
 from .policy import host_key
 
 
+WaveDisposition = Literal["eligible", "defer", "drop"]
 EligibilityCheck = Callable[[FrontierItem], bool]
+DispositionCheck = Callable[[FrontierItem], WaveDisposition]
 
 
 @dataclass(frozen=True)
@@ -53,10 +55,18 @@ class AsyncWavePlanner:
         *,
         remaining_total: int,
         pages_by_domain: Counter[str],
-        eligible: EligibilityCheck,
+        eligible: EligibilityCheck | None = None,
+        classify: DispositionCheck | None = None,
     ) -> FetchWave:
         if remaining_total <= 0:
             return FetchWave(items=())
+
+        if eligible is None and classify is None:
+            raise ValueError("Norādi eligible vai classify callback.")
+        if eligible is not None and classify is not None:
+            raise ValueError(
+                "Norādi tikai vienu no eligible vai classify callback."
+            )
 
         target = min(self.wave_size, remaining_total)
         selected: list[FrontierItem] = []
@@ -66,13 +76,31 @@ class AsyncWavePlanner:
         while frontier and len(selected) < target:
             item = frontier.pop()
 
-            if not eligible(item):
+            disposition: WaveDisposition
+            if classify is not None:
+                disposition = classify(item)
+            else:
+                disposition = (
+                    "eligible" if eligible is not None and eligible(item)
+                    else "defer"
+                )
+
+            if disposition == "drop":
+                continue
+            if disposition == "defer":
                 deferred.append(item)
                 continue
+            if disposition != "eligible":
+                raise ValueError(
+                    f"Nezināms wave disposition: {disposition}"
+                )
 
             domain = host_key(item.url)
             if not domain:
                 deferred.append(item)
+                continue
+
+            if pages_by_domain[domain] >= self.max_pages_per_domain:
                 continue
 
             if (
