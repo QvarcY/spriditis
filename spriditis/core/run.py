@@ -61,6 +61,14 @@ class ResearchRunResult:
     async_fetch_waves: int = 0
     async_fetch_submitted: int = 0
     async_fetch_failures: int = 0
+    async_http_attempts: int = 0
+    async_retries: int = 0
+    async_retry_exhausted: int = 0
+    async_pressure_events: int = 0
+    async_politeness_wait_seconds: float = 0.0
+    async_final_domain_delay_seconds: dict[str, float] = field(
+        default_factory=dict
+    )
     async_peak_active: int = 0
     async_peak_pending: int = 0
     async_peak_domain_active: dict[str, int] = field(default_factory=dict)
