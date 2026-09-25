@@ -26,7 +26,7 @@
 
 # Latviski
 
-## ✅ Pašreizējā publiskā bāze — 3.3.0-alpha.8
+## ✅ Pašreizējā publiskā bāze — 3.3.0-alpha.9
 
 Ieviests un publiski pieejams:
 
@@ -231,18 +231,24 @@ Pilnais alpha8 regression gate ir izpildīts: **48/48 deterministiskie testi izi
 
 Secība paliek apzināta: **Entity Resolution → Evidence Confidence → Change Detection**.
 
-## 🚧 3.3.0-alpha.9 — Watch mode
+## ✅ 3.3.0-alpha.9 — Watch mode
 
-- incremental repeated research;
-- `spriditis watch`;
-- change-only kopsavilkumi;
-- scheduling hooks;
-- notification hooks;
-- feed/ETag-aware refresh;
-- Research Memory atkārtota izmantošana;
-- JSONL eksports kā vienkāršs integrācijas formāts.
+**Statuss:** pilnībā validēts; 55/55 regression gate iziet.
 
-## 🧭 3.3.0-alpha.10 — Async crawler + adaptive politeness
+- incremental repeated research ar `spriditis watch`;
+- viena cikla `--once` un bounded repeat loop ar `--interval-seconds` / `--max-cycles`;
+- change-only kopsavilkumi un `spriditis.watch.change.v1` JSONL eksports;
+- coverage-aware presence/source-change semantika ar auditējamu `suppressed_uncertain`;
+- cycle hooks scheduling/integrācijas adapteriem;
+- change hooks notification adapteriem ar verificētu event payload;
+- hook kļūmju izolācija;
+- feed/ETag-aware refresh ar DB-persistētiem `ETag` / `Last-Modified` un `304 Not Modified`;
+- Research Memory atkārtota izmantošana query/source prioritizācijā un Decision Trace;
+- alpha8 raw historical diff semantika saglabāta backward-compatible.
+
+Apzināta robeža: alpha9 nepievieno iebūvētu daemon scheduler, background-job rindu vai webhook serveri. CLI loop, JSONL un hook kontrakti ir publiskā kodola integrācijas virsma.
+
+## 🚧 3.3.0-alpha.10 — Async crawler + adaptive politeness
 
 Tikai pēc tam, kad research loģika jau prot būt selektīva.
 
@@ -292,7 +298,7 @@ Tas ir **Research Memory + Adaptive Discovery + Evidence Confidence + Incrementa
 
 # English
 
-## ✅ Current public baseline — 3.3.0-alpha.8
+## ✅ Current public baseline — 3.3.0-alpha.9
 
 Implemented and public:
 
@@ -491,7 +497,7 @@ The sequence is intentional: **Entity Resolution → Evidence Confidence → Cha
 - reuse of Research Memory;
 - JSONL export as a simple integration format.
 
-## 🧭 3.3.0-alpha.10 — Async crawler + adaptive politeness
+## 🚧 3.3.0-alpha.10 — Async crawler + adaptive politeness
 
 Only after the research logic is selective enough.
 
