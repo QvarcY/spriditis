@@ -12,6 +12,7 @@ from spriditis.core.watch import (
 
 
 calls: list[tuple[str, int, int]] = []
+change_payloads: list[tuple[str, ...]] = []
 
 
 def cycle_hook(result: WatchCycleResult) -> None:
@@ -23,6 +24,12 @@ def cycle_hook(result: WatchCycleResult) -> None:
 def change_hook(result: WatchCycleResult) -> None:
     calls.append(
         ("change", result.cycle_number, result.change_count)
+    )
+    change_payloads.append(
+        tuple(
+            str(event.get("change_type", ""))
+            for event in result.events
+        )
     )
 
 
@@ -42,9 +49,11 @@ failures = dispatch_watch_hooks(
 assert failures == []
 assert calls == [("cycle", 1, 0)]
 assert baseline.has_changes is False
+assert baseline.events == ()
 
 
 calls.clear()
+change_payloads.clear()
 unchanged = WatchCycleResult(
     project_id="watch_hooks",
     cycle_number=2,
@@ -66,9 +75,12 @@ failures = dispatch_watch_hooks(
 assert failures == []
 assert calls == [("cycle", 2, 0)]
 assert unchanged.has_changes is False
+assert unchanged.events == ()
+assert change_payloads == []
 
 
 calls.clear()
+change_payloads.clear()
 changed = WatchCycleResult(
     project_id="watch_hooks",
     cycle_number=3,
@@ -76,6 +88,22 @@ changed = WatchCycleResult(
     previous_run_id=11,
     baseline=False,
     change_count=2,
+    events=(
+        {
+            "change_type": "PRICE_DROP",
+            "title": "Ergonomic chair",
+            "before": {"price": 199.0},
+            "after": {"price": 179.0},
+            "evidence": {"run_id": 12},
+        },
+        {
+            "change_type": "DESCRIPTION_CHANGED",
+            "title": "Ergonomic chair",
+            "before": {"description": "old"},
+            "after": {"description": "new"},
+            "evidence": {"run_id": 12},
+        },
+    ),
     counts={
         "PRICE_DROP": 1,
         "DESCRIPTION_CHANGED": 1,
@@ -92,9 +120,14 @@ assert calls == [
     ("change", 3, 2),
 ]
 assert changed.has_changes is True
+assert len(changed.events) == 2
+assert change_payloads == [
+    ("PRICE_DROP", "DESCRIPTION_CHANGED"),
+]
 
 
 calls.clear()
+change_payloads.clear()
 
 
 def failing_cycle_hook(result: WatchCycleResult) -> None:
@@ -120,6 +153,9 @@ assert calls == [
     ("cycle_after_failure", 3, 2),
     ("change", 3, 2),
 ]
+assert change_payloads == [
+    ("PRICE_DROP", "DESCRIPTION_CHANGED"),
+]
 assert len(failures) == 1
 failure = failures[0]
 assert failure.hook_kind == "cycle"
@@ -131,6 +167,7 @@ assert failure.message == "cycle adapter failed"
 print("WATCH HOOKS TEST OK")
 print("cycle_hook=every_completed_cycle")
 print("change_hook=verified_changes_only")
+print("change_payload=verified_events_available")
 print("baseline=change_hook_skipped")
 print("no_change=change_hook_skipped")
 print("hook_failure=isolated_nonfatal")
