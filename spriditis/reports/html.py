@@ -42,7 +42,7 @@ def generate_html_report(
     stats = _analytics(result.entities)
     generated = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    cards = []
+    cards: list[tuple[MarketEntity, str]] = []
     for entity in sorted(
         result.entities,
         key=lambda e: (not e.is_relevant, -e.relevance_score, e.title.lower()),
@@ -75,7 +75,9 @@ def generate_html_report(
         )
 
         cards.append(
-            f"""
+            (
+                entity,
+                f"""
             <article class="card {'irrelevant' if not entity.is_relevant else ''}">
               {image}
               <div class="body">
@@ -101,7 +103,8 @@ def generate_html_report(
                 <a href="{escape(entity.source_url)}">Atvērt avotu ↗</a>
               </div>
             </article>
-            """
+            """,
+            )
         )
 
     relevant = [entity for entity in result.entities if entity.is_relevant]
@@ -246,10 +249,12 @@ details.tech summary {{ cursor:pointer;font-weight:700 }}
 
 <section>
   <h2>Atrasti atbilstoši objekti</h2>
-  <div class="grid">{''.join(card for card, entity in zip(cards, result.entities) if entity.is_relevant) or '<p class="muted">Nav apstiprinātu objektu.</p>'}</div>
+  <div class="grid">{''.join(card for entity, card in cards if entity.is_relevant) or '<p class="muted">Nav apstiprinātu objektu.</p>'}</div>
 </section>
 
-<section class="cols">
+<details class="tech">
+  <summary>Tehniskais pielikums</summary>
+  <section class="cols">
   <div class="panel">
     <h2>Kategorijas</h2>
     <table><tbody>{category_rows}</tbody></table>
@@ -268,10 +273,7 @@ details.tech summary {{ cursor:pointer;font-weight:700 }}
       </table>
     </div>
   </div>
-</section>
-
-<details class="tech">
-  <summary>Tehniskais pielikums</summary>
+  </section>
   <p class="muted">
     visited={result.visited_pages} · failed={result.failed_pages} ·
     robots_skipped={result.skipped_by_robots} ·
