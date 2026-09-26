@@ -67,6 +67,12 @@ def extract_entities(
         return []
 
     soup = BeautifulSoup(html, "html.parser")
+
+    if ss_com.matches(page_url):
+        special = ss_com.extract_product(soup, page_url)
+        if special:
+            return [special]
+
     candidates: list[MarketEntity] = []
 
     candidates.extend(extract_jsonld_products(soup, page_url))
@@ -74,11 +80,6 @@ def extract_entities(
 
     if meistardarbs.matches(page_url):
         special = meistardarbs.extract_product(soup, page_url)
-        if special:
-            candidates.append(special)
-
-    if ss_com.matches(page_url):
-        special = ss_com.extract_product(soup, page_url)
         if special:
             candidates.append(special)
 
