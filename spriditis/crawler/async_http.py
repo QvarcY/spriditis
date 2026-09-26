@@ -9,6 +9,8 @@ from typing import Callable, Mapping
 
 import requests
 
+from .safe_http import SafeSession
+
 
 SessionFactory = Callable[[], requests.Session]
 
@@ -42,7 +44,7 @@ class AsyncHTTPTransport:
     """
     Async wrapper around the existing requests transport.
 
-    Each executor thread gets its own requests.Session. The transport does
+    Each executor thread gets its own requests-compatible SafeSession. The transport does
     not apply crawler policy, robots rules, retry semantics, or persistence;
     those remain explicit higher-level concerns.
     """
@@ -54,7 +56,7 @@ class AsyncHTTPTransport:
         timeout_seconds: int,
         accept: str = "text/html,application/xhtml+xml",
         accept_language: str = "",
-        session_factory: SessionFactory = requests.Session,
+        session_factory: SessionFactory = SafeSession,
     ):
         self.user_agent = user_agent
         self.timeout_seconds = timeout_seconds
