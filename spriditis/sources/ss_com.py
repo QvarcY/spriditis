@@ -48,10 +48,14 @@ def _fact(
 def matches(page_url: str) -> bool:
     parsed = urlparse(page_url)
     host = (parsed.hostname or "").lower()
-    return (
-        host == "ss.com"
+
+    supported_host = (
+        host in {"ss.com", "ss.lv"}
         or host.endswith(".ss.com")
-    ) and "/msg/" in (parsed.path or "")
+        or host.endswith(".ss.lv")
+    )
+
+    return supported_host and "/msg/" in (parsed.path or "")
 
 
 def _normalize_label(value: str) -> str:
