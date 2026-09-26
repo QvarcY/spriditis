@@ -39,6 +39,7 @@ from .policy import (
     text_relevance_score,
 )
 from .robots import RobotsCache
+from .safe_http import SafeSession
 
 
 class _AsyncResponseAdapter:
@@ -77,7 +78,7 @@ class ResearchCrawler:
         self.async_transport = async_transport
         self._owns_async_transport = async_transport is None
 
-        self.session = requests.Session()
+        self.session = SafeSession()
         self.session.headers.update(
             {
                 "User-Agent": settings.user_agent,
