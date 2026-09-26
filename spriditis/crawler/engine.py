@@ -1283,7 +1283,11 @@ class ResearchCrawler:
                 )
             )
 
-        language = self.project.languages[0] if self.project.languages else "all"
+        language = (
+            self.project.languages[0]
+            if self.project.languages
+            else "all"
+        )
 
         print("")
         print(
@@ -1293,19 +1297,58 @@ class ResearchCrawler:
 
         seen_search_urls: set[str] = set()
 
-        for query in queries:
+        # Search results are collected across every query first.
+        #
+        # Previously each query activated domains immediately. With a small
+        # max_domains budget an early broad query could consume every slot
+        # before a later hard-constraint query was even evaluated.
+        #
+        # pending_by_url keeps the best observation for each normalized URL;
+        # domain activation happens only after the complete search candidate
+        # pool is globally ranked.
+        pending_by_url: dict[str, dict[str, object]] = {}
+
+        def candidate_rank(candidate: dict[str, object]):
+            query = candidate["query"]
+
+            return (
+                int(candidate["score"]),
+                1
+                if getattr(
+                    query,
+                    "reason",
+                    "",
+                ) == "required_evidence_bundle"
+                else 0,
+                -int(candidate["query_position"]),
+                -int(candidate["result_position"]),
+            )
+
+        for query_position, query in enumerate(
+            queries,
+            start=1,
+        ):
             result.search_queries_issued += 1
+
             memory_note = ""
+
             if query.memory_state != "untested":
-                rate = query.memory_productive_domain_rate or 0.0
+                rate = (
+                    query.memory_productive_domain_rate
+                    or 0.0
+                )
                 memory_note = (
                     f" · memory={query.memory_state}"
                     f" yield={rate:.1%}"
-                    f" productive={query.memory_productive_domains}"
+                    f" productive="
+                    f"{query.memory_productive_domains}"
                     f"/{query.memory_unique_domains}"
                     f" runs={query.memory_runs}"
                 )
-            print(f"   🔍 {query.query}{memory_note}")
+
+            print(
+                f"   🔍 {query.query}{memory_note}"
+            )
 
             try:
                 hits = self.search_provider.search(
@@ -1314,44 +1357,65 @@ class ResearchCrawler:
                     limit=self.project.search.results_per_query,
                     safesearch=self.project.search.safesearch,
                 )
+
                 ranked_hits = self._rank_search_hits(
                     hits,
                     query.query,
                 )
-                for position, ranked_hit in enumerate(
+
+                for result_position, ranked_hit in enumerate(
                     ranked_hits,
                     start=1,
                 ):
-                    ranked_url = normalize_url(ranked_hit.hit.url)
-                    ranked_domain = (
-                        host_key(ranked_url) if ranked_url else ""
+                    ranked_url = normalize_url(
+                        ranked_hit.hit.url
                     )
-                    profile = self.source_profiles.get(ranked_domain)
+                    ranked_domain = (
+                        host_key(ranked_url)
+                        if ranked_url
+                        else ""
+                    )
+
+                    profile = self.source_profiles.get(
+                        ranked_domain
+                    )
+
                     result.adaptive_decisions.append(
                         AdaptiveDecision(
                             stage="search_result_priority",
                             decision="scheduled",
                             target=ranked_hit.hit.url,
                             signals={
-                                "position": position,
-                                "query": query.query,
+                                "position":
+                                    result_position,
+                                "query":
+                                    query.query,
                                 "source_memory_state":
                                     self._source_memory_state(
                                         ranked_domain
                                     ),
-                                "productive_run_rate": float(
-                                    profile.get(
-                                        "productive_run_rate",
-                                        0.0,
-                                    ) or 0.0
-                                ) if profile else 0.0,
-                                "entity_yield": float(
-                                    profile.get(
-                                        "entity_yield",
-                                        0.0,
-                                    ) or 0.0
-                                ) if profile else 0.0,
-                                "bm25": ranked_hit.bm25,
+                                "productive_run_rate":
+                                    float(
+                                        profile.get(
+                                            "productive_run_rate",
+                                            0.0,
+                                        )
+                                        or 0.0
+                                    )
+                                    if profile
+                                    else 0.0,
+                                "entity_yield":
+                                    float(
+                                        profile.get(
+                                            "entity_yield",
+                                            0.0,
+                                        )
+                                        or 0.0
+                                    )
+                                    if profile
+                                    else 0.0,
+                                "bm25":
+                                    ranked_hit.bm25,
                                 "title_matches":
                                     ranked_hit.title_matches,
                                 "path_matches":
@@ -1365,73 +1429,174 @@ class ResearchCrawler:
                             },
                         )
                     )
+
             except SearchProviderError as exc:
                 result.search_provider_errors += 1
-                detail = f"kind={exc.kind}, attempts={exc.attempts}"
+
+                detail = (
+                    f"kind={exc.kind}, "
+                    f"attempts={exc.attempts}"
+                )
+
                 if exc.status_code is not None:
-                    detail += f", http={exc.status_code}"
-                print(f"   ⚠️ SearchProvider kļūda: {exc} [{detail}]")
+                    detail += (
+                        f", http={exc.status_code}"
+                    )
+
+                print(
+                    f"   ⚠️ SearchProvider kļūda: "
+                    f"{exc} [{detail}]"
+                )
                 continue
 
-            for ranked_hit in ranked_hits:
+            for result_position, ranked_hit in enumerate(
+                ranked_hits,
+                start=1,
+            ):
                 hit = ranked_hit.hit
+
                 result.search_results_seen += 1
+
                 normalized = normalize_url(hit.url)
+
                 if not normalized:
                     continue
-                if normalized in seen_search_urls:
-                    result.search_results_duplicates += 1
-                    continue
-                seen_search_urls.add(normalized)
-                result.search_results_unique += 1
 
                 evidence = " ".join(
-                    part for part in [hit.title, hit.snippet] if part
+                    part
+                    for part in [
+                        hit.title,
+                        hit.snippet,
+                    ]
+                    if part
                 )
+
                 score = text_relevance_score(
                     self.project,
                     normalized,
                     evidence,
                 )
 
-                record, discovery = registry.observe_search_result(
-                    provider=self.search_provider.name,
+                candidate = {
+                    "normalized": normalized,
+                    "query": query,
+                    "query_position":
+                        query_position,
+                    "result_position":
+                        result_position,
+                    "ranked_hit":
+                        ranked_hit,
+                    "hit":
+                        hit,
+                    "score":
+                        score,
+                }
+
+                if normalized in seen_search_urls:
+                    result.search_results_duplicates += 1
+
+                    previous = pending_by_url[
+                        normalized
+                    ]
+
+                    if (
+                        candidate_rank(candidate)
+                        > candidate_rank(previous)
+                    ):
+                        pending_by_url[
+                            normalized
+                        ] = candidate
+
+                    continue
+
+                seen_search_urls.add(normalized)
+                result.search_results_unique += 1
+
+                pending_by_url[
+                    normalized
+                ] = candidate
+
+        ordered_candidates = sorted(
+            pending_by_url.values(),
+            key=candidate_rank,
+            reverse=True,
+        )
+
+        result.adaptive_decisions.append(
+            AdaptiveDecision(
+                stage="search_domain_budget",
+                decision="globally_ranked",
+                target=self.project.id,
+                signals={
+                    "candidate_urls":
+                        len(ordered_candidates),
+                    "max_domains":
+                        self.project.crawl.max_domains,
+                    "strategy":
+                        "all_queries_before_activation",
+                },
+            )
+        )
+
+        for candidate in ordered_candidates:
+            normalized = str(
+                candidate["normalized"]
+            )
+            query = candidate["query"]
+            ranked_hit = candidate["ranked_hit"]
+            hit = candidate["hit"]
+            score = int(candidate["score"])
+
+            record, discovery = (
+                registry.observe_search_result(
+                    provider=
+                        self.search_provider.name,
                     query_text=query.query,
                     target_url=normalized,
                     title=hit.title,
                     snippet=hit.snippet,
                     raw_score=score,
                 )
+            )
 
-                if discovery.action == "activated":
-                    result.search_domains_activated += 1
-                    profile = self.source_profiles.get(record.domain)
-                    state = self._source_memory_state(record.domain)
-                    source_note = ""
-                    if profile is not None:
-                        source_note = (
-                            f" source_memory={state}"
-                            f" productive_run_rate="
-                            f"{float(profile.get('productive_run_rate', 0.0) or 0.0):.1%}"
-                            f" entity_yield="
-                            f"{float(profile.get('entity_yield', 0.0) or 0.0):.2f}"
-                        )
-                    print(
-                        f"      🧭 Search domēns aktivizēts: "
-                        f"{record.domain} (score={record.relevance_score:.2f})"
-                        f"{source_note}"
-                        f" local={ranked_hit.audit_label}"
+            if discovery.action == "activated":
+                result.search_domains_activated += 1
+
+                profile = self.source_profiles.get(
+                    record.domain
+                )
+                state = self._source_memory_state(
+                    record.domain
+                )
+                source_note = ""
+
+                if profile is not None:
+                    source_note = (
+                        f" source_memory={state}"
+                        f" productive_run_rate="
+                        f"{float(profile.get('productive_run_rate', 0.0) or 0.0):.1%}"
+                        f" entity_yield="
+                        f"{float(profile.get('entity_yield', 0.0) or 0.0):.2f}"
                     )
 
-                if record.status == "active":
-                    frontier.add(
-                        normalized,
-                        priority=80 + score,
-                        depth=0,
-                        discovery_depth=0,
-                        source_url="",
-                        source_type="search_provider",
-                    )
+                print(
+                    f"      🧭 Search domēns aktivizēts: "
+                    f"{record.domain} "
+                    f"(score={record.relevance_score:.2f})"
+                    f"{source_note}"
+                    f" local="
+                    f"{ranked_hit.audit_label}"
+                )
+
+            if record.status == "active":
+                frontier.add(
+                    normalized,
+                    priority=80 + score,
+                    depth=0,
+                    discovery_depth=0,
+                    source_url="",
+                    source_type="search_provider",
+                )
 
     def _enrich_entities(self, result: ResearchRunResult):
         if not result.entities:
