@@ -105,6 +105,7 @@ class AnalysisConfig(BaseModel):
     min_relevance_score: float = Field(default=0.35, ge=0.0, le=1.0)
     categories: list[str] = Field(default_factory=list)
     desired_attributes: list[str] = Field(default_factory=list)
+    required_evidence_terms: list[str] = Field(default_factory=list)
 
 
 class ResearchProject(BaseModel):
