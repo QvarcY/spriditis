@@ -42,6 +42,28 @@ from .robots import RobotsCache
 from .safe_http import SafeSession
 
 
+def _link_relevance_context(tag) -> str:
+    """
+    Use the surrounding table row when a link lives in tabular result data.
+
+    Marketplaces and directories often keep year, price, location and other
+    important evidence in sibling cells rather than inside the <a> itself.
+    Navigation links outside tables keep their ordinary anchor text.
+    """
+    anchor = " ".join(tag.stripped_strings)
+
+    row = tag.find_parent("tr")
+    if row is None:
+        return anchor
+
+    row_text = " ".join(row.stripped_strings)
+
+    if not row_text:
+        return anchor
+
+    return row_text[:2000]
+
+
 class _AsyncResponseAdapter:
     def __init__(self, result: AsyncHTTPResult):
         self.url = result.final_url
@@ -650,11 +672,12 @@ class ResearchCrawler:
 
                 target_domain = host_key(absolute)
                 anchor = " ".join(tag.stripped_strings)
+                relevance_context = _link_relevance_context(tag)
 
                 score = text_relevance_score(
                     self.project,
                     absolute,
-                    anchor,
+                    relevance_context,
                 )
 
                 is_external = target_domain != final_domain

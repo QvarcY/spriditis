@@ -171,8 +171,38 @@ def text_relevance_score(
         if key and key in haystack:
             score -= 20
 
+    # Mandatory evidence should influence discovery priority too.
+    # These terms already decide whether an extracted entity may survive
+    # the final relevance gate, so pages carrying them deserve extra crawl
+    # priority instead of competing as ordinary keywords.
+    for required in project.analysis.required_evidence_terms:
+        key = required.strip().lower()
+        if key and key in haystack:
+            score += 15
+
     path = (urlparse(url).path or "").lower()
-    if any(part in path for part in ("/product", "/produk", "/katalog", "/shop", "/veikal")):
+
+    # Common item/detail URL shapes get priority over catalogue/navigation
+    # pages. This is deliberately generic rather than tied to one source.
+    if any(
+        part in path
+        for part in (
+            "/msg/",
+            "/item/",
+            "/listing/",
+        )
+    ):
+        score += 35
+    elif any(
+        part in path
+        for part in (
+            "/product",
+            "/produk",
+            "/katalog",
+            "/shop",
+            "/veikal",
+        )
+    ):
         score += 20
 
     depth = len([part for part in path.split("/") if part])
