@@ -70,6 +70,61 @@ def build_search_queries(
             keyword_seen.add(key)
             keywords.append(clean)
 
+    required_terms = [
+        _clean(term).casefold()
+        for term in project.analysis.required_evidence_terms
+        if _clean(term)
+    ]
+
+    if required_terms:
+        constraint_keywords: list[str] = []
+        constraint_keys: set[str] = set()
+
+        for term in required_terms:
+            matched = next(
+                (
+                    keyword
+                    for keyword in keywords
+                    if keyword.casefold() == term
+                    or keyword.casefold().startswith(term)
+                ),
+                None,
+            )
+
+            value = matched or term
+            key = value.casefold()
+
+            if key not in constraint_keys:
+                constraint_keys.add(key)
+                constraint_keywords.append(value)
+
+        anchors = [
+            keyword
+            for keyword in keywords
+            if not any(
+                keyword.casefold() == term
+                or keyword.casefold().startswith(term)
+                for term in required_terms
+            )
+        ]
+
+        # Keep hard constraints in the first generated discovery query.
+        # Try progressively smaller anchor sets so even a short configured
+        # query gets a distinct constraint-preserving fallback.
+        for anchor_count in (2, 1, 0):
+            before = len(candidates)
+
+            add(
+                " ".join(
+                    anchors[:anchor_count]
+                    + constraint_keywords
+                ),
+                "required_evidence_bundle",
+            )
+
+            if len(candidates) > before:
+                break
+
     if len(keywords) >= 3:
         add(" ".join(keywords[:3]), "keyword_bundle")
     elif keywords:

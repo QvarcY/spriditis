@@ -42,7 +42,20 @@ class FallbackProvider(AIProvider):
                 0.18 + positive_hits * 0.10 - negative_hits * 0.22,
             ),
         )
-        relevant = score >= project.analysis.min_relevance_score
+        required_terms = [
+            term.strip().casefold()
+            for term in project.analysis.required_evidence_terms
+            if term.strip()
+        ]
+        missing_required_terms = [
+            term
+            for term in required_terms
+            if term not in text.casefold()
+        ]
+        relevant = (
+            score >= project.analysis.min_relevance_score
+            and not missing_required_terms
+        )
 
         category = "uncategorized"
         categories = project.analysis.categories
@@ -81,6 +94,11 @@ class FallbackProvider(AIProvider):
             category = categories[0]
 
         attributes = {}
+        if required_terms:
+            attributes["criteria_verified"] = not missing_required_terms
+            attributes["required_evidence_terms"] = required_terms
+            attributes["missing_required_evidence_terms"] = missing_required_terms
+
         desired = set(project.analysis.desired_attributes)
 
         if "personalization" in desired:

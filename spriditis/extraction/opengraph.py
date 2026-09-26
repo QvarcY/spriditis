@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 
 from spriditis.core.entities import ExtractionEvidence, MarketEntity
 
-from .common import clean_text, meta, parse_price
+from .common import clean_text, meta, parse_explicit_money, parse_price
 
 
 def _fact(
@@ -54,6 +54,21 @@ def extract_opengraph_product(
     image = meta(soup, prop="og:image")
 
     price = parse_price(amount)
+    price_evidence = (
+        "opengraph:product:price:amount|og:price:amount"
+        if price is not None
+        else ""
+    )
+
+    if price is None:
+        fallback_price, fallback_currency = parse_explicit_money(
+            f"{title} {description}"
+        )
+        if fallback_price is not None:
+            price = fallback_price
+            currency = fallback_currency or currency
+            price_evidence = "opengraph:title|description:explicit_money"
+
     image_url = urljoin(page_url, image) if image else ""
 
     field_evidence: dict[str, ExtractionEvidence] = {
@@ -82,8 +97,12 @@ def extract_opengraph_product(
         field_evidence["price"] = _fact(
             price,
             page_url=page_url,
-            confidence=0.88,
-            evidence="opengraph:product:price:amount|og:price:amount",
+            confidence=(
+                0.88
+                if amount
+                else 0.74
+            ),
+            evidence=price_evidence,
         )
     if currency:
         field_evidence["currency"] = _fact(

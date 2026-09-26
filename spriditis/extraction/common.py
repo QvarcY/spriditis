@@ -10,7 +10,14 @@ from bs4 import BeautifulSoup
 
 
 PRICE_RE = re.compile(
-    r"(?<!\d)(\d{1,9}(?:[.,]\d{1,2})?)\s*(€|EUR|eur)",
+    r"(?<!\d)(\d{1,9}(?:[\s\u00a0]\d{3})*(?:[.,]\d{1,2})?)\s*"
+    r"(€|EUR|USD|GBP|CHF|SEK|NOK|DKK|PLN)",
+    re.IGNORECASE,
+)
+
+_PRICE_PREFIX_RE = re.compile(
+    r"\b(EUR|USD|GBP|CHF|SEK|NOK|DKK|PLN)\s*"
+    r"(\d{1,9}(?:[\s\u00a0]\d{3})*(?:[.,]\d{1,2})?)(?!\d)",
     re.IGNORECASE,
 )
 
@@ -29,11 +36,20 @@ def parse_price(value: Any) -> float | None:
     if value is None:
         return None
     text = clean_text(value, 100)
-    match = re.search(r"(\d{1,9}(?:[.,]\d{1,2})?)", text)
+    match = re.search(
+        r"(\d{1,9}(?:[\s\u00a0]\d{3})*(?:[.,]\d{1,2})?)",
+        text,
+    )
     if not match:
         return None
     try:
-        return round(float(match.group(1).replace(",", ".")), 2)
+        normalized = (
+            match.group(1)
+            .replace("\u00a0", "")
+            .replace(" ", "")
+            .replace(",", ".")
+        )
+        return round(float(normalized), 2)
     except ValueError:
         return None
 
@@ -65,3 +81,25 @@ def absolute_image(value: Any, base_url: str) -> str:
             if value.get(key):
                 return urljoin(base_url, str(value[key]))
     return ""
+
+
+def parse_explicit_money(value: Any) -> tuple[float | None, str]:
+    text = clean_text(value, 1200)
+
+    match = PRICE_RE.search(text)
+    if match:
+        amount = parse_price(match.group(1))
+        token = match.group(2).upper()
+    else:
+        match = _PRICE_PREFIX_RE.search(text)
+        if not match:
+            return None, ""
+        token = match.group(1).upper()
+        amount = parse_price(match.group(2))
+
+    currency = {
+        "€": "EUR",
+        "£": "GBP",
+    }.get(token, token)
+
+    return amount, currency
