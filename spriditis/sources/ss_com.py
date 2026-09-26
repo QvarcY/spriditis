@@ -282,6 +282,7 @@ def extract_product(
                     title,
                     description,
                     " ".join(str(value) for value in attributes.values()),
+                    " ".join(attribute_evidence.values()),
                 ]
             ),
             1200,
