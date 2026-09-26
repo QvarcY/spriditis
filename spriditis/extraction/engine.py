@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 
 from spriditis.core.entities import MarketEntity
 from spriditis.core.projects import ResearchProject
-from spriditis.sources import meistardarbs
+from spriditis.sources import meistardarbs, ss_com
 
 from .dom_fallback import extract_dom_fallback_product
 from .jsonld import extract_jsonld_products
@@ -74,6 +74,11 @@ def extract_entities(
 
     if meistardarbs.matches(page_url):
         special = meistardarbs.extract_product(soup, page_url)
+        if special:
+            candidates.append(special)
+
+    if ss_com.matches(page_url):
+        special = ss_com.extract_product(soup, page_url)
         if special:
             candidates.append(special)
 
