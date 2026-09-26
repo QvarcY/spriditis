@@ -26,6 +26,7 @@ def _analytics(entities: list[MarketEntity]) -> dict:
     return {
         "total": len(entities),
         "relevant": len(relevant),
+        "priced": len(prices),
         "sellers": len(sellers),
         "median_price": median(prices) if prices else None,
         "min_price": min(prices) if prices else None,
@@ -51,10 +52,26 @@ def generate_html_report(
             if entity.image_url
             else '<div class="thumb placeholder">bez attēla</div>'
         )
+        hidden_attrs = {
+            "required_evidence_terms",
+            "missing_required_evidence_terms",
+            "criteria_verified",
+        }
         attrs = "".join(
-            f"<dt>{escape(str(key))}</dt><dd>{escape(str(value))}</dd>"
+            f"<dt>{escape(str(key).replace('_', ' ').title())}</dt>"
+            f"<dd>{escape(str(value))}</dd>"
             for key, value in entity.attributes.items()
-            if value not in ("", None, [], {})
+            if key not in hidden_attrs
+            and value not in ("", None, [], {})
+        )
+
+        criteria_verified = entity.attributes.get("criteria_verified")
+        criteria_badge = (
+            '<span class="criterion ok">kritēriji pārbaudīti</span>'
+            if criteria_verified is True
+            else '<span class="criterion warn">kritēriji nav pilnībā pierādīti</span>'
+            if criteria_verified is False
+            else ""
         )
 
         cards.append(
@@ -63,9 +80,9 @@ def generate_html_report(
               {image}
               <div class="body">
                 <div class="chips">
-                  <span>{escape(entity.entity_type)}</span>
                   <span>{escape(entity.category)}</span>
-                  <span>relevance {entity.relevance_score:.0%}</span>
+                  <span>atbilstība {entity.relevance_score:.0%}</span>
+                  {criteria_badge}
                 </div>
                 <h3>{escape(entity.title)}</h3>
                 <div class="meta">
@@ -86,6 +103,34 @@ def generate_html_report(
             </article>
             """
         )
+
+    relevant = [entity for entity in result.entities if entity.is_relevant]
+    if stats["relevant"] == 0:
+        answer_summary = (
+            "Netika atrasts neviens objekts, kuram Sprīdītis varētu "
+            "pietiekami droši apstiprināt atbilstību dotajiem kritērijiem."
+        )
+    elif stats["priced"]:
+        answer_summary = (
+            f"Atrasti {stats['relevant']} atbilstoši objekti; "
+            f"{stats['priced']} no tiem ir droši iegūta cena. "
+            f"Cenu diapazons: {_money(stats['min_price'])}–"
+            f"{_money(stats['max_price'])}; mediāna "
+            f"{_money(stats['median_price'])}."
+        )
+    else:
+        answer_summary = (
+            f"Atrasti {stats['relevant']} atbilstoši objekti, "
+            "bet drošu strukturētu cenu datu nepietiek tirgus cenas "
+            "kopsavilkumam."
+        )
+
+    coverage_note = (
+        "Šis ir ātrais paraugs ar ierobežotu lapu un domēnu budžetu; "
+        "tas nav pilns tirgus audits."
+        if result.stop_reason == "budget_exhausted"
+        else ""
+    )
 
     category_rows = "".join(
         f"<tr><td>{escape(name)}</td><td>{count}</td></tr>"
@@ -153,6 +198,15 @@ td,th {{ padding:10px;border-bottom:1px solid var(--line);text-align:left }}
 .cols {{ display:grid;grid-template-columns:1fr 1fr;gap:18px }}
 .panel {{ background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px }}
 .op {{ border-left:3px solid var(--ok);padding-left:10px }}
+.answer {{ margin:20px 0;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px }}
+.answer h2 {{ margin-top:0 }}
+.answer p {{ font-size:17px;line-height:1.55 }}
+.coverage {{ color:var(--muted);font-size:13px }}
+.criterion {{ font-weight:700 }}
+.criterion.ok {{ color:var(--ok) }}
+.criterion.warn {{ color:#f4c56a }}
+details.tech {{ margin-top:22px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 18px }}
+details.tech summary {{ cursor:pointer;font-weight:700 }}
 @media(max-width:900px) {{
  .stats {{ grid-template-columns:repeat(2,1fr) }}
  .grid,.cols {{ grid-template-columns:1fr }}
@@ -173,13 +227,27 @@ td,th {{ padding:10px;border-bottom:1px solid var(--line);text-align:left }}
   </p>
 </header>
 
+<section class="answer">
+  <h2>Atbilde īsumā</h2>
+  <p>{escape(answer_summary)}</p>
+  {
+      f'<p class="coverage">{escape(coverage_note)}</p>'
+      if coverage_note else ''
+  }
+</section>
+
 <div class="stats">
-  <div class="stat"><b>{stats["relevant"]}</b><span>relevanti objekti</span></div>
-  <div class="stat"><b>{stats["sellers"]}</b><span>unikāli pārdevēji</span></div>
+  <div class="stat"><b>{stats["relevant"]}</b><span>apstiprināti objekti</span></div>
+  <div class="stat"><b>{stats["priced"]}</b><span>objekti ar cenu</span></div>
   <div class="stat"><b>{_money(stats["median_price"])}</b><span>mediānas cena</span></div>
-  <div class="stat"><b>{result.visited_pages}</b><span>apmeklētas lapas</span></div>
-  <div class="stat"><b>{len(result.domains)}</b><span>novēroti domēni</span></div>
+  <div class="stat"><b>{_money(stats["min_price"])}</b><span>zemākā cena</span></div>
+  <div class="stat"><b>{_money(stats["max_price"])}</b><span>augstākā cena</span></div>
 </div>
+
+<section>
+  <h2>Atrasti atbilstoši objekti</h2>
+  <div class="grid">{''.join(card for card, entity in zip(cards, result.entities) if entity.is_relevant) or '<p class="muted">Nav apstiprinātu objektu.</p>'}</div>
+</section>
 
 <section class="cols">
   <div class="panel">
@@ -202,21 +270,20 @@ td,th {{ padding:10px;border-bottom:1px solid var(--line);text-align:left }}
   </div>
 </section>
 
-<section>
-  <h2>Atrastie tirgus objekti</h2>
-  <div class="grid">{''.join(cards) or '<p class="muted">Nekas netika atrasts.</p>'}</div>
-</section>
-
-<p class="muted">
-  failed={result.failed_pages} · robots_skipped={result.skipped_by_robots} ·
-  search_queries={result.search_queries_issued} · search_raw={result.search_results_seen} ·
-  search_unique={result.search_results_unique} · search_duplicates={result.search_results_duplicates} ·
-  search_activated={result.search_domains_activated} · search_errors={result.search_provider_errors} ·
-  feed_candidates={result.feed_candidates_seen} · feeds={result.feeds_found} ·
-  feed_entries={result.feed_entries_seen} · feed_new={result.feed_entries_new} ·
-  feed_304={result.feed_not_modified} · feed_errors={result.feed_errors} ·
-  kopā atrasti={len(result.entities)}
-</p>
+<details class="tech">
+  <summary>Tehniskais pielikums</summary>
+  <p class="muted">
+    visited={result.visited_pages} · failed={result.failed_pages} ·
+    robots_skipped={result.skipped_by_robots} ·
+    search_queries={result.search_queries_issued} ·
+    search_raw={result.search_results_seen} ·
+    search_unique={result.search_results_unique} ·
+    search_duplicates={result.search_results_duplicates} ·
+    search_activated={result.search_domains_activated} ·
+    search_errors={result.search_provider_errors} ·
+    kopā atrasti={len(result.entities)}
+  </p>
+</details>
 </div>
 </body>
 </html>
