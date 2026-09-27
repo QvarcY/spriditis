@@ -93,6 +93,8 @@ class CrawlConfig(BaseModel):
 class SearchConfig(BaseModel):
     provider: Literal["none", "searxng"] = "none"
     max_queries: int = Field(default=4, ge=0, le=50)
+    # Additional target-preserving queries after an insufficient initial crawl.
+    max_recovery_queries: int = Field(default=2, ge=0, le=50)
     results_per_query: int = Field(default=8, ge=1, le=100)
     result_threshold: int = Field(default=35, ge=0, le=100)
     safesearch: Literal[0, 1, 2] = 1

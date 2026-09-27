@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import ipaddress
 import re
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 from spriditis.core.projects import ResearchProject
 
@@ -170,6 +170,19 @@ def text_relevance_score(
         key = keyword.strip().lower()
         if key and key in haystack:
             score -= 20
+
+    target_terms = set(re.findall(
+        r"[^\W_]+", " ".join(project.analysis.target_identity_terms).casefold(),
+    ))
+    target_anchors = set(re.findall(
+        r"[^\W_]+", " ".join(project.analysis.target_identity_anchor_terms).casefold(),
+    ))
+    if target_terms and target_anchors:
+        tokens = set(re.findall(r"[^\W_]+", unquote(haystack).casefold()))
+        score += 20 * len(target_terms & tokens)
+        score += 20 * len(target_anchors & tokens)
+        if target_terms <= tokens:
+            score += 20
 
     # Mandatory evidence should influence discovery priority too.
     # These terms already decide whether an extracted entity may survive

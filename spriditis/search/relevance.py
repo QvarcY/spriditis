@@ -35,6 +35,8 @@ class LocalRelevance:
     title_matches: int
     path_matches: int
     domain_matches: int
+    target_identity_matches: int
+    target_identity_anchor_matches: int
     negative_matches: int
 
     @property
@@ -44,6 +46,8 @@ class LocalRelevance:
             f" title={self.title_matches}"
             f" path={self.path_matches}"
             f" domain={self.domain_matches}"
+            f" target={self.target_identity_matches}"
+            f" anchor={self.target_identity_anchor_matches}"
             f" negative={self.negative_matches}"
         )
 
@@ -102,6 +106,17 @@ def local_relevance_signals(
         for item in project.negative_keywords
         if item.strip()
     ]
+    target_terms = set(
+        _unique_terms(" ".join(project.analysis.target_identity_terms))
+    )
+    target_anchor_terms = set(
+        _unique_terms(
+            " ".join(project.analysis.target_identity_anchor_terms)
+        )
+    )
+    if not target_terms or not target_anchor_terms:
+        target_terms = set()
+        target_anchor_terms = set()
 
     for index, (hit, document, parts) in enumerate(
         zip(hits, documents, parsed_parts)
@@ -139,10 +154,17 @@ def local_relevance_signals(
         title_tokens = set(_tokens(title))
         path_tokens = set(_tokens(path))
         domain_tokens = set(_tokens(domain.replace(".", " ")))
+        document_tokens = set(document)
 
         haystack = " ".join([title, snippet, path, domain])
         negative_matches = sum(
             1 for phrase in negative_phrases if phrase in haystack
+        )
+        target_identity_matches = sum(
+            1 for term in target_terms if term in document_tokens
+        )
+        target_identity_anchor_matches = sum(
+            1 for term in target_anchor_terms if term in document_tokens
         )
 
         signals.append(
@@ -158,6 +180,10 @@ def local_relevance_signals(
                 ),
                 domain_matches=sum(
                     1 for term in query_terms if term in domain_tokens
+                ),
+                target_identity_matches=target_identity_matches,
+                target_identity_anchor_matches=(
+                    target_identity_anchor_matches
                 ),
                 negative_matches=negative_matches,
             )

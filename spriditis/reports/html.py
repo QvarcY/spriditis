@@ -135,12 +135,19 @@ def generate_html_report(
             "kopsavilkumam."
         )
 
-    coverage_note = (
-        "Šis ir ātrais paraugs ar ierobežotu lapu un domēnu budžetu; "
-        "tas nav pilns tirgus audits."
-        if result.stop_reason == "budget_exhausted"
-        else ""
-    )
+    if result.stop_reason == "insufficient_target_coverage":
+        coverage_note = (
+            "Šajā izpildē nepietika apstiprinātu mērķa piedāvājumu ar cenām "
+            "plānotajam avotu pārklājumam. Rezultātus nevajag interpretēt "
+            "kā pilnu tirgus pārklājumu."
+        )
+    elif result.stop_reason == "budget_exhausted":
+        coverage_note = (
+            "Šis ir ātrais paraugs ar ierobežotu lapu un domēnu budžetu; "
+            "tas nav pilns tirgus audits."
+        )
+    else:
+        coverage_note = ""
 
     category_rows = "".join(
         f"<tr><td>{escape(name)}</td><td>{count}</td></tr>"

@@ -12,7 +12,8 @@ from bs4 import BeautifulSoup
 
 from spriditis.ai.base import AIProvider
 from spriditis.config import AppSettings
-from spriditis.core.domains import DomainRecord
+from spriditis.core.domains import DomainDiscovery, DomainRecord
+from spriditis.core.entities import MarketEntity
 from spriditis.core.feeds import FeedState
 from spriditis.core.memory import PageVisit
 from spriditis.core.projects import ResearchProject
@@ -31,6 +32,7 @@ from .async_politeness import (
     AsyncRetryingFetcher,
 )
 from .async_wave import AsyncWavePlanner
+from .coverage import ResearchCoverage
 from .discovery import DomainRegistry, SitemapDiscovery
 from .feed_discovery import FeedDiscovery
 from .frontier import URLFrontier
@@ -106,6 +108,11 @@ class ResearchCrawler:
         self.async_transport = async_transport
         self._owns_async_transport = async_transport is None
         self.progress_callback = progress_callback
+        self._search_candidate_pool: list[dict[str, object]] = []
+        self._coverage = ResearchCoverage.for_project(project)
+        self._issued_queries: set[str] = set()
+        self._recovery_queries_issued = 0
+        self._deferred_sources: list[tuple[DomainDiscovery, int, int]] = []
 
         self.session = SafeSession()
         self.session.headers.update(
@@ -157,6 +164,11 @@ class ResearchCrawler:
 
     def _crawl_impl(self) -> ResearchRunResult:
         result = ResearchRunResult(project_id=self.project.id)
+        self._coverage = ResearchCoverage.for_project(self.project)
+        self._search_candidate_pool = []
+        self._issued_queries = set()
+        self._recovery_queries_issued = 0
+        self._deferred_sources = []
 
         frontier = URLFrontier()
         visited: set[str] = set()
@@ -194,7 +206,7 @@ class ResearchCrawler:
         if self.project.crawl.mode == "expedition":
             self._seed_from_search(frontier, registry, result)
 
-        if not frontier:
+        if not frontier and not self._coverage.specific_target:
             if self.project.crawl.mode == "expedition":
                 raise ValueError(
                     "Expedition neieguva nevienu derīgu sākuma URL no seed vai SearchProvider."
@@ -237,10 +249,18 @@ class ResearchCrawler:
                 politeness=async_politeness,
             )
 
-        while (
-            frontier
-            and result.visited_pages < self.project.crawl.max_pages_total
-        ):
+        while True:
+            if not self._replenish_sources(
+                frontier, registry, result, visited, pages_by_domain,
+                discovery_depth_activations,
+            ):
+                break
+            if (
+                len(self._coverage.attempted_urls)
+                >= self.project.crawl.max_pages_total
+                and not async_cache
+            ):
+                break
             if async_planner is not None:
                 self._prefetch_async_wave(
                     frontier=frontier,
@@ -253,12 +273,13 @@ class ResearchCrawler:
                     fetcher=async_fetcher,
                 )
                 if not frontier:
-                    break
+                    continue
 
             item = frontier.pop()
             url = item.url
 
             if url in visited:
+                async_cache.pop(url, None)
                 continue
 
             if item.depth > self.project.crawl.max_depth:
@@ -268,13 +289,24 @@ class ResearchCrawler:
             record = registry.records.get(domain)
 
             if record is None or record.status != "active":
+                async_cache.pop(url, None)
                 continue
 
             if (
                 pages_by_domain[domain]
                 >= self.project.crawl.max_pages_per_domain
             ):
+                async_cache.pop(url, None)
                 continue
+
+            if (
+                url not in self._coverage.attempted_urls
+                and len(self._coverage.attempted_urls)
+                >= self.project.crawl.max_pages_total
+            ):
+                continue
+            self._coverage.attempted_urls.add(url)
+            self._coverage.attempted_domains.add(domain)
 
             if (
                 self.project.crawl.respect_robots
@@ -452,6 +484,7 @@ class ResearchCrawler:
                 self._sleep()
                 continue
 
+            self._coverage.usable_domains.add(final_domain)
             result.page_visits.append(
                 PageVisit(
                     url=url,
@@ -646,6 +679,10 @@ class ResearchCrawler:
                             )
 
                         if record.status != "active":
+                            if feed_event.reason == "domain_budget_reached":
+                                self._deferred_sources.append((
+                                    feed_event, item.depth + 1, feed_discovery_depth,
+                                ))
                             continue
 
                         if (
@@ -675,13 +712,14 @@ class ResearchCrawler:
                 print(f"⚠️ Extraction kļūda: {exc}")
 
             new_entities = 0
+            page_entities: list[MarketEntity] = []
 
             for entity in entities:
                 if entity.stable_key in entity_keys:
                     continue
 
                 entity_keys.add(entity.stable_key)
-                result.entities.append(entity)
+                page_entities.append(entity)
                 new_entities += 1
 
                 price_text = (
@@ -697,6 +735,35 @@ class ResearchCrawler:
 
             if new_entities:
                 registry.mark_entities(final_domain, new_entities)
+
+            if self._coverage.specific_target and page_entities:
+                # Use the final enrichment/gate here so stop decisions cannot
+                # be invalidated by a later identity or relevance rejection.
+                self._emit_progress(
+                    "analysis_started",
+                    entity_count=len(result.entities) + len(page_entities),
+                )
+                page_entities = self._enrich_batch(page_entities)
+            result.entities.extend(page_entities)
+            new_confirmed = self._coverage.observe_entities(
+                final_domain, page_entities,
+            )
+            if self._coverage.specific_target:
+                result.adaptive_decisions.append(AdaptiveDecision(
+                    stage="target_coverage",
+                    decision=(
+                        "confirmed_progress" if new_confirmed
+                        else "no_confirmed_progress"
+                    ),
+                    target=final_url,
+                    signals={
+                        "extracted_entities": new_entities,
+                        "new_confirmed_targets": new_confirmed,
+                        **self._coverage.snapshot(),
+                    },
+                ))
+
+            if new_entities:
                 self._emit_progress(
                     "entities_found",
                     domain=final_domain,
@@ -785,6 +852,10 @@ class ResearchCrawler:
                         )
 
                     if record.status != "active":
+                        if discovery.reason == "domain_budget_reached":
+                            self._deferred_sources.append((
+                                discovery, item.depth + 1, next_discovery_depth,
+                            ))
                         continue
 
                     if (
@@ -846,7 +917,10 @@ class ResearchCrawler:
             )
             if self._update_adaptive_stop(
                 result,
-                new_entities=new_entities,
+                new_entities=(
+                    new_confirmed
+                    if self._coverage.specific_target else new_entities
+                ),
                 new_active_domains=new_active_domains,
             ):
                 print(
@@ -862,6 +936,13 @@ class ResearchCrawler:
             if result.visited_pages >= self.project.crawl.max_pages_total:
                 result.stop_reason = "max_pages"
             elif (
+                len(self._coverage.attempted_urls)
+                >= self.project.crawl.max_pages_total
+            ):
+                result.stop_reason = "max_page_attempts"
+            elif self._coverage.specific_target:
+                result.stop_reason = "discovery_exhausted"
+            elif (
                 registry.active_count >= self.project.crawl.max_domains
                 and any(
                     item.reason == "domain_budget_reached"
@@ -872,6 +953,7 @@ class ResearchCrawler:
             else:
                 result.stop_reason = "budget_exhausted"
 
+        self._assess_target_coverage(result)
         result.adaptive_decisions.append(
             AdaptiveDecision(
                 stage="stop",
@@ -891,15 +973,17 @@ class ResearchCrawler:
                         self.project.crawl.saturation_window,
                     "active_domains": registry.active_count,
                     "max_domains": self.project.crawl.max_domains,
+                    **self._coverage.snapshot(),
                 },
             )
         )
 
-        self._emit_progress(
-            "analysis_started",
-            entity_count=len(result.entities),
-        )
-        self._enrich_entities(result)
+        if not self._coverage.specific_target:
+            self._emit_progress(
+                "analysis_started",
+                entity_count=len(result.entities),
+            )
+            self._enrich_entities(result)
 
         if async_politeness is not None:
             politeness_snapshot = async_politeness.snapshot()
@@ -948,7 +1032,7 @@ class ResearchCrawler:
     ) -> None:
         remaining_total = (
             self.project.crawl.max_pages_total
-            - result.visited_pages
+            - len(self._coverage.attempted_urls)
         )
         if remaining_total <= 0:
             return
@@ -987,6 +1071,8 @@ class ResearchCrawler:
         for item in wave.items:
             url = item.url
             domain = host_key(url)
+            self._coverage.attempted_urls.add(url)
+            self._coverage.attempted_domains.add(domain)
 
             if (
                 self.project.crawl.respect_robots
@@ -1138,6 +1224,9 @@ class ResearchCrawler:
             else:
                 result.saturation_streak += 1
 
+        if self._coverage.needs_evidence:
+            return False
+
         saturation_window = self.project.crawl.saturation_window
         if (
             saturation_window > 0
@@ -1274,10 +1363,11 @@ class ResearchCrawler:
                 "productive_fresh",
                 "productive_stale",
             }
-
             ranked.append(
                 (
                     (
+                        -signal.target_identity_anchor_matches,
+                        -signal.target_identity_matches,
                         band_order[state],
                         -productive_rate if has_productive_history else 0.0,
                         -entity_yield if has_productive_history else 0.0,
@@ -1306,6 +1396,9 @@ class ResearchCrawler:
         frontier: URLFrontier,
         registry: DomainRegistry,
         result: ResearchRunResult,
+        *,
+        recovery: bool = False,
+        pages_by_domain: Counter[str] | None = None,
     ):
         if self.search_provider is None:
             raise ValueError(
@@ -1317,14 +1410,25 @@ class ResearchCrawler:
             self.project,
             query_memory=self.query_memory,
             provider=self.search_provider.name,
+            recovery=recovery,
+            exclude_queries=self._issued_queries,
         )
+        if recovery:
+            remaining = (
+                self.project.search.max_recovery_queries
+                - self._recovery_queries_issued
+            )
+            queries = queries[:max(0, remaining)]
         if not queries:
+            if recovery:
+                return
             raise ValueError(
                 "Expedition režīmam nav neviena search query. "
                 "Pievieno keywords vai search.queries."
             )
 
-        for position, query in enumerate(queries, start=1):
+        query_offset = result.search_queries_issued
+        for position, query in enumerate(queries, start=query_offset + 1):
             result.adaptive_decisions.append(
                 AdaptiveDecision(
                     stage="query_priority",
@@ -1356,7 +1460,9 @@ class ResearchCrawler:
             f"{len(queries)} vaicājumi"
         )
 
-        seen_search_urls: set[str] = set()
+        seen_search_urls = {
+            str(item["normalized"]) for item in self._search_candidate_pool
+        }
 
         # Search results are collected across every query first.
         #
@@ -1367,12 +1473,17 @@ class ResearchCrawler:
         # pending_by_url keeps the best observation for each normalized URL;
         # domain activation happens only after the complete search candidate
         # pool is globally ranked.
-        pending_by_url: dict[str, dict[str, object]] = {}
+        pending_by_url = {
+            str(item["normalized"]): item for item in self._search_candidate_pool
+        }
 
         def candidate_rank(candidate: dict[str, object]):
             query = candidate["query"]
+            signal = candidate["ranked_hit"]
 
             return (
+                signal.target_identity_anchor_matches,
+                signal.target_identity_matches,
                 int(candidate["score"]),
                 1
                 if getattr(
@@ -1387,13 +1498,16 @@ class ResearchCrawler:
 
         for query_position, query in enumerate(
             queries,
-            start=1,
+            start=query_offset + 1,
         ):
             result.search_queries_issued += 1
+            self._issued_queries.add(query.query)
+            if recovery:
+                self._recovery_queries_issued += 1
             self._emit_progress(
                 "search_query_started",
                 position=query_position,
-                total=len(queries),
+                total=query_offset + len(queries),
             )
 
             memory_note = ""
@@ -1488,6 +1602,11 @@ class ResearchCrawler:
                                     ranked_hit.path_matches,
                                 "domain_matches":
                                     ranked_hit.domain_matches,
+                                "target_identity_matches":
+                                    ranked_hit.target_identity_matches,
+                                "target_identity_anchor_matches":
+                                    ranked_hit
+                                    .target_identity_anchor_matches,
                                 "negative_matches":
                                     ranked_hit.negative_matches,
                                 "provider_index":
@@ -1587,6 +1706,7 @@ class ResearchCrawler:
             key=candidate_rank,
             reverse=True,
         )
+        self._search_candidate_pool = ordered_candidates
 
         result.adaptive_decisions.append(
             AdaptiveDecision(
@@ -1612,6 +1732,21 @@ class ResearchCrawler:
             ranked_hit = candidate["ranked_hit"]
             hit = candidate["hit"]
             score = int(candidate["score"])
+            domain = host_key(normalized)
+            if recovery and (
+                normalized in self._coverage.attempted_urls
+                or (
+                    pages_by_domain is not None
+                    and pages_by_domain[domain]
+                    >= self.project.crawl.max_pages_per_domain
+                )
+            ):
+                continue
+            if (
+                domain in registry.run_active_domains
+                and registry.records[domain].status == "failed"
+            ):
+                continue
 
             record, discovery = (
                 registry.observe_search_result(
@@ -1622,6 +1757,9 @@ class ResearchCrawler:
                     title=hit.title,
                     snippet=hit.snippet,
                     raw_score=score,
+                    activation_budget_available=self._source_slot_available(
+                        registry, domain,
+                    ),
                 )
             )
 
@@ -1659,7 +1797,12 @@ class ResearchCrawler:
                     f"{ranked_hit.audit_label}"
                 )
 
-            if record.status == "active":
+            if (
+                record.status == "active"
+                and discovery.action in {"activated", "known"}
+                and normalized not in self._coverage.attempted_urls
+            ):
+                self._coverage.exhausted_domains.discard(domain)
                 frontier.add(
                     normalized,
                     priority=80 + score,
@@ -1669,22 +1812,258 @@ class ResearchCrawler:
                     source_type="search_provider",
                 )
 
+    def _source_slot_available(
+        self, registry: DomainRegistry, domain: str = "",
+    ) -> bool:
+        occupied = self._coverage.occupied_domains(registry.run_active_domains)
+        return domain in occupied or len(occupied) < self.project.crawl.max_domains
+
+    def _replenish_sources(
+        self,
+        frontier: URLFrontier,
+        registry: DomainRegistry,
+        result: ResearchRunResult,
+        visited: set[str],
+        pages_by_domain: Counter[str],
+        discovery_depth_activations: Counter[int],
+    ) -> bool:
+        pending_domains = {
+            host_key(item.url) for item in frontier.pending_items()
+            if item.url not in visited
+            and item.depth <= self.project.crawl.max_depth
+            and pages_by_domain[host_key(item.url)]
+            < self.project.crawl.max_pages_per_domain
+            and host_key(item.url) in registry.records
+            and registry.records[host_key(item.url)].status == "active"
+        }
+        self._coverage.exhausted_domains = (
+            registry.run_active_domains - pending_domains
+        )
+        if len(self._coverage.attempted_urls) >= self.project.crawl.max_pages_total:
+            return bool(pending_domains)
+
+        added = self._backfill_search_domain_slots(
+            frontier, registry, result, reason="source_exhausted",
+        )
+        added += self._backfill_discovered_sources(
+            frontier, registry, result, discovery_depth_activations,
+        )
+        if pending_domains or added:
+            return True
+
+        if (
+            self.project.crawl.mode == "expedition"
+            and self._coverage.needs_evidence
+            and self._recovery_queries_issued < self.project.search.max_recovery_queries
+        ):
+            result.adaptive_decisions.append(AdaptiveDecision(
+                stage="discovery_recovery",
+                decision="reformulate_queries",
+                target=self.project.id,
+                signals=self._coverage.snapshot(),
+            ))
+            self._seed_from_search(
+                frontier, registry, result, recovery=True,
+                pages_by_domain=pages_by_domain,
+            )
+            return any(
+                item.url not in visited
+                and item.depth <= self.project.crawl.max_depth
+                and pages_by_domain[host_key(item.url)]
+                < self.project.crawl.max_pages_per_domain
+                and registry.records[host_key(item.url)].status == "active"
+                for item in frontier.pending_items()
+            )
+        return False
+
+    def _backfill_discovered_sources(
+        self,
+        frontier: URLFrontier,
+        registry: DomainRegistry,
+        result: ResearchRunResult,
+        depth_activations: Counter[int],
+    ) -> int:
+        added = 0
+        activated: set[str] = set()
+        for event, depth, discovery_depth in sorted(
+            self._deferred_sources, key=lambda item: -item[0].relevance_score,
+        ):
+            if depth > self.project.crawl.max_depth:
+                continue
+            domain = event.target_domain
+            if domain not in activated:
+                if domain in registry.run_active_domains:
+                    continue
+                if not self._source_slot_available(registry):
+                    continue
+                block = self._discovery_activation_block_reason(
+                    discovery_depth, depth_activations,
+                )
+                common = dict(
+                    target_url=event.target_url,
+                    raw_score=round(event.relevance_score * 100),
+                    activation_block_reason=block,
+                    activation_budget_available=True,
+                )
+                if event.discovered_via == "feed":
+                    record, discovery = registry.observe_feed_entry(
+                        feed_url=event.source_url,
+                        title=event.anchor_text, summary="", **common,
+                    )
+                else:
+                    record, discovery = registry.observe_link(
+                        source_url=event.source_url,
+                        anchor_text=event.anchor_text, **common,
+                    )
+                if discovery.action not in {"activated", "known"}:
+                    continue
+                activated.add(domain)
+                depth_activations[discovery_depth] += 1
+                self._emit_progress(
+                    "source_activated", domain=domain,
+                    origin="discovery_backfill",
+                )
+                result.adaptive_decisions.append(AdaptiveDecision(
+                    stage="discovery_backfill", decision="activated",
+                    target=event.target_url,
+                    signals={"via": event.discovered_via, **self._coverage.snapshot()},
+                ))
+            if event.target_url not in self._coverage.attempted_urls:
+                added += frontier.add(
+                    event.target_url, priority=55 + round(event.relevance_score * 100),
+                    depth=depth, discovery_depth=discovery_depth,
+                    source_url=event.source_url, source_type=event.discovered_via,
+                )
+        return added
+
+    def _backfill_search_domain_slots(
+        self,
+        frontier: URLFrontier,
+        registry: DomainRegistry,
+        result: ResearchRunResult,
+        *,
+        reason: str,
+    ) -> int:
+        if (
+            self.project.crawl.mode != "expedition"
+            or not self._search_candidate_pool
+            or self.search_provider is None
+        ):
+            return 0
+
+        activated = 0
+        backfilled_domains: set[str] = set()
+        if not self._source_slot_available(registry):
+            return 0
+
+        for candidate in self._search_candidate_pool:
+            normalized = str(candidate["normalized"])
+            domain = host_key(normalized)
+            if (
+                domain in registry.run_active_domains
+                and domain not in backfilled_domains
+            ):
+                continue
+            if normalized in self._coverage.attempted_urls:
+                continue
+            if (
+                domain not in backfilled_domains
+                and not self._source_slot_available(registry)
+            ):
+                continue
+
+            query = candidate["query"]
+            ranked_hit = candidate["ranked_hit"]
+            hit = candidate["hit"]
+            score = int(candidate["score"])
+
+            record, discovery = registry.observe_search_result(
+                provider=self.search_provider.name,
+                query_text=query.query,
+                target_url=normalized,
+                title=hit.title,
+                snippet=hit.snippet,
+                raw_score=score,
+                activation_budget_available=self._source_slot_available(
+                    registry, domain,
+                ),
+            )
+
+            if discovery.action not in {"activated", "known"}:
+                continue
+            if domain in backfilled_domains:
+                frontier.add(
+                    normalized, priority=75 + score, depth=0,
+                    source_type="search_backfill",
+                )
+                continue
+            activated += 1
+            backfilled_domains.add(domain)
+            if discovery.action == "activated":
+                result.search_domains_activated += 1
+            self._emit_progress(
+                "source_activated",
+                domain=record.domain,
+                origin="search_backfill",
+            )
+            result.adaptive_decisions.append(
+                AdaptiveDecision(
+                    stage="search_domain_backfill",
+                    decision="activated",
+                    target=normalized,
+                    signals={
+                        "domain": record.domain,
+                        "reason": reason,
+                        "score": score,
+                        "activated_domains": registry.active_count,
+                        "occupied_source_slots": len(
+                            self._coverage.occupied_domains(
+                                registry.run_active_domains,
+                            )
+                        ),
+                        **self._coverage.snapshot(),
+                        "max_domains": self.project.crawl.max_domains,
+                        "query": query.query,
+                    },
+                )
+            )
+            print(
+                f"      🧭 Search backfill aktivizēts: "
+                f"{record.domain} "
+                f"(score={record.relevance_score:.2f}, "
+                f"reason={reason})"
+                f" local={ranked_hit.audit_label}"
+            )
+            frontier.add(
+                normalized,
+                priority=75 + score,
+                depth=0,
+                discovery_depth=0,
+                source_url="",
+                source_type="search_backfill",
+            )
+
+        return activated
+
     def _enrich_entities(self, result: ResearchRunResult):
-        if not result.entities:
-            return
+        result.entities = self._enrich_batch(result.entities)
+
+    def _enrich_batch(self, entities: list[MarketEntity]) -> list[MarketEntity]:
+        if not entities:
+            return []
 
         print("")
         print(
             f"🧠 Analīzes posms: "
-            f"{len(result.entities)} atrasti tirgus objekti."
+            f"{len(entities)} atrasti tirgus objekti."
         )
 
         enrichments = self.ai.enrich_many(
-            result.entities,
+            entities,
             self.project,
         )
 
-        if len(enrichments) != len(result.entities):
+        if len(enrichments) != len(entities):
             raise RuntimeError(
                 "AI provider atgrieza neatbilstošu rezultātu skaitu."
             )
@@ -1692,7 +2071,7 @@ class ResearchCrawler:
         enriched_entities = []
 
         for entity, enrichment in zip(
-            result.entities,
+            entities,
             enrichments,
         ):
             enriched = entity.apply_enrichment(enrichment)
@@ -1719,7 +2098,47 @@ class ResearchCrawler:
                 f"{target_note}"
             )
 
-        result.entities = enriched_entities
+        return enriched_entities
+
+    def _assess_target_coverage(
+        self,
+        result: ResearchRunResult,
+    ) -> None:
+        if not self._coverage.specific_target:
+            return
+
+        outcomes = Counter(
+            str(
+                entity.attributes.get(
+                    "target_identity_status",
+                    "not_evaluated",
+                )
+            )
+            for entity in result.entities
+        )
+        previous_stop_reason = result.stop_reason
+        decision = "target_coverage_sufficient"
+        if self._coverage.needs_evidence:
+            decision = "insufficient_target_coverage"
+            result.stop_reason = decision
+        result.adaptive_decisions.append(
+            AdaptiveDecision(
+                stage="coverage_assessment",
+                decision=decision,
+                target=self.project.id,
+                signals={
+                    **self._coverage.snapshot(),
+                    "target_identity_outcomes": dict(outcomes),
+                    "previous_stop_reason": previous_stop_reason,
+                    "visited_pages": result.visited_pages,
+                    "failed_pages": result.failed_pages,
+                    "search_results_unique":
+                        result.search_results_unique,
+                    "search_domains_activated":
+                        result.search_domains_activated,
+                },
+            )
+        )
 
     def _sleep(self):
         if self.project.crawl.async_enabled:

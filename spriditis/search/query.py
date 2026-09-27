@@ -5,8 +5,139 @@ from spriditis.core.projects import ResearchProject
 from .models import SearchQuery
 
 
+_QUERY_STOPWORDS = {
+    "atrodi",
+    "mekle",
+    "meklē",
+    "salidzini",
+    "salīdzini",
+    "piedavajumus",
+    "piedāvājumus",
+    "piedavajumi",
+    "piedāvājumi",
+    "cena",
+    "cenas",
+    "latvija",
+    "latvijā",
+    "latvijas",
+    "veikals",
+    "veikali",
+    "veikalos",
+    "find",
+    "compare",
+    "offers",
+    "offer",
+    "price",
+    "prices",
+    "shop",
+    "shops",
+    "store",
+    "stores",
+    "latvia",
+    "un",
+    "and",
+    "the",
+    "in",
+}
+
+
 def _clean(value: str) -> str:
     return " ".join(value.strip().split())
+
+
+def _dedupe_terms(values: list[str]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+
+    for value in values:
+        clean = _clean(value)
+        key = clean.casefold()
+        if clean and key not in seen:
+            seen.add(key)
+            result.append(clean)
+
+    return result
+
+
+def _target_identity_queries(
+    project: ResearchProject,
+    keywords: list[str],
+) -> list[tuple[str, str]]:
+    target_terms = _dedupe_terms(project.analysis.target_identity_terms)
+    anchor_terms = {
+        term.casefold()
+        for term in _dedupe_terms(
+            project.analysis.target_identity_anchor_terms
+        )
+    }
+    if not target_terms or not anchor_terms:
+        return []
+
+    anchor_index = next(
+        (
+            index
+            for index, keyword in enumerate(keywords)
+            if keyword.casefold() in anchor_terms
+        ),
+        -1,
+    )
+
+    prefix: list[str] = []
+    if anchor_index > 0:
+        for keyword in reversed(keywords[:anchor_index]):
+            key = keyword.casefold()
+            if key in _QUERY_STOPWORDS:
+                continue
+            if len(prefix) >= 3:
+                break
+            prefix.append(keyword)
+        prefix.reverse()
+
+    target_phrase = " ".join(_dedupe_terms(
+        prefix + target_terms + project.analysis.required_evidence_terms
+    ))
+    if not target_phrase:
+        return []
+
+    language = project.languages[0].casefold() if project.languages else ""
+    locale_terms = [
+        ("Latvija" if language == "lv" else "Latvia")
+        if country.upper() == "LV" else country
+        for country in project.countries if country.strip()
+    ]
+    price_term = "cena" if language == "lv" else "price"
+    shop_terms = (
+        ["veikals"] if language == "lv" else ["shop"]
+    )
+
+    queries: list[tuple[str, str]] = []
+
+    if locale_terms:
+        queries.append(
+            (
+                " ".join([target_phrase, *locale_terms]),
+                "target_identity_locale",
+            )
+        )
+
+    queries.append(
+        (
+            " ".join([target_phrase, price_term]),
+            "target_identity_price",
+        )
+    )
+
+    if locale_terms:
+        queries.append(
+            (
+                " ".join([target_phrase, *shop_terms, *locale_terms]),
+                "target_identity_shop",
+            )
+        )
+
+    queries.append((target_phrase, "target_identity_bundle"))
+
+    return queries
 
 
 def _memory_row_for_query(
@@ -41,9 +172,14 @@ def build_search_queries(
     *,
     query_memory: list[dict] | None = None,
     provider: str | None = None,
+    recovery: bool = False,
+    exclude_queries: set[str] | None = None,
 ) -> list[SearchQuery]:
     """Build a deterministic, auditable query plan from project configuration."""
-    limit = project.search.max_queries
+    limit = (
+        project.search.max_recovery_queries
+        if recovery else project.search.max_queries
+    )
     if limit <= 0:
         return []
 
@@ -61,14 +197,11 @@ def build_search_queries(
     for query in project.search.queries:
         add(query, "configured")
 
-    keywords = []
-    keyword_seen = set()
-    for keyword in project.keywords:
-        clean = _clean(keyword)
-        key = clean.casefold()
-        if clean and key not in keyword_seen:
-            keyword_seen.add(key)
-            keywords.append(clean)
+    keywords = _dedupe_terms(project.keywords)
+
+    target_queries = _target_identity_queries(project, keywords)
+    for query, reason in target_queries:
+        add(query, reason)
 
     required_terms = [
         _clean(term).casefold()
@@ -137,6 +270,20 @@ def build_search_queries(
 
     for keyword in keywords:
         add(keyword, "keyword")
+
+    if target_queries:
+        candidates = [
+            query for query in candidates
+            if query.reason == "configured"
+            or query.reason.startswith("target_identity_")
+        ]
+    if recovery:
+        candidates = [
+            query for query in candidates
+            if query.reason.startswith("target_identity_")
+        ]
+    excluded = {_clean(query).casefold() for query in (exclude_queries or set())}
+    candidates = [query for query in candidates if query.query.casefold() not in excluded]
 
     memory_rows = list(query_memory or [])
     provider_name = (provider or "").strip()

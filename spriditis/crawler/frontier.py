@@ -72,5 +72,8 @@ class URLFrontier:
         self._queued.discard(item.url)
         return item
 
+    def pending_items(self) -> tuple[FrontierItem, ...]:
+        return tuple(item for _, _, item in self._queue)
+
     def __bool__(self):
         return bool(self._queue)

@@ -70,6 +70,7 @@ class DomainRegistry:
     def _persisted_state(
         self,
         domain: str,
+        activation_budget_available: bool | None = None,
     ) -> tuple[str, str, str] | None:
         record = self.records.get(domain)
         if record is None:
@@ -90,6 +91,8 @@ class DomainRegistry:
             )
 
         if record.status == "active":
+            if activation_budget_available is False:
+                return ("active", "recorded", "domain_budget_reached")
             self.run_active_domains.add(domain)
             return ("active", "known", "already_active")
 
@@ -127,13 +130,14 @@ class DomainRegistry:
         anchor_text: str,
         raw_score: int,
         activation_block_reason: str = "",
+        activation_budget_available: bool | None = None,
     ) -> tuple[DomainRecord, DomainDiscovery]:
         source_domain = host_key(source_url)
         target_domain = host_key(target_url)
         ratio = score_to_ratio(raw_score)
 
         safe, safety_reason = url_safety_reason(target_url)
-        persisted = self._persisted_state(target_domain)
+        persisted = self._persisted_state(target_domain, activation_budget_available)
 
         if not safe:
             status = self._status_for_unsafe_target(
@@ -156,7 +160,11 @@ class DomainRegistry:
             status = "candidate"
             action = "recorded"
             reason = activation_block_reason
-        elif self.active_count >= self.project.crawl.max_domains:
+        elif not (
+            activation_budget_available
+            if activation_budget_available is not None
+            else self.active_count < self.project.crawl.max_domains
+        ):
             status = "candidate"
             action = "recorded"
             reason = "domain_budget_reached"
@@ -203,7 +211,7 @@ class DomainRegistry:
             reason=reason,
             discovered_via="external_link",
         )
-        if status == "active":
+        if status == "active" and action in {"activated", "known"}:
             self.run_active_domains.add(target_domain)
         self._touch(target_domain)
         self.discoveries.append(discovery)
@@ -219,11 +227,12 @@ class DomainRegistry:
         title: str,
         snippet: str,
         raw_score: int,
+        activation_budget_available: bool | None = None,
     ) -> tuple[DomainRecord, DomainDiscovery]:
         target_domain = host_key(target_url)
         ratio = score_to_ratio(raw_score)
         safe, safety_reason = url_safety_reason(target_url)
-        persisted = self._persisted_state(target_domain)
+        persisted = self._persisted_state(target_domain, activation_budget_available)
 
         if not safe:
             status = self._status_for_unsafe_target(
@@ -242,7 +251,11 @@ class DomainRegistry:
             status = "candidate"
             action = "recorded"
             reason = "below_search_threshold"
-        elif self.active_count >= self.project.crawl.max_domains:
+        elif not (
+            activation_budget_available
+            if activation_budget_available is not None
+            else self.active_count < self.project.crawl.max_domains
+        ):
             status = "candidate"
             action = "recorded"
             reason = "domain_budget_reached"
@@ -294,7 +307,7 @@ class DomainRegistry:
             provider=provider,
             query_text=query_text[:500],
         )
-        if status == "active":
+        if status == "active" and action in {"activated", "known"}:
             self.run_active_domains.add(target_domain)
         self._touch(target_domain)
         self.discoveries.append(discovery)
@@ -310,12 +323,13 @@ class DomainRegistry:
         summary: str,
         raw_score: int,
         activation_block_reason: str = "",
+        activation_budget_available: bool | None = None,
     ) -> tuple[DomainRecord, DomainDiscovery]:
         source_domain = host_key(feed_url)
         target_domain = host_key(target_url)
         ratio = score_to_ratio(raw_score)
         safe, safety_reason = url_safety_reason(target_url)
-        persisted = self._persisted_state(target_domain)
+        persisted = self._persisted_state(target_domain, activation_budget_available)
 
         if not safe:
             status = self._status_for_unsafe_target(
@@ -338,7 +352,11 @@ class DomainRegistry:
             status = "candidate"
             action = "recorded"
             reason = activation_block_reason
-        elif self.active_count >= self.project.crawl.max_domains:
+        elif not (
+            activation_budget_available
+            if activation_budget_available is not None
+            else self.active_count < self.project.crawl.max_domains
+        ):
             status = "candidate"
             action = "recorded"
             reason = "domain_budget_reached"
@@ -391,7 +409,7 @@ class DomainRegistry:
             reason=reason,
             discovered_via="feed",
         )
-        if status == "active":
+        if status == "active" and action in {"activated", "known"}:
             self.run_active_domains.add(target_domain)
         self._touch(target_domain)
         self.discoveries.append(discovery)
@@ -433,6 +451,7 @@ class DomainRegistry:
 
     @property
     def active_count(self) -> int:
+        # Audit count: every activation in this run, including later failures.
         return len(self.run_active_domains)
 
     def _get_or_create(
