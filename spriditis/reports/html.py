@@ -56,6 +56,13 @@ def generate_html_report(
             "required_evidence_terms",
             "missing_required_evidence_terms",
             "criteria_verified",
+            "target_identity_status",
+            "target_identity_reason",
+            "target_identity_required_terms",
+            "target_identity_anchor_terms",
+            "target_identity_matched_terms",
+            "target_identity_missing_terms",
+            "target_identity_candidate_model_terms",
         }
         attrs = "".join(
             f"<dt>{escape(str(key).replace('_', ' ').title())}</dt>"
