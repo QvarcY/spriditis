@@ -26,7 +26,7 @@
 
 # Latviski
 
-## ✅ Pašreizējā publiskā bāze — 3.3.0-alpha.9
+## ✅ Pašreizējā publiskā bāze — 3.3.0-alpha.10
 
 Ieviests un publiski pieejams:
 
@@ -559,4 +559,4 @@ Deliberate boundary: alpha10 async mode remains **opt-in**; it does not change t
 
 That is **Research Memory + Adaptive Discovery + Evidence Confidence + Incremental Monitoring**.
 
-See also [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/OPEN_CORE.md](docs/OPEN_CORE.md).
+See also [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/OPEN_CORE.md](docs/OPEN_CORE.md), and [docs/T20_ACCEPTANCE.md](docs/T20_ACCEPTANCE.md) for the final public-research acceptance closeout.
