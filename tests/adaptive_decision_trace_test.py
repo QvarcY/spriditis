@@ -159,6 +159,7 @@ stages = [item.stage for item in result.adaptive_decisions]
 assert stages == [
     "query_priority",
     "search_result_priority",
+    "search_domain_budget",
     "stop",
 ]
 
@@ -175,7 +176,17 @@ assert source_decision.signals["source_memory_state"] == "productive_fresh"
 assert source_decision.signals["productive_run_rate"] == 1.0
 assert source_decision.signals["bm25"] > 0
 
-stop_decision = result.adaptive_decisions[2]
+budget_decision = result.adaptive_decisions[2]
+assert budget_decision.decision == "globally_ranked"
+assert budget_decision.target == project.id
+assert budget_decision.signals["candidate_urls"] == 1
+assert budget_decision.signals["max_domains"] == 1
+assert (
+    budget_decision.signals["strategy"]
+    == "all_queries_before_activation"
+)
+
+stop_decision = result.adaptive_decisions[3]
 assert stop_decision.decision == "max_pages"
 assert stop_decision.signals["visited_pages"] == 1
 assert stop_decision.signals["max_pages_total"] == 1
@@ -195,19 +206,24 @@ with TemporaryDirectory() as tmp:
         assert trace is not None
         persisted = trace["adaptive_decisions"]
 
-        assert [item["sequence"] for item in persisted] == [1, 2, 3]
+        assert [item["sequence"] for item in persisted] == [1, 2, 3, 4]
         assert [item["stage"] for item in persisted] == stages
         assert persisted[0]["signals"]["memory_state"] == "productive"
         assert (
             persisted[1]["signals"]["source_memory_state"]
             == "productive_fresh"
         )
-        assert persisted[2]["decision"] == "max_pages"
-        assert persisted[2]["signals"]["visited_pages"] == 1
+        assert persisted[2]["decision"] == "globally_ranked"
+        assert (
+            persisted[2]["signals"]["strategy"]
+            == "all_queries_before_activation"
+        )
+        assert persisted[3]["decision"] == "max_pages"
+        assert persisted[3]["signals"]["visited_pages"] == 1
     finally:
         db.close()
 
 print("ADAPTIVE DECISION TRACE TEST OK")
-print("stages=query_priority > search_result_priority > stop")
+print("stages=query_priority > search_result_priority > search_domain_budget > stop")
 print(f"schema_version={CURRENT_SCHEMA_VERSION}")
 print("sqlite_roundtrip=ok")

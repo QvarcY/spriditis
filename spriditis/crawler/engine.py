@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from collections import Counter
 from collections.abc import Callable
 from datetime import datetime, timezone
-from urllib.parse import urljoin
+from urllib.parse import unquote, urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -528,6 +529,12 @@ class ResearchCrawler:
                         if not normalized or normalized in visited:
                             continue
 
+                        if not self._allow_target_continuation(
+                            result, normalized, source_url=final_url,
+                            source_type="sitemap",
+                        ):
+                            continue
+
                         score = text_relevance_score(
                             self.project,
                             normalized,
@@ -865,6 +872,12 @@ class ResearchCrawler:
                         continue
                 else:
                     if not is_safe_public_url(absolute):
+                        continue
+                    if not self._allow_target_continuation(
+                        result, absolute, source_url=final_url,
+                        source_type="html_link",
+                        relevance_context=relevance_context,
+                    ):
                         continue
                     next_discovery_depth = item.discovery_depth
 
@@ -1812,6 +1825,44 @@ class ResearchCrawler:
                     source_type="search_provider",
                 )
 
+    def _allow_target_continuation(
+        self,
+        result: ResearchRunResult,
+        url: str,
+        *,
+        source_url: str,
+        source_type: str,
+        relevance_context: str = "",
+    ) -> bool:
+        if not self._coverage.specific_target:
+            return True
+
+        anchors = set(re.findall(
+            r"[^\W_]+",
+            " ".join(self.project.analysis.target_identity_anchor_terms).casefold(),
+        ))
+        # Match destination path/link-local evidence, not the source page,
+        # hostname or return-URL query parameters inherited by navigation.
+        evidence = f"{unquote(urlparse(url).path)} {relevance_context}"
+        tokens = set(re.findall(r"[^\W_]+", evidence.casefold()))
+        if anchors and anchors <= tokens:
+            return True
+
+        result.adaptive_decisions.append(AdaptiveDecision(
+            stage="target_continuation",
+            decision="discarded",
+            target=url,
+            signals={
+                "reason": "target_anchor_missing",
+                "source_url": source_url,
+                "source_type": source_type,
+                "required_anchor_tokens": sorted(anchors),
+                "matched_anchor_tokens": sorted(anchors & tokens),
+                "missing_anchor_tokens": sorted(anchors - tokens),
+            },
+        ))
+        return False
+
     def _source_slot_available(
         self, registry: DomainRegistry, domain: str = "",
     ) -> bool:
@@ -1827,6 +1878,8 @@ class ResearchCrawler:
         pages_by_domain: Counter[str],
         discovery_depth_activations: Counter[int],
     ) -> bool:
+        # HTML/sitemap continuations are filtered before enqueueing, so
+        # navigation noise cannot keep these domains pending and delay recovery.
         pending_domains = {
             host_key(item.url) for item in frontier.pending_items()
             if item.url not in visited

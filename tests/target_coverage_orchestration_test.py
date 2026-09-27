@@ -92,7 +92,7 @@ class Transport:
 
 def run(search_results, pages, *, async_enabled=False, page_cap=8,
         domain_cap=1, per_domain=1, recovery=0, robots_block=(), required=(),
-        domain_states=None):
+        domain_states=None, sitemap_urls=None, specific_target=True):
     project = ResearchProject.model_validate({
         "id": "target_coverage_test", "name": QUERY,
         "keywords": ["Bambu", "Lab", "P1S", "Combo"],
@@ -101,15 +101,16 @@ def run(search_results, pages, *, async_enabled=False, page_cap=8,
             "mode": "expedition", "max_domains": domain_cap,
             "max_pages_total": page_cap, "max_pages_per_domain": per_domain,
             "max_depth": 2, "delay_seconds": 0, "respect_robots": bool(robots_block),
-            "discover_sitemaps": False, "discover_feeds": False,
+            "discover_sitemaps": sitemap_urls is not None, "discover_feeds": False,
+            "max_sitemap_urls_per_domain": 30,
             "saturation_window": 1, "diminishing_returns_window": 1,
             "async_enabled": async_enabled, "async_max_retries": 0,
         },
         "search": {"queries": [QUERY], "max_queries": 1, "max_recovery_queries": recovery},
         "analysis": {
             "ai_enabled": False, "ai_provider": "none",
-            "target_identity_terms": ["P1S", "Combo"],
-            "target_identity_anchor_terms": ["P1S"],
+            "target_identity_terms": ["P1S", "Combo"] if specific_target else [],
+            "target_identity_anchor_terms": ["P1S"] if specific_target else [],
             "required_evidence_terms": list(required),
         },
     })
@@ -123,6 +124,10 @@ def run(search_results, pages, *, async_enabled=False, page_cap=8,
     )
     crawler.session = transport
     crawler.robots.can_fetch = lambda url: url not in robots_block
+    if sitemap_urls is not None:
+        crawler.sitemaps.discover = lambda url, **kwargs: SimpleNamespace(
+            status="found", urls=sitemap_urls.get(url, [])[:kwargs["max_urls"]],
+        )
     result = crawler.crawl()
     assert len(ai.keys) == len(set(ai.keys)), "An entity was enriched twice"
     assert len(crawler._coverage.attempted_urls) <= page_cap
@@ -242,5 +247,63 @@ for async_enabled in (False, True):
     }, async_enabled=async_enabled)
     assert transport.calls == [A, B]
     assert any(d.stage == "discovery_backfill" for d in result.adaptive_decisions)
+
+    # Live failure: priced and unpriced target sources expose navigation noise.
+    # Neither HTML nor thirty sitemap candidates may starve recovery search.
+    for continuation in ("html", "sitemap", "both"):
+        maps = {} if continuation != "html" else None
+        pages = {C: RIGHT}
+        noise_urls = set()
+        for url, price in ((A, 606), (B, None)):
+            origin = url.rsplit("/", 1)[0]
+            noise = [origin + path for path in (
+                "/sign-in", "/orders/status", "/televisions", "/products/tv",
+                "/sign-in?return=%2Fp1s-combo", "/products/p1smax-combo",
+            )]
+            html = page("Bambu Lab P1S Combo", price=price)
+            if continuation != "sitemap":
+                html += ''.join(f'<a href="{link}">Store navigation</a>' for link in noise)
+                noise_urls.update(noise)
+            if maps is not None:
+                maps[url] = [f"{origin}/catalog/page-{i}" for i in range(30)]
+                noise_urls.update(maps[url])
+            pages[url] = html
+        pages.update({url: "<html>Unrelated navigation</html>" for url in noise_urls})
+        search = {QUERY: hits(A, B), "Bambu Lab P1S Combo Latvia": hits(C)}
+        crawler, result, transport = run(
+            search, pages, domain_cap=2, per_domain=4, page_cap=6, recovery=1,
+            sitemap_urls=maps, async_enabled=async_enabled,
+        )
+        assert transport.calls == [A, B, C], "Navigation noise starved recovery"
+        recovery_event = next(d for d in result.adaptive_decisions if d.stage == "discovery_recovery")
+        assert recovery_event.signals["attempted_pages"] == 2
+        assert recovery_event.signals["priced_domains"] == ["a.example"]
+        assert result.search_queries_issued == 2
+        assert crawler._coverage.priced_domains == {"a.example", "c.example"}
+        discarded = [d for d in result.adaptive_decisions if d.stage == "target_continuation"]
+        assert {d.target for d in discarded} == noise_urls
+        assert all(d.decision == "discarded" for d in discarded)
+        if maps is not None:
+            assert result.domains["a.example"].sitemap_urls_found == 30
+            assert result.domains["b.example"].sitemap_urls_found == 30
+
+        # The same navigation remains crawlable for broad research.
+        _, broad, broad_transport = run(
+            search, pages, domain_cap=2, per_domain=4, page_cap=6, recovery=1,
+            sitemap_urls=maps, specific_target=False, async_enabled=async_enabled,
+        )
+        assert any(url in noise_urls for url in broad_transport.calls)
+        assert broad.search_queries_issued == 1
+        assert not any(d.stage == "target_continuation" for d in broad.adaptive_decisions)
+
+    # A target-bearing sitemap path still deserves continuation before recovery.
+    priced_detail = "https://b.example/products/%50%31%53-combo"
+    crawler, result, transport = run({QUERY: hits(B)}, {
+        B: page("Bambu Lab P1S Combo", price=None), priced_detail: RIGHT,
+    }, per_domain=4, page_cap=3, recovery=1, async_enabled=async_enabled,
+        sitemap_urls={B: ["https://b.example/televisions", priced_detail]})
+    assert transport.calls == [B, priced_detail]
+    assert result.search_queries_issued == 1
+    assert crawler._coverage.priced_domains == {"b.example"}
 
 print("TARGET COVERAGE ORCHESTRATION TEST OK (sequential and async)")
