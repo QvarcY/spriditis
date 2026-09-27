@@ -106,6 +106,8 @@ class AnalysisConfig(BaseModel):
     categories: list[str] = Field(default_factory=list)
     desired_attributes: list[str] = Field(default_factory=list)
     required_evidence_terms: list[str] = Field(default_factory=list)
+    target_identity_terms: list[str] = Field(default_factory=list)
+    target_identity_anchor_terms: list[str] = Field(default_factory=list)
 
 
 class ResearchProject(BaseModel):

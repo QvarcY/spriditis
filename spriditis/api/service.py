@@ -123,7 +123,10 @@ def run_project(
         return RunArtifacts(
             report_path=report_path,
             run_id=run_id,
-            entity_count=len(result.entities),
+            entity_count=sum(
+                1 for entity in result.entities
+                if entity.is_relevant
+            ),
             visited_pages=result.visited_pages,
             observed_domain_count=len(result.domains),
             crawled_domain_count=sum(

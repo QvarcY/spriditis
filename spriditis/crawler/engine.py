@@ -21,6 +21,7 @@ from spriditis.extraction.engine import extract_entities
 from spriditis.search.base import SearchProvider, SearchProviderError
 from spriditis.search.query import build_search_queries
 from spriditis.search.relevance import LocalRelevance, local_relevance_signals
+from spriditis.resolution.target import apply_target_identity_gate
 
 from .async_coordinator import AsyncCrawlCoordinator, AsyncCrawlPolicy
 from .async_http import AsyncHTTPResult, AsyncHTTPTransport
@@ -1695,14 +1696,27 @@ class ResearchCrawler:
             enrichments,
         ):
             enriched = entity.apply_enrichment(enrichment)
+            enriched = apply_target_identity_gate(
+                enriched,
+                self.project,
+            )
             enriched_entities.append(enriched)
 
             status = "✅" if enriched.is_relevant else "⚪"
+            target_status = enriched.attributes.get(
+                "target_identity_status"
+            )
+            target_note = (
+                f" · target={target_status}"
+                if target_status
+                else ""
+            )
 
             print(
                 f"   {status} {enriched.title[:56]} | "
                 f"{enriched.category} | "
                 f"relevance={enriched.relevance_score:.2f}"
+                f"{target_note}"
             )
 
         result.entities = enriched_entities
