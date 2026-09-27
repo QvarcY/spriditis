@@ -254,6 +254,7 @@ for async_enabled in (False, True):
         maps = {} if continuation != "html" else None
         pages = {C: RIGHT}
         noise_urls = set()
+        noise_by_source = {}
         for url, price in ((A, 606), (B, None)):
             origin = url.rsplit("/", 1)[0]
             noise = [origin + path for path in (
@@ -264,9 +265,11 @@ for async_enabled in (False, True):
             if continuation != "sitemap":
                 html += ''.join(f'<a href="{link}">Store navigation</a>' for link in noise)
                 noise_urls.update(noise)
+                noise_by_source[(url, "html_link")] = noise
             if maps is not None:
                 maps[url] = [f"{origin}/catalog/page-{i}" for i in range(30)]
                 noise_urls.update(maps[url])
+                noise_by_source[(url, "sitemap")] = maps[url]
             pages[url] = html
         pages.update({url: "<html>Unrelated navigation</html>" for url in noise_urls})
         search = {QUERY: hits(A, B), "Bambu Lab P1S Combo Latvia": hits(C)}
@@ -275,14 +278,28 @@ for async_enabled in (False, True):
             sitemap_urls=maps, async_enabled=async_enabled,
         )
         assert transport.calls == [A, B, C], "Navigation noise starved recovery"
+        assert noise_urls.isdisjoint(transport.calls)
         recovery_event = next(d for d in result.adaptive_decisions if d.stage == "discovery_recovery")
         assert recovery_event.signals["attempted_pages"] == 2
         assert recovery_event.signals["priced_domains"] == ["a.example"]
         assert result.search_queries_issued == 2
         assert crawler._coverage.priced_domains == {"a.example", "c.example"}
-        discarded = [d for d in result.adaptive_decisions if d.stage == "target_continuation"]
-        assert {d.target for d in discarded} == noise_urls
-        assert all(d.decision == "discarded" for d in discarded)
+        summaries = [d for d in result.adaptive_decisions if d.stage == "target_continuation"]
+        assert len(summaries) == len(noise_by_source)
+        assert {(d.target, d.signals["source_type"]) for d in summaries} == set(noise_by_source)
+        assert sum(d.signals["discarded"] for d in summaries) == len(noise_urls)
+        for summary in summaries:
+            signals = summary.signals
+            expected_noise = noise_by_source[(summary.target, signals["source_type"])]
+            assert summary.decision == "filtered_summary"
+            assert signals["source_url"] == summary.target
+            assert signals["examined"] == signals["allowed"] + signals["discarded"]
+            assert signals["allowed"] == 0
+            assert signals["discarded"] == len(expected_noise)
+            assert signals["required_anchor_tokens"] == ["p1s"]
+            assert signals["reason_counts"] == {"target_anchor_missing": len(expected_noise)}
+            assert signals["sample_discarded_urls"] == expected_noise[:5]
+            assert len(signals["sample_discarded_urls"]) <= 5
         if maps is not None:
             assert result.domains["a.example"].sitemap_urls_found == 30
             assert result.domains["b.example"].sitemap_urls_found == 30
@@ -298,12 +315,29 @@ for async_enabled in (False, True):
 
     # A target-bearing sitemap path still deserves continuation before recovery.
     priced_detail = "https://b.example/products/%50%31%53-combo"
-    crawler, result, transport = run({QUERY: hits(B)}, {
-        B: page("Bambu Lab P1S Combo", price=None), priced_detail: RIGHT,
-    }, per_domain=4, page_cap=3, recovery=1, async_enabled=async_enabled,
-        sitemap_urls={B: ["https://b.example/televisions", priced_detail]})
-    assert transport.calls == [B, priced_detail]
-    assert result.search_queries_issued == 1
-    assert crawler._coverage.priced_domains == {"b.example"}
+    for sitemap_noise in ([], ["https://b.example/televisions"]):
+        crawler, result, transport = run({QUERY: hits(B)}, {
+            B: page("Bambu Lab P1S Combo", price=None), priced_detail: RIGHT,
+        }, per_domain=4, page_cap=3, recovery=1, async_enabled=async_enabled,
+            sitemap_urls={B: sitemap_noise + [priced_detail]})
+        assert transport.calls == [B, priced_detail]
+        assert result.search_queries_issued == 1
+        assert crawler._coverage.priced_domains == {"b.example"}
+        summaries = [d for d in result.adaptive_decisions if d.stage == "target_continuation"]
+        assert len(summaries) == len(sitemap_noise)
+        if sitemap_noise:
+            summary = summaries[0]
+            assert summary.target == B
+            assert summary.decision == "filtered_summary"
+            assert summary.signals == {
+                "source_url": B,
+                "source_type": "sitemap",
+                "examined": 2,
+                "allowed": 1,
+                "discarded": 1,
+                "required_anchor_tokens": ["p1s"],
+                "reason_counts": {"target_anchor_missing": 1},
+                "sample_discarded_urls": sitemap_noise,
+            }
 
 print("TARGET COVERAGE ORCHESTRATION TEST OK (sequential and async)")

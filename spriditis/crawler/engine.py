@@ -501,6 +501,8 @@ class ResearchCrawler:
                 )
             )
 
+            continuation_summaries: dict[str, AdaptiveDecision] = {}
+
             # Sitemap discovery only once per active domain.
             if (
                 self.project.crawl.discover_sitemaps
@@ -530,7 +532,7 @@ class ResearchCrawler:
                             continue
 
                         if not self._allow_target_continuation(
-                            result, normalized, source_url=final_url,
+                            continuation_summaries, normalized, source_url=final_url,
                             source_type="sitemap",
                         ):
                             continue
@@ -874,7 +876,7 @@ class ResearchCrawler:
                     if not is_safe_public_url(absolute):
                         continue
                     if not self._allow_target_continuation(
-                        result, absolute, source_url=final_url,
+                        continuation_summaries, absolute, source_url=final_url,
                         source_type="html_link",
                         relevance_context=relevance_context,
                     ):
@@ -924,6 +926,11 @@ class ResearchCrawler:
                     source_url=final_url,
                     source_type="html_link",
                 )
+
+            result.adaptive_decisions.extend(
+                summary for summary in continuation_summaries.values()
+                if summary.signals["discarded"] > 0
+            )
 
             new_active_domains = len(
                 set(registry.run_active_domains) - active_domains_before
@@ -1827,13 +1834,14 @@ class ResearchCrawler:
 
     def _allow_target_continuation(
         self,
-        result: ResearchRunResult,
+        summaries: dict[str, AdaptiveDecision],
         url: str,
         *,
         source_url: str,
         source_type: str,
         relevance_context: str = "",
     ) -> bool:
+        """Count only candidates reaching this filter, grouped by page/type."""
         if not self._coverage.specific_target:
             return True
 
@@ -1845,22 +1853,37 @@ class ResearchCrawler:
         # hostname or return-URL query parameters inherited by navigation.
         evidence = f"{unquote(urlparse(url).path)} {relevance_context}"
         tokens = set(re.findall(r"[^\W_]+", evidence.casefold()))
+
+        summary = summaries.get(source_type)
+        if summary is None:
+            summary = AdaptiveDecision(
+                stage="target_continuation",
+                decision="filtered_summary",
+                target=source_url,
+                signals={
+                    "source_url": source_url,
+                    "source_type": source_type,
+                    "examined": 0,
+                    "allowed": 0,
+                    "discarded": 0,
+                    "required_anchor_tokens": sorted(anchors),
+                    "reason_counts": {},
+                    "sample_discarded_urls": [],
+                },
+            )
+            summaries[source_type] = summary
+        signals = summary.signals
+        signals["examined"] += 1
         if anchors and anchors <= tokens:
+            signals["allowed"] += 1
             return True
 
-        result.adaptive_decisions.append(AdaptiveDecision(
-            stage="target_continuation",
-            decision="discarded",
-            target=url,
-            signals={
-                "reason": "target_anchor_missing",
-                "source_url": source_url,
-                "source_type": source_type,
-                "required_anchor_tokens": sorted(anchors),
-                "matched_anchor_tokens": sorted(anchors & tokens),
-                "missing_anchor_tokens": sorted(anchors - tokens),
-            },
-        ))
+        signals["discarded"] += 1
+        reasons = signals["reason_counts"]
+        reasons["target_anchor_missing"] = reasons.get("target_anchor_missing", 0) + 1
+        samples = signals["sample_discarded_urls"]
+        if len(samples) < 5:
+            samples.append(url)
         return False
 
     def _source_slot_available(
