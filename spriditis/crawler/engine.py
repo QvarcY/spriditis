@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 from collections import Counter
+from collections.abc import Callable
 from datetime import datetime, timezone
 from urllib.parse import urljoin
 
@@ -84,6 +85,10 @@ class ResearchCrawler:
         query_memory: list[dict] | None = None,
         source_profiles: list[dict] | None = None,
         async_transport=None,
+        progress_callback: Callable[
+            [str, dict[str, object]],
+            None,
+        ] | None = None,
     ):
         self.settings = settings
         self.project = project
@@ -99,6 +104,7 @@ class ResearchCrawler:
         }
         self.async_transport = async_transport
         self._owns_async_transport = async_transport is None
+        self.progress_callback = progress_callback
 
         self.session = SafeSession()
         self.session.headers.update(
@@ -120,6 +126,22 @@ class ResearchCrawler:
             user_agent=settings.user_agent,
             timeout=settings.request_timeout_seconds,
         )
+
+    def _emit_progress(
+        self,
+        kind: str,
+        **data: object,
+    ) -> None:
+        callback = self.progress_callback
+        if callback is None:
+            return
+
+        try:
+            callback(kind, dict(data))
+        except Exception:
+            # Progress reporting is observational. A consumer-side failure
+            # must never break the research run itself.
+            return
 
     def crawl(self) -> ResearchRunResult:
         try:
@@ -156,6 +178,11 @@ class ResearchCrawler:
             if url and is_safe_public_url(url):
                 seeds.append(url)
                 registry.add_seed(url)
+                self._emit_progress(
+                    "source_activated",
+                    domain=host_key(url),
+                    origin="seed",
+                )
                 frontier.add(
                     url,
                     priority=100,
@@ -372,6 +399,12 @@ class ResearchCrawler:
             pages_by_domain[final_domain] += 1
             result.visited_pages += 1
             registry.mark_page(final_domain)
+            self._emit_progress(
+                "page_checked",
+                domain=final_domain,
+                visited_pages=result.visited_pages,
+                max_pages=self.project.crawl.max_pages_total,
+            )
 
             if response.status_code != 200:
                 result.failed_pages += 1
@@ -595,6 +628,11 @@ class ResearchCrawler:
                             feed_event.action == "activated"
                             and record.status == "active"
                         ):
+                            self._emit_progress(
+                                "source_activated",
+                                domain=record.domain,
+                                origin="feed",
+                            )
                             if feed_is_external:
                                 discovery_depth_activations[
                                     feed_discovery_depth
@@ -658,6 +696,12 @@ class ResearchCrawler:
 
             if new_entities:
                 registry.mark_entities(final_domain, new_entities)
+                self._emit_progress(
+                    "entities_found",
+                    domain=final_domain,
+                    count=new_entities,
+                    total=len(result.entities),
+                )
 
             soup = BeautifulSoup(response.text, "html.parser")
 
@@ -724,6 +768,11 @@ class ResearchCrawler:
                         discovery.action == "activated"
                         and record.status == "active"
                     ):
+                        self._emit_progress(
+                            "source_activated",
+                            domain=record.domain,
+                            origin="link",
+                        )
                         discovery_depth_activations[
                             next_discovery_depth
                         ] += 1
@@ -845,6 +894,10 @@ class ResearchCrawler:
             )
         )
 
+        self._emit_progress(
+            "analysis_started",
+            entity_count=len(result.entities),
+        )
         self._enrich_entities(result)
 
         if async_politeness is not None:
@@ -861,6 +914,13 @@ class ResearchCrawler:
         result.domains = registry.current_run_records()
         result.domain_discoveries = registry.discoveries
         result.finished_at = datetime.now(timezone.utc).isoformat()
+        self._emit_progress(
+            "crawl_finished",
+            visited_pages=result.visited_pages,
+            entity_count=len(result.entities),
+            domain_count=len(result.domains),
+            stop_reason=result.stop_reason,
+        )
         return result
 
     def _ensure_async_transport(self):
@@ -1329,6 +1389,11 @@ class ResearchCrawler:
             start=1,
         ):
             result.search_queries_issued += 1
+            self._emit_progress(
+                "search_query_started",
+                position=query_position,
+                total=len(queries),
+            )
 
             memory_note = ""
 
@@ -1561,6 +1626,11 @@ class ResearchCrawler:
 
             if discovery.action == "activated":
                 result.search_domains_activated += 1
+                self._emit_progress(
+                    "source_activated",
+                    domain=record.domain,
+                    origin="search",
+                )
 
                 profile = self.source_profiles.get(
                     record.domain

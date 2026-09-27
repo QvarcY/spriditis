@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -56,6 +57,10 @@ def run_project(
     *,
     force_no_ai: bool = False,
     send_email: bool = False,
+    progress_callback: Callable[
+        [str, dict[str, object]],
+        None,
+    ] | None = None,
 ) -> RunArtifacts:
     db = Database(
         settings.db_path,
@@ -86,6 +91,7 @@ def run_project(
             domain_states=domain_states,
             query_memory=query_memory,
             source_profiles=source_profiles,
+            progress_callback=progress_callback,
         )
         result = crawler.crawl()
 
