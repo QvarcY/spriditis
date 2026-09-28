@@ -68,11 +68,45 @@ Iesniedzot contribution, tu piekrīti, ka tas var tikt izplatīts ar repozitorij
 
 ---
 
+## Dokumentācijas disciplīna
+
+Dokumentācija ir daļa no izmaiņas, nevis darbs "kādreiz pēc tam".
+
+Ja PR maina uzvedību, arhitektūru, publisku konfigurāciju, acceptance statusu vai production robežu, tajā pašā PR jāatjauno attiecīgie dokumenti:
+
+- `README.md` — tikai aktuālais produkta stāvoklis un lietošana;
+- `ROADMAP.md` — pabeigtie/aktīvie/nākamie milestones;
+- `CHANGELOG.md` — release/main izmaiņu vēsture;
+- `docs/ARCHITECTURE.md` — faktiskā šodienas arhitektūra un invarianti;
+- acceptance/closeout dokumenti — vēsturiskais snapshot, ko pēc aizvēršanas nepārraksta par live dashboardu.
+
+Production SHA vai "deployed" statusu dokumentē tikai pēc reāla deploy/health pārbaudes, nevis pēc merge vien.
+
+Pirms PR pabeigšanas pārbaudi [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md) un PR checklist.
+
+
 # English
 
 Thanks for your interest in improving Sprīdītis.
 
 Sprīdītis is alpha software. The public repository is the research core, so contributions should keep it configurable, auditable, safe by default and useful without requiring a hosted product.
+
+## Documentation discipline
+
+Documentation is part of the change, not a follow-up task.
+
+If a PR changes behavior, architecture, public configuration, acceptance status or production boundaries, update the relevant documentation in the same PR:
+
+- `README.md` — current product state and usage only;
+- `ROADMAP.md` — completed/active/next milestones;
+- `CHANGELOG.md` — release/main change history;
+- `docs/ARCHITECTURE.md` — how the system actually works today;
+- acceptance/closeout documents — historical snapshots that should not be reused as live dashboards after closure.
+
+Only record a production SHA or "deployed" status after the real deployment and health validation, not merely after merge.
+
+Before completing a PR, check [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md) and the PR checklist.
+
 
 ## Especially useful contributions
 

@@ -8,6 +8,9 @@ Sprīdītis tiek attīstīts open-core virzienā. Šis dokuments apraksta iecer�
 
 ## Publiskais kodols
 
+Aktuālajā `main` šajā publiskajā kodolā ietilpst arī W6.9A target identity gate un W6.9B target-aware research orchestration. Tie ir core research-quality mehānismi, nevis hostētā produkta ekskluzīvas funkcijas.
+
+
 Publiskajam repozitorijam jāpaliek patstāvīgi lietojamam pētniecības dzinējam.
 
 Publiskajā kodolā ietilpst vai ir paredzēts ietvert:
@@ -71,6 +74,9 @@ optional provider or product implementation
 Sprīdītis is being developed with an open-core direction. This document describes the intended project boundary and **does not add restrictions to the Apache License 2.0**.
 
 ## Public core
+
+Current `main` also includes the W6.9A target identity gate and W6.9B target-aware research orchestration in the public core. These are core research-quality mechanisms, not hosted-product-only features.
+
 
 The public repository should remain a useful standalone research engine.
 

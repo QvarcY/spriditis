@@ -1,5 +1,7 @@
 # T20 Public Research Quality Acceptance — Closeout
 
+> **Historical acceptance snapshot.** This document records the T20 state as accepted on 2026-09-27. Commit/release identifiers below intentionally describe that acceptance point and are not the current production dashboard. For current state use `README.md`, `ROADMAP.md` and `docs/ARCHITECTURE.md`. W6.9A/W6.9B were added later and production-accepted on 2026-09-28.
+
 Status: **CLOSED / ACCEPTED**  
 Closed: **2026-09-27**
 

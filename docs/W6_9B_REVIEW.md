@@ -1,16 +1,18 @@
-# W6.9B: target-aware discovery and evidence-based continuation
+# W6.9B: target-aware discovery and evidence-based continuation — closeout
 
-## Review status
+## Closeout status
 
-Implementation and local regression checks are complete. Live P1S Combo
-acceptance is pending code review and an isolated run on the VPS. No production
-configuration, deployment, service, or remote branch was changed.
+**CLOSED / ACCEPTED / PRODUCTION** — 2026-09-28.
 
-- Branch in both repositories: `feature/w6-9b-research-orchestration-reset`.
-- CORE base and current HEAD: `0301a31caf7359a98c6e068efa7d19f75dbadffa`.
-- WEB base and current HEAD: `5d8db4c7167c5617a6b12eceac187907045c7e9f`.
-- CORE changes are uncommitted. WEB has no code changes.
-- The patch is relative to canonical CORE main, not the W6.9A feature head.
+- CORE base before W6.9B: `0301a31caf7359a98c6e068efa7d19f75dbadffa` (W6.9A).
+- W6.9B commit chain:
+  - `acf08b81e4a76314ab2c107abeecf9f37ef6cbb3` — target-aware research orchestration;
+  - `8ba8605e02a67fa1b205d6e970e5e919c640e3a1` — preempt low-value target continuations;
+  - `19833e95281eab5356ee35736fc2da99f01211ba` — aggregate target continuation telemetry.
+- GitHub `main` and production core now point to `19833e95281eab5356ee35736fc2da99f01211ba`.
+- WEB/API required no W6.9B runtime change; W6.9A WEB target parser remains at `5d8db4c7167c5617a6b12eceac187907045c7e9f`.
+- Production API/worker release remains `/opt/spriditis-web-api/releases/5d8db4c7167c5617a6b12eceac187907045c7e9f`.
+- No DB schema migration, frontend release, extractor rewrite or transport-safety relaxation was part of W6.9B.
 
 ## Problem and resulting behavior
 
@@ -141,22 +143,37 @@ Its quick profile produces:
 - Limits: 12 main-page attempts, 4 pages/domain, 3 useful source slots,
   2 initial queries and at most 2 recovery queries.
 
-## Pending VPS acceptance and limitations
+## Production acceptance and closeout
 
-The local tests use deterministic search/HTTP fixtures. They prove control flow,
-not real-world offer availability or research quality.
+The deterministic local suite passed before promotion. The final W6.9B telemetry patch completed the full core regression gate with **71/71** test scripts passing.
 
-After code review, run the exact P1S Combo request on the VPS in an isolated
-checkout/output location using its existing localhost SearXNG endpoint. Keep
-production services/configuration unchanged and do not expose SearXNG publicly.
+Two isolated live P1S Combo acceptance runs were used to validate the orchestration:
 
-Capture issued queries, source replacements, per-page `target_coverage`, final
-`coverage_assessment`, stop reason, confirmed offer URLs, extracted prices, and
-the report. Verify that P2S/X2D/generic brand pages never become confirmed P1S
-offers and that zero confirmed coverage drives available recovery work.
+1. The first W6.9B run exposed a real budget-waste defect: irrelevant same-domain continuation URLs could consume the page budget before recovery search.
+2. The continuation-filter fix allowed recovery search to run before the budget was exhausted and preserved target-anchor-positive URL paths.
+3. The telemetry follow-up replaced thousands of per-URL continuation discard decisions with bounded per-page/per-source-type summaries.
 
-Distinct hosts are a coverage proxy, not proof of independently owned sellers.
-The source goal does not establish statistical market completeness. Per-page
-enrichment can use smaller AI batches than the previous final batch. Locale
-phrases currently support Latvian/English wording with country-code fallback.
-Live fetchability, extraction quality and latency still require VPS acceptance.
+In the final isolated acceptance, recovery behavior remained intact while adaptive-decision volume fell from roughly 3.3k events in the noisy run to **52 total decisions**, including **11 `target_continuation / filtered_summary` events** representing **1756 discarded continuation candidates**. Audit totals and bounded samples remained available without database event spam.
+
+Production deployment then:
+
+- acquired the shared execution lock;
+- stopped only `spriditis-web-worker.service`;
+- fast-forwarded core from W6.9A `0301a31...` to W6.9B `19833e9...`;
+- passed import sanity;
+- passed target coverage orchestration, adaptive decision trace and target identity regressions on production;
+- restarted the worker;
+- left the production worktree clean;
+- left worker, API and Nginx active;
+- left the API immutable release unchanged at `5d8db4c...`;
+- passed a post-deploy health check with the execution lock available again.
+
+### Remaining limitations
+
+- Distinct hosts are a coverage proxy, not proof of independently owned sellers.
+- The source goal does not establish statistical market completeness.
+- Live fetchability, extraction quality and latency still vary with third-party sites.
+- Opaque same-domain continuation URLs with no target evidence may be skipped intentionally; recovery search is preferred under a scarce page budget.
+- Locale-specific query wording is currently conservative and not a full multilingual query-planning system.
+
+This file is now a historical/technical closeout for W6.9B. Current project status belongs in `README.md`, `ROADMAP.md` and `docs/ARCHITECTURE.md`; do not turn this closeout back into a live status dashboard.

@@ -1,7 +1,7 @@
 # Sprīdītis — arhitektūra / Architecture
 
-Pašreizējā publiskā bāze / Current public baseline: **3.3.0-alpha.10 — Async crawler + adaptive politeness**  
-Nākamais aktīvais posms / Next active milestone: **vēl nav izvēlēts / not selected yet**
+Publiskā release bāze / Public release baseline: **3.3.0-alpha.10 — Async crawler + adaptive politeness**  
+Aktuālais `main` + production / Current `main` + production: **W6.9A + W6.9B target-aware research hardening** (`19833e95281eab5356ee35736fc2da99f01211ba`)
 
 > **Latviski pirmajā vietā, angļu valoda zemāk. / Latvian first, English below.**
 
@@ -457,6 +457,46 @@ Ilgtermiņā `ETag`/`Last-Modified` var kļūt par vispārīgu per-resource fetc
 6. Research Memory tiek būvēta virs SQLite, nevis ieviešot smagu infrastruktūru bez vajadzības.
 7. Ātrums nedrīkst vājināt politeness un drošību.
 
+## Target-aware research kvalitātes slānis — W6.9A/W6.9B production
+
+W6.9A un W6.9B ir pēc-alpha.10 kvalitātes slāņi virs esošās crawler arhitektūras; tie nemaina persistence shēmu, transporta drošības modeli vai publisko API līgumu.
+
+```text
+Research request
+      ↓
+target identity terms / anchors
+      ↓
+target-preserving queries
+      ↓
+global ranked search candidate pool
+      ↓
+source slot activation
+      ↓
+fetch → extraction → enrichment
+      ↓
+W6.9A target identity gate
+      ↓
+ResearchCoverage
+  attempted / usable / productive
+  confirmed / priced / exhausted
+      ↓
+continue source OR replace source
+      ↓
+bounded recovery queries if evidence insufficient
+      ↓
+coverage-aware stop / insufficient_target_coverage
+```
+
+Svarīgās robežas:
+
+- search snippet ir discovery signāls, nevis pierādīts offer;
+- specific-target soft stop nevar iestāties ar `confirmed=0`;
+- distinct confirmed priced domains ir coverage proxy, nevis tirgus pilnīguma garantija;
+- continuation filtrs specific-target plūsmā izmanto target anchor evidence no URL path/link-local konteksta un nebalstās source-page tekstā vai query parametros;
+- broad research saglabā iepriekšējo ungated continuation/soft-stop semantiku;
+- continuation auditam viens source page/source type rada bounded `filtered_summary`, nevis eventu par katru izmesto URL;
+- W6.9B production acceptance notika izolētā checkoutā pirms fast-forward uz production core.
+
 ---
 
 # English
@@ -899,3 +939,44 @@ Long term, `ETag`/`Last-Modified` can become generic per-resource fetch-state me
 5. The public core stays generic.
 6. Research Memory is built on SQLite before adding heavy infrastructure.
 7. Speed must not weaken politeness or safety.
+
+## Target-aware research quality layer — W6.9A/W6.9B production
+
+W6.9A and W6.9B are post-alpha.10 quality layers on top of the existing crawler architecture; they do not change the persistence schema, transport-safety model or public API contract.
+
+```text
+Research request
+      ↓
+target identity terms / anchors
+      ↓
+target-preserving queries
+      ↓
+global ranked search candidate pool
+      ↓
+source slot activation
+      ↓
+fetch → extraction → enrichment
+      ↓
+W6.9A target identity gate
+      ↓
+ResearchCoverage
+  attempted / usable / productive
+  confirmed / priced / exhausted
+      ↓
+continue source OR replace source
+      ↓
+bounded recovery queries if evidence insufficient
+      ↓
+coverage-aware stop / insufficient_target_coverage
+```
+
+Important boundaries:
+
+- a search snippet is a discovery signal, not confirmed offer evidence;
+- a specific-target soft stop cannot succeed with `confirmed=0`;
+- distinct confirmed priced domains are a coverage proxy, not a market-completeness guarantee;
+- the specific-target continuation filter uses target-anchor evidence from URL paths/link-local context and does not rely on source-page text or query parameters;
+- broad research keeps its previous ungated continuation/soft-stop semantics;
+- continuation auditing emits one bounded `filtered_summary` per source page/source type instead of one event per discarded URL;
+- W6.9B was live-accepted in an isolated checkout before the production core fast-forward.
+

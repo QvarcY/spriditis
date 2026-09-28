@@ -6,6 +6,12 @@
 
 Sprīdītis ir web crawler un pētniecības dzinējs, tāpēc URL, redirect, credentials un ārējā satura drošības robežas ir daļa no kodola arhitektūras.
 
+## Aktuālā drošības robeža
+
+Production core 2026-09-28 darbojas uz `19833e95281eab5356ee35736fc2da99f01211ba`. W6.9A/W6.9B maina research kvalitāti un orchestration, bet **neatslābina** transporta SSRF/DNS rebinding aizsardzību, `robots.txt`, URL drošības politiku vai crawl budžetus.
+
+Drošības invarianti joprojām ir autoritatīvi crawler transportā; search/discovery signāls nedrīkst apiet URL/redirect/private-network validāciju.
+
 ## Atbalstītā versija
 
 Drošības labojumi tiek mērķēti uz aktuālo `main` un jaunāko publicēto alpha bāzi. Vecākiem development snapshot labojumi var netikt backportēti.
@@ -58,6 +64,12 @@ Sprīdītis paredzēts likumīgai publiski pieejamas informācijas izpētei. To 
 # English
 
 Sprīdītis is a web crawler and research engine, so security boundaries around URLs, redirects, credentials and external content are part of the core design.
+
+## Current security boundary
+
+Production core as of 2026-09-28 runs `19833e95281eab5356ee35736fc2da99f01211ba`. W6.9A/W6.9B change research quality and orchestration but **do not relax** transport SSRF/DNS-rebinding protection, `robots.txt`, URL safety policy or crawl budgets.
+
+Security invariants remain authoritative in the crawler transport; search/discovery signals must never bypass URL/redirect/private-network validation.
 
 ## Supported version
 

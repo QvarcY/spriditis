@@ -1,5 +1,37 @@
 # Izmaiņu vēsture / Changelog
 
+## [Unreleased / main] — post-alpha.10 production hardening
+
+> **Production core 2026-09-28:** `19833e95281eab5356ee35736fc2da99f01211ba`  
+> W6.9A Target Identity Gate + W6.9B Target-aware Research Orchestration are merged to `main`, live-accepted and deployed.
+
+### W6.9A — Target Identity Gate
+
+- specific-target identity terms + anchor terms;
+- deterministic `confirmed / uncertain / rejected` target outcome;
+- model-conflict/model-missing audit reasons;
+- confirmed-target entity counting and report hygiene;
+- WEB-side conservative target parser compatibility.
+
+### W6.9B — Target-aware Research Orchestration
+
+- target-preserving search queries and target-aware result ranking;
+- global candidate pooling before source-slot allocation;
+- run-local evidence coverage with attempted/usable/productive/confirmed/priced/exhausted source states;
+- early per-page enrichment + identity validation before adaptive stopping;
+- exhausted-source replacement and bounded recovery search;
+- explicit `insufficient_target_coverage` outcome;
+- target-aware same-domain HTML/sitemap continuation filtering;
+- aggregated `target_continuation / filtered_summary` telemetry instead of per-URL audit spam.
+
+### Validation
+
+- complete core regression gate passed before promotion;
+- isolated live P1S Combo acceptance passed with recovery behavior preserved;
+- continuation telemetry reduced from thousands of per-URL decisions to bounded summary events while retaining discard totals and samples;
+- production deploy passed import sanity plus target coverage, adaptive trace and target identity regressions;
+- production post-deploy: clean worktree, execution lock available, worker/API/Nginx active.
+
 ## [3.3.0-alpha.10]
 
 > **Statuss / Status:** release baseline pilnībā validēts; pilnais regression gate izpildīts ar 60/60 testiem.  
