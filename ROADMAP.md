@@ -26,7 +26,9 @@
 
 # Latviski
 
-## ✅ Pašreizējā publiskā bāze — 3.3.0-alpha.10
+## ✅ Pašreizējā publiskā release bāze — 3.3.0-alpha.10
+
+> **Aktuālais `main` un production ir tālāk par release tagu:** W6.9A Target Identity Gate un W6.9B Target-aware Research Orchestration ir pabeigti un production pieņemti 2026-09-28. Production core: `19833e95281eab5356ee35736fc2da99f01211ba`.
 
 Ieviests un publiski pieejams:
 
@@ -268,6 +270,33 @@ Apzināta robeža: alpha9 nepievieno iebūvētu daemon scheduler, background-job
 
 Apzināta robeža: alpha10 async režīms paliek **opt-in**; tas nemaina persistence shēmu un nepievieno background worker/distributed queue infrastruktūru.
 
+## ✅ W6.9A — Target Identity Gate
+
+**Statuss:** mergeots `main` un production pieņemts.
+
+- `target_identity_terms` un `target_identity_anchor_terms` konkrētu mērķu identitātes aprakstam;
+- deterministic `confirmed / uncertain / rejected` rezultāts pēc enrichment;
+- model conflict / model missing audit iemesli;
+- tikai `confirmed + relevant` entītijas skaitās derīgas konkrēta mērķa coverage/price analītikā;
+- report neiznes iekšējos target-gate atribūtus kā lietotāja produkta datus;
+- WEB project builder konservatīvi atvasina mērķa identitāti no konkrētiem modeļu pieprasījumiem.
+
+## ✅ W6.9B — Target-aware Research Orchestration
+
+**Statuss:** pilnībā validēts un production izvietots 2026-09-28; production core `19833e95281eab5356ee35736fc2da99f01211ba`.
+
+- target-preserving query planning un target-aware search ranking;
+- globāls candidate pool pirms source slot piešķiršanas;
+- per-page enrichment + W6.9A gate pirms adaptive stopping;
+- atsevišķs `ResearchCoverage` slānis: attempted, usable, productive, confirmed, priced un exhausted avoti;
+- specific-target market research source goal balstās distinct confirmed priced domains, nevis vienkārši extracted entity skaitā;
+- izsmeltu/neveiksmīgu source aizvietošana un bounded recovery query budžets;
+- `insufficient_target_coverage` kā godīgs gala stāvoklis, ja pierādījumu mērķis nav sasniegts;
+- zemas vērtības same-domain HTML/sitemap continuation URL tiek atmesti pirms crawl budžeta patēriņa, saglabājot target-anchor pozitīvos URL;
+- continuation telemetrija tiek agregēta per page/source type `filtered_summary` eventos ar bounded sample URL.
+
+**Acceptance:** pilnais core regression gate iziets; izolētā live P1S Combo acceptance pierādīja recovery un target filtering; telemetrija tajā pašā scenārijā samazināta no tūkstošiem per-URL eventu līdz bounded summary eventiem. Pēc production deploy import sanity, target coverage, adaptive trace un target identity regresijas izietas, worktree palika tīrs un worker/API/Nginx bija healthy.
+
 ## 🔭 Vēlāk / Backlog
 
 - papildu bezmaksas/self-hostable SearchProvider adapteri;
@@ -306,7 +335,9 @@ Tas ir **Research Memory + Adaptive Discovery + Evidence Confidence + Incrementa
 
 # English
 
-## ✅ Current public baseline — 3.3.0-alpha.10
+## ✅ Current public release baseline — 3.3.0-alpha.10
+
+> **Current `main` and production are ahead of the release tag:** W6.9A Target Identity Gate and W6.9B Target-aware Research Orchestration were completed and production-accepted on 2026-09-28. Production core: `19833e95281eab5356ee35736fc2da99f01211ba`.
 
 Implemented and public:
 
@@ -525,6 +556,33 @@ The sequence is intentional: **Entity Resolution → Evidence Confidence → Cha
 
 Deliberate boundary: alpha10 async mode remains **opt-in**; it does not change the persistence schema or add a background-worker/distributed-queue platform.
 
+## ✅ W6.9A — Target Identity Gate
+
+**Status:** merged to `main` and production-accepted.
+
+- `target_identity_terms` and `target_identity_anchor_terms` describe specific target identity;
+- deterministic `confirmed / uncertain / rejected` result after enrichment;
+- model-conflict / model-missing audit reasons;
+- only `confirmed + relevant` entities count as valid evidence for specific-target coverage and price analytics;
+- internal target-gate attributes stay out of user-facing product fields;
+- the WEB project builder conservatively derives target identity for specific model requests.
+
+## ✅ W6.9B — Target-aware Research Orchestration
+
+**Status:** fully validated and deployed to production on 2026-09-28; production core `19833e95281eab5356ee35736fc2da99f01211ba`.
+
+- target-preserving query planning and target-aware search ranking;
+- global candidate pooling before source-slot assignment;
+- per-page enrichment + W6.9A gate before adaptive stopping;
+- dedicated `ResearchCoverage` state for attempted, usable, productive, confirmed, priced and exhausted sources;
+- specific-target market-research source goals use distinct confirmed priced domains rather than raw extracted-entity counts;
+- exhausted/failed source replacement plus a bounded recovery-query budget;
+- honest `insufficient_target_coverage` completion when evidence goals remain unmet;
+- low-value same-domain HTML/sitemap continuations are rejected before consuming the crawl budget while target-anchor-positive URLs remain eligible;
+- continuation telemetry is aggregated per page/source type into bounded `filtered_summary` events with small URL samples.
+
+**Acceptance:** the full core regression gate passed; isolated live P1S Combo acceptance proved recovery and target filtering; telemetry for the same scenario dropped from thousands of per-URL events to bounded summary events. After production deployment, import sanity plus target coverage, adaptive trace and target identity regressions passed, the worktree stayed clean and worker/API/Nginx remained healthy.
+
 ## 🔭 Later backlog
 
 - additional free/self-hostable SearchProvider adapters;
@@ -559,4 +617,4 @@ Deliberate boundary: alpha10 async mode remains **opt-in**; it does not change t
 
 That is **Research Memory + Adaptive Discovery + Evidence Confidence + Incremental Monitoring**.
 
-See also [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/OPEN_CORE.md](docs/OPEN_CORE.md), and [docs/T20_ACCEPTANCE.md](docs/T20_ACCEPTANCE.md) for the final public-research acceptance closeout.
+See also [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/OPEN_CORE.md](docs/OPEN_CORE.md), [docs/T20_ACCEPTANCE.md](docs/T20_ACCEPTANCE.md), and [docs/W6_9B_REVIEW.md](docs/W6_9B_REVIEW.md). Documentation roles and update rules are defined in [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md).
