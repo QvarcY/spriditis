@@ -25,8 +25,8 @@
 
 | | Status |
 |---|---|
-| **Publiskā versija / Public baseline** | ✅ `v3.3.0-alpha.10` — Async crawler + adaptive politeness |
-| **Šobrīd / Current work** | 🧭 Nākamais numurētais posms vēl nav izvēlēts / Next numbered milestone not selected yet |
+| **Publiskā release bāze / Public release baseline** | ✅ `v3.3.0-alpha.10` — Async crawler + adaptive politeness |
+| **Aktuālais `main` + production / Current `main` + production** | ✅ W6.9A + W6.9B — target identity gate + target-aware research orchestration |
 | **Galvenais virziens / North star** | 🧠 **Research Memory + Adaptive Discovery** |
 | **Pamatprincips / Core principle** | 🔎 **source-backed facts > AI guesses** |
 | **Izmaksu princips / Cost direction** | 🌱 Priekšroka lokāliem, atvērtiem, pašhostējamiem un bezmaksas risinājumiem / Prefer local, open, self-hostable and zero-cost building blocks |
@@ -57,6 +57,8 @@
 | ✅ | **3.3.0-alpha.8** | Change Detection | entity/price/field/source/domain/feed lifecycle events, historical provenance, `diff` between runs, schema v12 |
 | ✅ | **3.3.0-alpha.9** | Watch mode | coverage-aware repeated research, change-only JSONL, hooks, ETag/304 + Research Memory reuse |
 | ✅ | **3.3.0-alpha.10** | Async crawler | bounded async prefetch, retry budgets, adaptive per-domain politeness, deterministic processing |
+| ✅ | **W6.9A** | Target identity gate | exact-target confirmation, anchor/qualifier handling, rejected/uncertain audit states |
+| ✅ | **W6.9B** | Target-aware research orchestration | target-preserving queries, evidence coverage, source replacement/recovery, continuation filtering, bounded telemetry |
 
 <details>
 <summary><strong>🔭 Longer-term backlog / Ilgtermiņa plāns</strong></summary>
@@ -463,13 +465,15 @@ Sprīdīti nevajadzētu izmantot autentifikācijas, piekļuves kontroles, paywal
 
 ### Projekta statuss
 
-Pašreizējais publiskais atskaites punkts ir **Sprīdītis 3.3.0-alpha.9 — Watch mode**.
+Publiskā release bāze joprojām ir **Sprīdītis 3.3.0-alpha.10 — Async crawler + adaptive politeness**. Kopš šī release `main` un production ir saņēmuši divus pēc-release kvalitātes slāņus:
 
-**3.3.0-alpha.9 — Watch mode** ir pilnībā validēts. Tas pievieno coverage-aware inkrementālu atkārtotu izpēti, change-only JSONL, cycle/change hook kontraktus ar verificētu event payload, DB-persistētu ETag/Last-Modified/304 feed refresh un Research Memory atkārtotu izmantošanu nākamajos Watch ciklos.
+- **W6.9A — Target Identity Gate:** konkrēta mērķa pētījumos rezultāts tiek klasificēts kā `confirmed`, `uncertain` vai `rejected`; nepareizs modelis vairs nevar kļūt par derīgu piedāvājumu tikai ar augstu teksta relevance.
+- **W6.9B — Target-aware Research Orchestration:** search vaicājumi saglabā mērķa identitāti, avotu slots balstās faktiskā evidence coverage, izsmelti/nesekmīgi avoti tiek aizvietoti, nepietiekamas coverage gadījumā ir bounded recovery search, bet zemas vērtības same-domain continuation URL tiek filtrēti pirms crawl budžeta iztērēšanas.
+- W6.9B continuation audits tiek glabāts agregētos `filtered_summary` eventos, nevis tūkstošos per-URL ierakstu.
 
-Pilnais alpha9 regression gate ir izpildīts: **55/55 deterministiskie testi iziet**. Reālā 60-lapu Watch pārbaudē coverage-aware slānis apspieda 42 nepietiekami pierādītus presence kandidātus un neizveidoja nevienu viltus change eventu.
+**Aktuālais production core:** `19833e95281eab5356ee35736fc2da99f01211ba` (2026-09-28). W6.9B izolētais live acceptance un production post-deploy health check ir izieti; worker/API/Nginx pēc deploy palika healthy.
 
-Alpha9 neievieš iebūvētu daemon scheduler, background-job rindu vai webhook serveri; publiskā kodola integrācijas virsmas ir CLI loop, JSONL un hook kontrakti.
+Pilns release changelog ir [CHANGELOG.md](CHANGELOG.md), aktuālā attīstības secība — [ROADMAP.md](ROADMAP.md), bet arhitektūras patiesības avots — [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 Šis ir alpha projekts, tāpēc līdz stabilai versijai iespējamas arī nesavietojamas izmaiņas.
 
@@ -805,13 +809,15 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ### Project status
 
-The current public baseline is **Sprīdītis 3.3.0-alpha.9 — Watch mode**.
+The public release baseline remains **Sprīdītis 3.3.0-alpha.10 — Async crawler + adaptive politeness**. Since that release, `main` and production have received two post-release research-quality layers:
 
-**3.3.0-alpha.9 — Watch mode** is fully validated. It adds coverage-aware incremental repeated research, change-only JSONL, cycle/change hook contracts with verified event payloads, persisted ETag/Last-Modified/304 feed refresh, and Research Memory reuse across Watch cycles.
+- **W6.9A — Target Identity Gate:** specific-target research classifies candidates as `confirmed`, `uncertain` or `rejected`; a wrong model can no longer become a valid offer merely through high text relevance.
+- **W6.9B — Target-aware Research Orchestration:** search queries preserve target identity, source slots are driven by real evidence coverage, exhausted/failed sources are replaced, insufficient coverage can trigger bounded recovery search, and low-value same-domain continuations are filtered before consuming the crawl budget.
+- W6.9B continuation auditing is aggregated into bounded `filtered_summary` events instead of thousands of per-URL records.
 
-The complete alpha9 regression gate passed: **55/55 deterministic tests**. In a real 60-page Watch validation, coverage-aware comparison suppressed 42 insufficiently proven presence candidates and emitted zero false change events.
+**Current production core:** `19833e95281eab5356ee35736fc2da99f01211ba` (2026-09-28). The isolated W6.9B live acceptance and production post-deploy health check passed, with worker/API/Nginx healthy after deployment.
 
-Alpha9 does not include a built-in daemon scheduler, background-job queue or webhook server; the public-core integration surfaces are the CLI loop, JSONL and hook contracts.
+See [CHANGELOG.md](CHANGELOG.md) for release history, [ROADMAP.md](ROADMAP.md) for the current development sequence, and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the architecture source of truth.
 
 This is alpha software. Expect breaking changes before a stable release.
 
