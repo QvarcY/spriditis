@@ -1832,6 +1832,145 @@ class ResearchCrawler:
                     source_type="search_provider",
                 )
 
+        # A search engine can return useful candidates while the older
+        # exact-keyword score keeps every result below result_threshold.
+        # Do not fail the entire expedition in that case: if normal search
+        # activation left the frontier empty, bootstrap from the best
+        # independently ranked safe candidates.
+        if not frontier and ordered_candidates:
+            for candidate in ordered_candidates:
+                normalized = str(candidate["normalized"])
+                query = candidate["query"]
+                ranked_hit = candidate["ranked_hit"]
+                hit = candidate["hit"]
+                score = int(candidate["score"])
+                domain = host_key(normalized)
+
+                if recovery and (
+                    normalized in self._coverage.attempted_urls
+                    or (
+                        pages_by_domain is not None
+                        and pages_by_domain[domain]
+                        >= self.project.crawl.max_pages_per_domain
+                    )
+                ):
+                    continue
+
+                if not self._ranked_bootstrap_candidate_eligible(
+                    ranked_hit,
+                    score,
+                ):
+                    continue
+
+                record, discovery = registry.observe_search_result(
+                    provider=self.search_provider.name,
+                    query_text=query.query,
+                    target_url=normalized,
+                    title=hit.title,
+                    snippet=hit.snippet,
+                    raw_score=score,
+                    activation_budget_available=self._source_slot_available(
+                        registry,
+                        domain,
+                    ),
+                    activation_reason="search_ranked_bootstrap_fallback",
+                )
+
+                # Persisted blocked/rejected state and source budgets still
+                # win over the fallback.
+                if discovery.action != "activated":
+                    continue
+
+                result.search_domains_activated += 1
+
+                self._emit_progress(
+                    "source_activated",
+                    domain=record.domain,
+                    origin="search_ranked_bootstrap",
+                )
+
+                result.adaptive_decisions.append(
+                    AdaptiveDecision(
+                        stage="search_bootstrap_fallback",
+                        decision="activated",
+                        target=normalized,
+                        signals={
+                            "domain": record.domain,
+                            "query": query.query,
+                            "legacy_score": score,
+                            "threshold":
+                                self.project.search.result_threshold,
+                            "bm25": ranked_hit.bm25,
+                            "title_matches":
+                                ranked_hit.title_matches,
+                            "path_matches":
+                                ranked_hit.path_matches,
+                            "domain_matches":
+                                ranked_hit.domain_matches,
+                            "target_identity_matches":
+                                ranked_hit.target_identity_matches,
+                            "target_identity_anchor_matches":
+                                ranked_hit.target_identity_anchor_matches,
+                            "provider_score":
+                                ranked_hit.hit.provider_score,
+                        },
+                    )
+                )
+
+                print(
+                    f"      🧭 Search bootstrap fallback: "
+                    f"{record.domain} "
+                    f"(legacy_score={score}, "
+                    f"threshold={self.project.search.result_threshold}) "
+                    f"local={ranked_hit.audit_label}"
+                )
+
+                frontier.add(
+                    normalized,
+                    priority=70 + max(score, 0),
+                    depth=0,
+                    discovery_depth=0,
+                    source_url="",
+                    source_type="search_ranked_bootstrap",
+                )
+
+                if (
+                    registry.active_count
+                    >= self.project.crawl.max_domains
+                ):
+                    break
+
+    def _ranked_bootstrap_candidate_eligible(
+        self,
+        ranked_hit: LocalRelevance,
+        score: int,
+    ) -> bool:
+        if ranked_hit.negative_matches > 0:
+            return False
+
+        # A specific model/target keeps the W6.9 identity boundary:
+        # provider rank alone must never bootstrap the wrong model.
+        if self._coverage.specific_target:
+            return (
+                ranked_hit.target_identity_anchor_matches > 0
+            )
+
+        provider_score = ranked_hit.hit.provider_score
+
+        return (
+            score > 0
+            or ranked_hit.bm25 > 0.0
+            or ranked_hit.title_matches > 0
+            or ranked_hit.path_matches > 0
+            or ranked_hit.domain_matches > 0
+            or ranked_hit.target_identity_matches > 0
+            or ranked_hit.target_identity_anchor_matches > 0
+            or (
+                provider_score is not None
+                and provider_score > 0
+            )
+        )
+
     def _allow_target_continuation(
         self,
         summaries: dict[str, AdaptiveDecision],
