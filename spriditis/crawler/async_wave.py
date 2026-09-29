@@ -57,6 +57,7 @@ class AsyncWavePlanner:
         pages_by_domain: Counter[str],
         eligible: EligibilityCheck | None = None,
         classify: DispositionCheck | None = None,
+        max_pages_for_domain: Callable[[str], int] | None = None,
     ) -> FetchWave:
         if remaining_total <= 0:
             return FetchWave(items=())
@@ -100,12 +101,18 @@ class AsyncWavePlanner:
                 deferred.append(item)
                 continue
 
-            if pages_by_domain[domain] >= self.max_pages_per_domain:
+            domain_limit = self.max_pages_per_domain
+            if max_pages_for_domain is not None:
+                domain_limit = min(
+                    domain_limit, max_pages_for_domain(domain),
+                )
+
+            if pages_by_domain[domain] >= domain_limit:
                 continue
 
             if (
                 pages_by_domain[domain] + reserved[domain]
-                >= self.max_pages_per_domain
+                >= domain_limit
             ):
                 deferred.append(item)
                 continue

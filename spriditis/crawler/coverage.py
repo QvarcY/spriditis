@@ -12,6 +12,7 @@ class ResearchCoverage:
 
     specific_target: bool
     source_goal: int
+    expedition_mode: bool
     attempted_urls: set[str] = field(default_factory=set)
     attempted_domains: set[str] = field(default_factory=set)
     usable_domains: set[str] = field(default_factory=set)
@@ -19,6 +20,7 @@ class ResearchCoverage:
     confirmed_domains: set[str] = field(default_factory=set)
     priced_domains: set[str] = field(default_factory=set)
     exhausted_domains: set[str] = field(default_factory=set)
+    released_domains: set[str] = field(default_factory=set)
     confirmed_entities: int = 0
 
     @classmethod
@@ -32,6 +34,7 @@ class ResearchCoverage:
                 )
             ),
             source_goal=project.crawl.max_domains,
+            expedition_mode=project.crawl.mode == "expedition",
         )
 
     @property
@@ -55,10 +58,14 @@ class ResearchCoverage:
         return len(confirmed)
 
     def occupied_domains(self, activated: set[str]) -> set[str]:
-        # Retain successful sources in the budget even after their queue drains.
-        retained = (
-            self.priced_domains if self.specific_target else self.usable_domains
-        )
+        # Expedition broad research retains evidence-bearing sources only.
+        # Preserve the existing slot rule for other crawl modes.
+        if self.specific_target:
+            retained = self.priced_domains
+        elif self.expedition_mode:
+            retained = self.productive_domains
+        else:
+            retained = self.usable_domains
         return (activated - self.exhausted_domains) | retained
 
     def snapshot(self) -> dict[str, object]:
@@ -70,6 +77,7 @@ class ResearchCoverage:
             "confirmed_domains": sorted(self.confirmed_domains),
             "priced_domains": sorted(self.priced_domains),
             "exhausted_domains": sorted(self.exhausted_domains),
+            "released_domains": sorted(self.released_domains),
             "confirmed_targets": self.confirmed_entities,
             "source_goal": self.source_goal,
         }

@@ -263,16 +263,17 @@ class ResearchCrawler:
             ):
                 break
             if async_planner is not None:
-                self._prefetch_async_wave(
-                    frontier=frontier,
-                    planner=async_planner,
-                    cache=async_cache,
-                    visited=visited,
-                    pages_by_domain=pages_by_domain,
-                    registry=registry,
-                    result=result,
-                    fetcher=async_fetcher,
-                )
+                if not async_cache:
+                    self._prefetch_async_wave(
+                        frontier=frontier,
+                        planner=async_planner,
+                        cache=async_cache,
+                        visited=visited,
+                        pages_by_domain=pages_by_domain,
+                        registry=registry,
+                        result=result,
+                        fetcher=async_fetcher,
+                    )
                 if not frontier:
                     continue
 
@@ -295,7 +296,7 @@ class ResearchCrawler:
 
             if (
                 pages_by_domain[domain]
-                >= self.project.crawl.max_pages_per_domain
+                >= self._source_page_limit(domain)
             ):
                 async_cache.pop(url, None)
                 continue
@@ -932,10 +933,53 @@ class ResearchCrawler:
                 if summary.signals["discarded"] > 0
             )
 
+            # Give a source with no extracted evidence only a short chance to
+            # produce it, then offer its slot to another search candidate.
+            # Replenish before adaptive stopping so a replacement is not
+            # discarded by an entity-free page streak.
+            if (
+                self.project.crawl.mode == "expedition"
+                and not self._coverage.specific_target
+                and len(self._coverage.attempted_urls)
+                < self.project.crawl.max_pages_total
+            ):
+                self._replenish_sources(
+                    frontier, registry, result, visited, pages_by_domain,
+                    discovery_depth_activations,
+                )
+
             new_active_domains = len(
                 set(registry.run_active_domains) - active_domains_before
             )
-            if self._update_adaptive_stop(
+            trial_pending = any(
+                domain in self._coverage.usable_domains
+                and domain not in self._coverage.productive_domains
+                and registry.records[domain].status == "active"
+                for domain in (
+                    registry.run_active_domains
+                    - self._coverage.exhausted_domains
+                )
+            )
+            untried_source_pending = any(
+                domain not in self._coverage.attempted_domains
+                and registry.records[domain].status == "active"
+                for domain in (
+                    registry.run_active_domains
+                    - self._coverage.exhausted_domains
+                )
+            )
+            if (
+                self.project.crawl.mode == "expedition"
+                and not self._coverage.specific_target
+                and (
+                    new_active_domains > 0
+                    or trial_pending
+                    or untried_source_pending
+                )
+            ):
+                result.diminishing_returns_streak = 0
+                result.saturation_streak = 0
+            elif self._update_adaptive_stop(
                 result,
                 new_entities=(
                     new_confirmed
@@ -963,7 +1007,9 @@ class ResearchCrawler:
             elif self._coverage.specific_target:
                 result.stop_reason = "discovery_exhausted"
             elif (
-                registry.active_count >= self.project.crawl.max_domains
+                len(self._coverage.occupied_domains(
+                    registry.run_active_domains,
+                )) >= self.project.crawl.max_domains
                 and any(
                     item.reason == "domain_budget_reached"
                     for item in registry.discoveries
@@ -992,6 +1038,11 @@ class ResearchCrawler:
                     "saturation_window":
                         self.project.crawl.saturation_window,
                     "active_domains": registry.active_count,
+                    "occupied_source_slots": len(
+                        self._coverage.occupied_domains(
+                            registry.run_active_domains,
+                        )
+                    ),
                     "max_domains": self.project.crawl.max_domains,
                     **self._coverage.snapshot(),
                 },
@@ -1083,6 +1134,7 @@ class ResearchCrawler:
             remaining_total=remaining_total,
             pages_by_domain=pages_by_domain,
             classify=classify,
+            max_pages_for_domain=self._source_page_limit,
         )
         if not wave.items:
             return
@@ -2031,6 +2083,16 @@ class ResearchCrawler:
         occupied = self._coverage.occupied_domains(registry.run_active_domains)
         return domain in occupied or len(occupied) < self.project.crawl.max_domains
 
+    def _source_page_limit(self, domain: str) -> int:
+        limit = self.project.crawl.max_pages_per_domain
+        if (
+            self.project.crawl.mode == "expedition"
+            and not self._coverage.specific_target
+            and domain not in self._coverage.productive_domains
+        ):
+            return min(2, limit)
+        return limit
+
     def _replenish_sources(
         self,
         frontier: URLFrontier,
@@ -2050,10 +2112,39 @@ class ResearchCrawler:
             < self.project.crawl.max_pages_per_domain
             and host_key(item.url) in registry.records
             and registry.records[host_key(item.url)].status == "active"
+            and (
+                pages_by_domain[host_key(item.url)]
+                < self._source_page_limit(host_key(item.url))
+            )
         }
         self._coverage.exhausted_domains = (
             registry.run_active_domains - pending_domains
         )
+        if (
+            self.project.crawl.mode == "expedition"
+            and not self._coverage.specific_target
+        ):
+            for domain in sorted(self._coverage.exhausted_domains):
+                record = registry.records.get(domain)
+                if (
+                    record is None
+                    or record.status != "active"
+                    or domain not in self._coverage.usable_domains
+                    or domain in self._coverage.productive_domains
+                ):
+                    continue
+                registry.mark_nonproductive(domain)
+                self._coverage.released_domains.add(domain)
+                result.adaptive_decisions.append(AdaptiveDecision(
+                    stage="source_slot",
+                    decision="released",
+                    target=domain,
+                    signals={
+                        "reason": "nonproductive_source",
+                        "pages_seen": pages_by_domain[domain],
+                        "trial_page_limit": self._source_page_limit(domain),
+                    },
+                ))
         if len(self._coverage.attempted_urls) >= self.project.crawl.max_pages_total:
             return bool(pending_domains)
 
@@ -2192,6 +2283,17 @@ class ResearchCrawler:
             hit = candidate["hit"]
             score = int(candidate["score"])
 
+            trial_reason = ""
+            if score < self.project.search.result_threshold:
+                if (
+                    not self._coverage.released_domains
+                    or not self._ranked_bootstrap_candidate_eligible(
+                        ranked_hit, score,
+                    )
+                ):
+                    continue
+                trial_reason = "search_candidate_trial"
+
             record, discovery = registry.observe_search_result(
                 provider=self.search_provider.name,
                 query_text=query.query,
@@ -2202,6 +2304,7 @@ class ResearchCrawler:
                 activation_budget_available=self._source_slot_available(
                     registry, domain,
                 ),
+                activation_reason=trial_reason,
             )
 
             if discovery.action not in {"activated", "known"}:

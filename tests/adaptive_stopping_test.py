@@ -191,7 +191,7 @@ crawler, result = run_domain(
 assert result.stop_reason == "budget_exhausted"
 assert result.visited_pages == 1
 
-# Expedition domain budget has its own reason.
+# An exhausted empty source releases its slot and the deferred source is tried.
 expedition = ResearchProject.model_validate({
     "id": "stop_max_domains",
     "name": "stop max domains",
@@ -248,9 +248,18 @@ crawler.session = FakeSession({
 })
 result = crawler.crawl()
 
-assert result.stop_reason == "max_domains"
-assert result.visited_pages == 1
-assert result.domains["two.example"].reason == "domain_budget_reached"
+assert result.stop_reason == "budget_exhausted"
+assert result.visited_pages == 2
+assert any(
+    item.target_domain == "two.example"
+    and item.reason == "domain_budget_reached"
+    for item in result.domain_discoveries
+)
+assert result.domains["two.example"].status == "failed"
+assert crawler.session.calls == [
+    "https://one.example/product/ergonomic-chair/item",
+    "https://two.example/product/ergonomic-chair/item",
+]
 
 print("ADAPTIVE STOPPING TEST OK")
 print(
