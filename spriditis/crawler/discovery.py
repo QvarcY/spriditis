@@ -228,6 +228,7 @@ class DomainRegistry:
         snippet: str,
         raw_score: int,
         activation_budget_available: bool | None = None,
+        activation_reason: str = "",
     ) -> tuple[DomainRecord, DomainDiscovery]:
         target_domain = host_key(target_url)
         ratio = score_to_ratio(raw_score)
@@ -247,7 +248,10 @@ class DomainRegistry:
             status = "candidate"
             action = "recorded"
             reason = "not_expedition_mode"
-        elif raw_score < self.project.search.result_threshold:
+        elif (
+            raw_score < self.project.search.result_threshold
+            and not activation_reason
+        ):
             status = "candidate"
             action = "recorded"
             reason = "below_search_threshold"
@@ -262,7 +266,10 @@ class DomainRegistry:
         else:
             status = "active"
             action = "activated"
-            reason = "search_relevance_threshold"
+            reason = (
+                activation_reason
+                or "search_relevance_threshold"
+            )
 
         record = self._get_or_create(
             target_domain,
