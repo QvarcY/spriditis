@@ -66,3 +66,138 @@ Changed functions/files: spriditis/crawler/engine.py (_crawl_impl, _source_page_
 Targeted validation passed with the repository .venv and UTF-8 output: search_nonproductive_source_trial_backfill_test.py, search_failed_source_backfill_test.py, search_global_domain_budget_test.py, search_ranked_bootstrap_fallback_test.py, adaptive_stopping_test.py, async_wave_planner_test.py, and async_crawler_integration_test.py. git diff --check and staged diff --check passed. No full test suite was run.
 
 Remaining limits: this phase only revisits URLs already returned by the bounded SearchProvider query/result plan. A source that yields a raw extracted entity is retained even if later broad-mode enrichment judges that entity irrelevant; tightening this would require changing the current productivity signal. An evidence-free category page can be retired after two pages even if relevant products are deeper. JS-only product content remains outside this change. **Broader candidate probing is still Phase C**, including wider discovery beyond the retained search pool and stronger page-level evidence for category pages; Phase B does not claim that work complete.
+
+## Phase C1 — promising probe continuation
+
+Status: implemented and locally validated on branch `fix/w7a6-c1-probe-evidence`.
+
+Baseline before C1:
+
+`e0ac8839bafc8f4d290361efcd8c627f4d7dd231`
+
+### Problem addressed
+
+Phase B correctly releases broad-expedition sources that return usable HTML but never produce entity evidence. Its default provisional allowance is two pages.
+
+That is safe for genuinely empty sources, but can retire a legitimate shop or category source too early when the useful product page is one internal hop deeper.
+
+Example lifecycle before C1:
+
+search result
+→ shop landing page
+→ relevant category page
+→ provisional 2-page cap reached
+→ source retired
+→ actual product page never inspected
+
+### C1 behavior
+
+C1 preserves the Phase B default:
+
+- ordinary evidence-free source: maximum 2 provisional pages;
+- no meaningful continuation evidence: release the source slot normally.
+
+A broad-expedition provisional source may receive exactly one additional page, for a maximum provisional allowance of 3 pages, when actual page-level internal-link evidence is strong enough.
+
+The continuation is granted only when:
+
+- crawl mode is `expedition`;
+- research is not specific-target mode;
+- the source is not already productive;
+- the source has not already received the C1 extension;
+- `max_pages_per_domain >= 3`;
+- the candidate is within `max_depth`;
+- the existing `text_relevance_score()` meets the configured search relevance threshold;
+- the URL/link context contains actual subject evidence from project keywords or required evidence terms;
+- no configured negative keyword is present.
+
+A structural URL bonus such as `/item/` or `/product/` is therefore not sufficient by itself.
+
+While the source remains provisional, evidence-backed internal links are prioritized over structurally attractive but subject-unrelated internal URLs so the bounded extra probe is spent on the evidence that justified it.
+
+### Important lifecycle semantics
+
+The C1 extension does not promote or retain the source.
+
+The source remains provisional.
+
+Lifecycle:
+
+candidate
+→ normal short trial
+→ strong internal-link evidence
+→ one extra provisional page
+→ entity evidence → productive
+OR
+→ no entity evidence → nonproductive release
+
+Once entity evidence makes the source productive, `_source_page_limit()` returns to the ordinary configured `max_pages_per_domain`.
+
+The extra provisional allowance is bounded by:
+
+`min(3, max_pages_per_domain)`
+
+and remains subject to all existing total-page, depth, safety, robots, deduplication, and lifecycle limits.
+
+Specific-target behavior is unchanged.
+
+### Files changed
+
+- `spriditis/crawler/engine.py`
+- `tests/search_promising_probe_continuation_test.py`
+- `tests/search_nonproductive_source_trial_backfill_test.py`
+- `docs/W7A6_QUALITY_RECOVERY.md`
+
+### Validation
+
+Focused C1 regression:
+
+- relevant landing → category → product chain reaches the third provisional page;
+- product entity and price are extracted;
+- source becomes productive;
+- exactly one `source_probe / continuation_granted` decision is emitted;
+- ordinary navigation such as About → Contact does not earn the extra page;
+- structural `/item/` URL score without actual subject evidence does not earn the extra page.
+
+Compatibility validation passed:
+
+- `tests/search_promising_probe_continuation_test.py`
+- `tests/search_nonproductive_source_trial_backfill_test.py`
+- `tests/adaptive_stopping_test.py`
+- `tests/async_crawler_integration_test.py`
+- `git diff --check`
+
+The full test suite was intentionally not run.
+
+### Known C1 limitations
+
+C1 intentionally does not solve broad candidate discovery.
+
+It still works only with sources already admitted into the existing search/discovery lifecycle.
+
+The promising-evidence predicate is deliberately conservative and uses literal project keyword / required-evidence matches plus the existing relevance score. It does not attempt semantic page classification.
+
+C1 reuses `search.result_threshold` for the strong internal-link decision instead of adding another configuration parameter. This keeps the change small; real research acceptance may later justify separating these thresholds.
+
+JavaScript-only product discovery remains outside this phase.
+
+### Exact Phase C2 task
+
+C2 owns candidate-universe breadth.
+
+Its goal is to let broad expedition research inspect substantially more safe candidate domains than the productive-source target without permanently occupying productive source slots.
+
+C2 must:
+
+1. separate probe capacity from retained productive-source capacity;
+2. introduce explicit bounded probe-domain / probe-page budgets;
+3. continue through additional untried SearchProvider candidates while useful candidates remain;
+4. preserve search ranking as work priority rather than a premature final exclusion;
+5. reuse the same crawler, safety, robots, extraction, lifecycle and deduplication paths;
+6. prevent same-run candidate churn or repeated probing;
+7. preserve Phase B nonproductive replacement and Phase C1 promising continuation;
+8. keep specific-target identity safeguards unchanged;
+9. add coverage telemetry for discovered versus actually probed candidate domains;
+10. remain bounded by hard global resource limits.
+
+C2 does not yet redesign query generation. Query-plan quality remains Phase D.
