@@ -114,6 +114,7 @@ class ResearchCrawler:
         self._issued_queries: set[str] = set()
         self._recovery_queries_issued = 0
         self._deferred_sources: list[tuple[DomainDiscovery, int, int]] = []
+        self._promising_probe_domains: set[str] = set()
 
         self.session = SafeSession()
         self.session.headers.update(
@@ -170,6 +171,7 @@ class ResearchCrawler:
         self._issued_queries = set()
         self._recovery_queries_issued = 0
         self._deferred_sources = []
+        self._promising_probe_domains = set()
 
         frontier = URLFrontier()
         visited: set[str] = set()
@@ -882,12 +884,74 @@ class ResearchCrawler:
                         relevance_context=relevance_context,
                     ):
                         continue
+
+                    if (
+                        final_domain
+                        not in self._coverage.productive_domains
+                        and final_domain
+                        not in self._promising_probe_domains
+                        and self.project.crawl.max_pages_per_domain >= 3
+                        and item.depth + 1
+                        <= self.project.crawl.max_depth
+                        and self._promising_probe_link(
+                            absolute,
+                            relevance_context,
+                            score,
+                        )
+                    ):
+                        self._promising_probe_domains.add(final_domain)
+                        result.adaptive_decisions.append(
+                            AdaptiveDecision(
+                                stage="source_probe",
+                                decision="continuation_granted",
+                                target=final_domain,
+                                signals={
+                                    "reason":
+                                        "strong_internal_link_evidence",
+                                    "source_url": final_url,
+                                    "candidate_url": absolute,
+                                    "link_score": score,
+                                    "threshold": max(
+                                        1,
+                                        self.project.search
+                                        .result_threshold,
+                                    ),
+                                    "pages_seen":
+                                        pages_by_domain[final_domain],
+                                    "trial_page_limit": min(
+                                        3,
+                                        self.project.crawl
+                                        .max_pages_per_domain,
+                                    ),
+                                },
+                            )
+                        )
+
                     next_discovery_depth = item.discovery_depth
 
                 priority = 20 + score
 
                 if not is_external:
                     priority += 15
+
+                    # A C1 provisional continuation must spend its scarce
+                    # extra page on evidence-backed work rather than on a
+                    # structurally attractive but unrelated internal URL.
+                    #
+                    # text_relevance_score() is capped at 100, so +101 keeps
+                    # a subject-evidence link ahead of every same-domain
+                    # non-evidence link during the provisional trial.
+                    if (
+                        final_domain
+                        not in self._coverage.productive_domains
+                        and self._promising_probe_link(
+                            absolute,
+                            relevance_context,
+                            score,
+                        )
+                    ):
+                        priority += 101
+
                     penalty = self._source_diversity_penalty(
                         final_domain,
                         registry,
@@ -2083,14 +2147,66 @@ class ResearchCrawler:
         occupied = self._coverage.occupied_domains(registry.run_active_domains)
         return domain in occupied or len(occupied) < self.project.crawl.max_domains
 
+    def _promising_probe_link(
+        self,
+        url: str,
+        relevance_context: str,
+        score: int,
+    ) -> bool:
+        """Return True when actual page evidence merits one extra probe."""
+        if (
+            self.project.crawl.mode != "expedition"
+            or self._coverage.specific_target
+            or score <= 0
+        ):
+            return False
+
+        threshold = max(
+            1,
+            self.project.search.result_threshold,
+        )
+
+        if score < threshold:
+            return False
+
+        haystack = f"{url} {relevance_context}".casefold()
+
+        has_subject_evidence = False
+
+        for term in (
+            *self.project.keywords,
+            *self.project.analysis.required_evidence_terms,
+        ):
+            key = term.strip().casefold()
+
+            if key and key in haystack:
+                has_subject_evidence = True
+                break
+
+        if not has_subject_evidence:
+            return False
+
+        for keyword in self.project.negative_keywords:
+            key = keyword.strip().casefold()
+
+            if key and key in haystack:
+                return False
+
+        return True
+
     def _source_page_limit(self, domain: str) -> int:
         limit = self.project.crawl.max_pages_per_domain
+
         if (
             self.project.crawl.mode == "expedition"
             and not self._coverage.specific_target
             and domain not in self._coverage.productive_domains
         ):
+            if domain in self._promising_probe_domains:
+                return min(3, limit)
+
             return min(2, limit)
+
         return limit
 
     def _replenish_sources(

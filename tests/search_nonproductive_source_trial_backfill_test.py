@@ -211,9 +211,15 @@ bounded_crawler.session = FakeSession({
     later: crawler.session.pages[later],
 })
 bounded_result = bounded_crawler.crawl()
-assert bounded_crawler.session.calls == [first, next_one, later]
+assert bounded_crawler.session.calls == [
+    first,
+    next_one,
+    next_two,
+    later,
+]
 assert bounded_result.domains["empty-one.example"].reason == "nonproductive_source"
-assert bounded_result.domains["empty-one.example"].pages_seen == 2
+assert bounded_result.domains["empty-one.example"].pages_seen == 3
+assert bounded_result.visited_pages == 4
 assert bounded_result.domains["useful.example"].entities_found == 1
 assert bounded_result.search_domains_activated == 2
 print("SEARCH NONPRODUCTIVE SOURCE TRIAL BACKFILL TEST OK")
