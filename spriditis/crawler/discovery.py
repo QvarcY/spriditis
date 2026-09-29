@@ -90,6 +90,13 @@ class DomainRegistry:
                 record.reason or "persisted_rejected",
             )
 
+        if (
+            domain in self.run_active_domains
+            and record.status == "candidate"
+            and record.reason == "nonproductive_source"
+        ):
+            return ("candidate", "recorded", "nonproductive_source")
+
         if record.status == "active":
             if activation_budget_available is False:
                 return ("active", "recorded", "domain_budget_reached")
@@ -455,6 +462,16 @@ class DomainRegistry:
             record.status = "failed"
         record.reason = reason
         record.last_seen = utc_now()
+
+    def mark_nonproductive(self, domain: str):
+        """Release a tried source without erasing its activation history."""
+        record = self.records[domain]
+        if record.status != "active":
+            return
+        record.status = "candidate"
+        record.reason = "nonproductive_source"
+        record.last_seen = utc_now()
+        self._touch(domain)
 
     @property
     def active_count(self) -> int:

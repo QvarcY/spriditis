@@ -152,7 +152,12 @@ crawler.session = FakeSession(
         ),
         "https://useful.example/bambu-lab-p1s-combo": FakeResponse(
             url="https://useful.example/bambu-lab-p1s-combo",
-            text="<html><body>Bambu Lab P1S Combo 599 EUR</body></html>",
+            text="""<html><head><script type="application/ld+json">
+                {"@context":"https://schema.org","@type":"Product",
+                 "name":"Bambu Lab P1S Combo",
+                 "offers":{"@type":"Offer","price":"599",
+                           "priceCurrency":"EUR"}}
+                </script></head><body>Bambu Lab P1S Combo</body></html>""",
             status_code=200,
         ),
     }
@@ -169,6 +174,7 @@ assert result.domains["blocked-one.example"].status == "failed"
 assert result.domains["blocked-two.example"].status == "failed"
 assert result.domains["useful.example"].status == "active"
 assert result.domains["useful.example"].pages_seen == 1
+assert len(result.entities) == 1
 assert result.search_domains_activated == 3
 assert any(
     decision.stage == "search_domain_backfill"

@@ -97,6 +97,27 @@ second_deferred = frontier.pop()
 assert first_deferred.url == "https://a.example/high-2"
 assert second_deferred.url == "https://c.example/blocked"
 
+# A provisional source may have a lower cap than productive sources.
+trial_frontier = URLFrontier()
+trial_frontier.add("https://trial.example/one", priority=100, depth=0)
+trial_frontier.add("https://trial.example/two", priority=95, depth=0)
+trial_frontier.add("https://other.example/one", priority=90, depth=0)
+trial_wave = AsyncWavePlanner(
+    wave_size=3,
+    max_pages_per_domain=4,
+).plan(
+    trial_frontier,
+    remaining_total=3,
+    pages_by_domain=Counter(),
+    eligible=lambda item: True,
+    max_pages_for_domain=lambda domain: 1 if domain == "trial.example" else 4,
+)
+assert trial_wave.urls == (
+    "https://trial.example/one",
+    "https://other.example/one",
+)
+assert trial_frontier.pop().url == "https://trial.example/two"
+
 # Permanently invalid work can be dropped instead of requeued.
 drop_frontier = URLFrontier()
 drop_frontier.add(
