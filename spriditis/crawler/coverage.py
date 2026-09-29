@@ -17,6 +17,10 @@ class ResearchCoverage:
     attempted_domains: set[str] = field(default_factory=set)
     usable_domains: set[str] = field(default_factory=set)
     productive_domains: set[str] = field(default_factory=set)
+    retained_domains: set[str] = field(default_factory=set)
+    search_candidate_domains: set[str] = field(default_factory=set)
+    overflow_probe_domains: set[str] = field(default_factory=set)
+    overflow_probe_attempted_urls: set[str] = field(default_factory=set)
     confirmed_domains: set[str] = field(default_factory=set)
     priced_domains: set[str] = field(default_factory=set)
     exhausted_domains: set[str] = field(default_factory=set)
@@ -45,6 +49,13 @@ class ResearchCoverage:
     def observe_entities(self, domain: str, entities: list[MarketEntity]) -> int:
         if entities:
             self.productive_domains.add(domain)
+
+            if (
+                self.expedition_mode
+                and not self.specific_target
+                and len(self.retained_domains) < self.source_goal
+            ):
+                self.retained_domains.add(domain)
         confirmed = [
             entity for entity in entities
             if entity.is_relevant
@@ -63,7 +74,7 @@ class ResearchCoverage:
         if self.specific_target:
             retained = self.priced_domains
         elif self.expedition_mode:
-            retained = self.productive_domains
+            retained = self.retained_domains
         else:
             retained = self.usable_domains
         return (activated - self.exhausted_domains) | retained
@@ -74,6 +85,20 @@ class ResearchCoverage:
             "attempted_domains": sorted(self.attempted_domains),
             "usable_domains": sorted(self.usable_domains),
             "productive_domains": sorted(self.productive_domains),
+            "retained_domains": sorted(self.retained_domains),
+            "search_candidate_domains":
+                sorted(self.search_candidate_domains),
+            "search_candidate_domains_discovered":
+                len(self.search_candidate_domains),
+            "search_candidate_domains_probed":
+                len(
+                    self.attempted_domains
+                    & self.search_candidate_domains
+                ),
+            "overflow_probe_domains":
+                sorted(self.overflow_probe_domains),
+            "overflow_probe_pages":
+                len(self.overflow_probe_attempted_urls),
             "confirmed_domains": sorted(self.confirmed_domains),
             "priced_domains": sorted(self.priced_domains),
             "exhausted_domains": sorted(self.exhausted_domains),

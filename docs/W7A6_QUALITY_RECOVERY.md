@@ -201,3 +201,145 @@ C2 must:
 10. remain bounded by hard global resource limits.
 
 C2 does not yet redesign query generation. Query-plan quality remains Phase D.
+
+## Phase C2 — bounded candidate probe capacity
+
+Status: implemented and locally validated on branch `fix/w7a6-c2-candidate-probe-capacity`.
+
+Baseline before C2:
+
+`e6d9106eb938e9694b998a6133b9a18060277e9c`
+
+### Problem addressed
+
+Broad expedition research previously treated `max_domains` as both retained deep-crawl capacity and practical candidate-inspection capacity.
+
+That allowed the first productive sources to occupy all available source slots and could prevent lower-ranked but still relevant SearchProvider candidates from ever being inspected.
+
+Search ranking therefore acted too much like a final exclusion boundary instead of work priority.
+
+### C2 behavior
+
+C2 separates retained source capacity from bounded candidate probing.
+
+`max_domains` now represents retained/deep-crawl source capacity for broad expedition research.
+
+A separate overflow probe lane may inspect additional SearchProvider candidates after retained capacity is full.
+
+New crawl limits:
+
+- `max_probe_domains`
+- `max_probe_pages_total`
+
+The ordinary global `max_pages_total` remains the final hard page ceiling.
+
+### Retained versus productive sources
+
+`productive_domains` records every source that produced entity evidence.
+
+`retained_domains` records the bounded subset allowed to occupy retained deep-crawl capacity.
+
+A productive overflow source still contributes its discovered entities to the research result even if retained capacity is already full.
+
+It does not automatically receive unrestricted deep-crawl capacity.
+
+Specific-target research keeps its existing priced-domain occupancy semantics.
+
+### Candidate discovery telemetry
+
+Coverage now tracks:
+
+- SearchProvider candidate domains discovered;
+- candidate domains actually probed;
+- retained domains;
+- productive domains;
+- overflow probe domains;
+- overflow probe pages.
+
+The full globally ranked SearchProvider candidate pool remains available for bounded backfill/probing.
+
+### Sequential overflow probing
+
+When retained `max_domains` capacity is full, broad expedition research may activate one unresolved overflow probe domain at a time.
+
+The candidate still passes the existing safety and ranked-bootstrap eligibility rules.
+
+Below-threshold ranking no longer automatically prevents inspection when independent relevance signals justify a bounded probe.
+
+Phase B nonproductive release and Phase C1 promising 3-page continuation remain in effect.
+
+### Async overflow probing
+
+Async prefetch reserves overflow probe-page budget before network I/O.
+
+This prevents one concurrent fetch wave from overshooting `max_probe_pages_total`.
+
+The same hard probe-page limit therefore applies to sequential and async execution.
+
+### Honest stopping semantics
+
+Broad expedition research no longer reports `max_domains` as though retained source capacity meant the candidate universe was exhausted.
+
+C2 distinguishes:
+
+- `search_candidates_exhausted`
+- `probe_budget_disabled`
+- `probe_domain_budget_exhausted`
+- `probe_page_budget_exhausted`
+- `search_candidates_unreached`
+- existing global page/adaptive stop reasons
+
+Stop telemetry also reports whether coverage was:
+
+- candidate-pool exhausted;
+- resource-limited;
+- adaptive-stop limited;
+- specific-target.
+
+Remaining probeable candidate domains are included in the stop audit.
+
+### Validation
+
+Focused C2 validation passed:
+
+- `tests/candidate_probe_retention_test.py`
+- `tests/search_candidate_overflow_probe_test.py`
+- `tests/search_candidate_overflow_probe_async_test.py`
+- `tests/search_candidate_coverage_stop_test.py`
+- `tests/search_nonproductive_source_trial_backfill_test.py`
+- `tests/search_promising_probe_continuation_test.py`
+- `tests/search_global_domain_budget_test.py`
+- `tests/adaptive_stopping_test.py`
+- `tests/async_crawler_integration_test.py`
+- `git diff --check`
+
+The full repository test suite was intentionally not run.
+
+### Known C2 limits
+
+C2 only broadens inspection across candidates already returned by the existing SearchProvider query plan.
+
+It does not improve query generation itself.
+
+Literal query/keyword quality can still limit which sites enter the candidate universe in the first place.
+
+JavaScript-only discovery remains outside this phase.
+
+The probe budgets are intentionally bounded and therefore do not claim complete Internet coverage.
+
+### Exact next task — Phase D
+
+Phase D owns query-plan quality.
+
+It should:
+
+1. separate instruction/filler wording from subject concepts and hard constraints;
+2. generate multiple compact search formulations from the research request;
+3. preserve specific-target identity requirements;
+4. avoid topic-specific hardcoding;
+5. improve recall without flooding the provider with weak permutations;
+6. keep query count bounded;
+7. record query-plan reasons in existing audit telemetry;
+8. validate against real broad-market research rather than synthetic query volume alone.
+
+After Phase D, run a real core acceptance research before changing the public API/frontend result model.

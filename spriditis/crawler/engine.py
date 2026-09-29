@@ -309,6 +309,24 @@ class ResearchCrawler:
                 >= self.project.crawl.max_pages_total
             ):
                 continue
+
+            if (
+                self._is_overflow_probe_domain(domain)
+                and url not in self._coverage.attempted_urls
+            ):
+                if (
+                    len(
+                        self._coverage
+                        .overflow_probe_attempted_urls
+                    )
+                    >= self.project.crawl.max_probe_pages_total
+                ):
+                    continue
+
+                self._coverage.overflow_probe_attempted_urls.add(
+                    url
+                )
+
             self._coverage.attempted_urls.add(url)
             self._coverage.attempted_domains.add(domain)
 
@@ -1060,6 +1078,10 @@ class ResearchCrawler:
 
             self._sleep()
 
+        remaining_probe_domains = (
+            self._remaining_search_probe_domains(registry)
+        )
+
         if not result.stop_reason:
             if result.visited_pages >= self.project.crawl.max_pages_total:
                 result.stop_reason = "max_pages"
@@ -1070,6 +1092,45 @@ class ResearchCrawler:
                 result.stop_reason = "max_page_attempts"
             elif self._coverage.specific_target:
                 result.stop_reason = "discovery_exhausted"
+            elif self.project.crawl.mode == "expedition":
+                probe_domains_used = len(
+                    self._coverage.overflow_probe_domains
+                )
+                probe_pages_used = len(
+                    self._coverage
+                    .overflow_probe_attempted_urls
+                )
+
+                if not remaining_probe_domains:
+                    result.stop_reason = (
+                        "search_candidates_exhausted"
+                    )
+                elif (
+                    self.project.crawl.max_probe_domains <= 0
+                    or self.project.crawl.max_probe_pages_total <= 0
+                ):
+                    result.stop_reason = "probe_budget_disabled"
+                elif (
+                    probe_domains_used
+                    >= self.project.crawl.max_probe_domains
+                ):
+                    result.stop_reason = (
+                        "probe_domain_budget_exhausted"
+                    )
+                elif (
+                    probe_pages_used
+                    >= self.project.crawl.max_probe_pages_total
+                ):
+                    result.stop_reason = (
+                        "probe_page_budget_exhausted"
+                    )
+                else:
+                    # This should be rare: candidates remain and explicit
+                    # probe budgets are still available. Keep the reason
+                    # diagnostic rather than falsely claiming exhaustion.
+                    result.stop_reason = (
+                        "search_candidates_unreached"
+                    )
             elif (
                 len(self._coverage.occupied_domains(
                     registry.run_active_domains,
@@ -1084,12 +1145,43 @@ class ResearchCrawler:
                 result.stop_reason = "budget_exhausted"
 
         self._assess_target_coverage(result)
+        if self._coverage.specific_target:
+            coverage_status = "specific_target"
+        elif result.stop_reason == "search_candidates_exhausted":
+            coverage_status = "candidate_pool_exhausted"
+        elif result.stop_reason in {
+            "saturation_reached",
+            "diminishing_returns",
+        }:
+            coverage_status = "adaptive_stop"
+        elif result.stop_reason in {
+            "max_pages",
+            "max_page_attempts",
+            "max_domains",
+            "probe_budget_disabled",
+            "probe_domain_budget_exhausted",
+            "probe_page_budget_exhausted",
+            "search_candidates_unreached",
+        }:
+            coverage_status = "resource_limited"
+        else:
+            coverage_status = "other"
+
         result.adaptive_decisions.append(
             AdaptiveDecision(
                 stage="stop",
                 decision=result.stop_reason,
                 target=self.project.id,
                 signals={
+                    "coverage_status": coverage_status,
+                    "candidate_domains_remaining":
+                        sorted(remaining_probe_domains),
+                    "candidate_domains_remaining_count":
+                        len(remaining_probe_domains),
+                    "max_probe_domains":
+                        self.project.crawl.max_probe_domains,
+                    "max_probe_pages_total":
+                        self.project.crawl.max_probe_pages_total,
                     "visited_pages": result.visited_pages,
                     "max_pages_total":
                         self.project.crawl.max_pages_total,
@@ -1191,6 +1283,16 @@ class ResearchCrawler:
             ):
                 return "drop"
 
+            if (
+                self._is_overflow_probe_domain(domain)
+                and len(
+                    self._coverage
+                    .overflow_probe_attempted_urls
+                )
+                >= self.project.crawl.max_probe_pages_total
+            ):
+                return "drop"
+
             return "eligible"
 
         wave = planner.plan(
@@ -1203,10 +1305,40 @@ class ResearchCrawler:
         if not wave.items:
             return
 
+        probe_pages_remaining = max(
+            0,
+            self.project.crawl.max_probe_pages_total
+            - len(
+                self._coverage
+                .overflow_probe_attempted_urls
+            ),
+        )
+
         fetch_items = []
         for item in wave.items:
             url = item.url
             domain = host_key(url)
+            is_new_attempt = (
+                url not in self._coverage.attempted_urls
+            )
+
+            if (
+                self._is_overflow_probe_domain(domain)
+                and is_new_attempt
+            ):
+                # Reserve the probe-page budget before network I/O.
+                # A single async wave may contain several URLs from the
+                # same provisional source, so checking only after fetch
+                # would allow concurrency to overshoot the hard limit.
+                if probe_pages_remaining <= 0:
+                    frontier.restore(item)
+                    continue
+
+                self._coverage.overflow_probe_attempted_urls.add(
+                    url
+                )
+                probe_pages_remaining -= 1
+
             self._coverage.attempted_urls.add(url)
             self._coverage.attempted_domains.add(domain)
 
@@ -1844,6 +1976,15 @@ class ResearchCrawler:
         )
         self._search_candidate_pool = ordered_candidates
 
+        self._coverage.search_candidate_domains.update(
+            domain
+            for domain in (
+                host_key(str(candidate["normalized"]))
+                for candidate in ordered_candidates
+            )
+            if domain
+        )
+
         result.adaptive_decisions.append(
             AdaptiveDecision(
                 stage="search_domain_budget",
@@ -2147,6 +2288,107 @@ class ResearchCrawler:
         occupied = self._coverage.occupied_domains(registry.run_active_domains)
         return domain in occupied or len(occupied) < self.project.crawl.max_domains
 
+    def _is_overflow_probe_domain(
+        self,
+        domain: str,
+    ) -> bool:
+        return (
+            domain in self._coverage.overflow_probe_domains
+            and domain not in self._coverage.retained_domains
+        )
+
+    def _overflow_probe_domain_available(
+        self,
+        domain: str,
+    ) -> bool:
+        if (
+            self.project.crawl.mode != "expedition"
+            or self._coverage.specific_target
+            or domain in self._coverage.retained_domains
+        ):
+            return False
+
+        if self.project.crawl.max_probe_domains <= 0:
+            return False
+
+        if self.project.crawl.max_probe_pages_total <= 0:
+            return False
+
+        if (
+            len(self._coverage.overflow_probe_domains)
+            >= self.project.crawl.max_probe_domains
+        ):
+            return False
+
+        if (
+            len(self._coverage.overflow_probe_attempted_urls)
+            >= self.project.crawl.max_probe_pages_total
+        ):
+            return False
+
+        active_overflow = {
+            probe_domain
+            for probe_domain
+            in self._coverage.overflow_probe_domains
+            if (
+                probe_domain
+                not in self._coverage.exhausted_domains
+                and probe_domain
+                not in self._coverage.retained_domains
+            )
+        }
+
+        # Keep the overflow lane deliberately narrow:
+        # one unresolved probe domain at a time.
+        return not active_overflow
+
+    def _remaining_search_probe_domains(
+        self,
+        registry: DomainRegistry,
+    ) -> set[str]:
+        """Return provider domains still eligible for a first probe."""
+        remaining: set[str] = set()
+
+        for candidate in self._search_candidate_pool:
+            normalized = str(candidate["normalized"])
+            domain = host_key(normalized)
+
+            if not domain:
+                continue
+
+            if normalized in self._coverage.attempted_urls:
+                continue
+
+            # A domain already activated in this run has already had its
+            # domain-level opportunity, even if another result URL exists.
+            if domain in registry.run_active_domains:
+                continue
+
+            record = registry.records.get(domain)
+
+            if (
+                record is not None
+                and record.status in {"blocked", "rejected"}
+            ):
+                continue
+
+            score = int(candidate["score"])
+            ranked_hit = candidate["ranked_hit"]
+
+            # Mirror the actual C2 overflow eligibility rule.
+            if (
+                score < self.project.search.result_threshold
+                and not self._ranked_bootstrap_candidate_eligible(
+                    ranked_hit,
+                    score,
+                )
+            ):
+                continue
+
+            remaining.add(domain)
+
+        return remaining
+
     def _promising_probe_link(
         self,
         url: str,
@@ -2200,7 +2442,10 @@ class ResearchCrawler:
         if (
             self.project.crawl.mode == "expedition"
             and not self._coverage.specific_target
-            and domain not in self._coverage.productive_domains
+            and (
+                domain not in self._coverage.productive_domains
+                or self._is_overflow_probe_domain(domain)
+            )
         ):
             if domain in self._promising_probe_domains:
                 return min(3, limit)
@@ -2375,22 +2620,35 @@ class ResearchCrawler:
 
         activated = 0
         backfilled_domains: set[str] = set()
-        if not self._source_slot_available(registry):
-            return 0
 
         for candidate in self._search_candidate_pool:
             normalized = str(candidate["normalized"])
             domain = host_key(normalized)
+
             if (
                 domain in registry.run_active_domains
                 and domain not in backfilled_domains
             ):
                 continue
+
             if normalized in self._coverage.attempted_urls:
                 continue
+
+            normal_slot = self._source_slot_available(
+                registry,
+                domain,
+            )
+
+            overflow_probe = (
+                not normal_slot
+                and domain not in registry.run_active_domains
+                and self._overflow_probe_domain_available(domain)
+            )
+
             if (
                 domain not in backfilled_domains
-                and not self._source_slot_available(registry)
+                and not normal_slot
+                and not overflow_probe
             ):
                 continue
 
@@ -2400,14 +2658,29 @@ class ResearchCrawler:
             score = int(candidate["score"])
 
             trial_reason = ""
-            if score < self.project.search.result_threshold:
+
+            if overflow_probe:
                 if (
-                    not self._coverage.released_domains
-                    or not self._ranked_bootstrap_candidate_eligible(
-                        ranked_hit, score,
+                    score < self.project.search.result_threshold
+                    and not self._ranked_bootstrap_candidate_eligible(
+                        ranked_hit,
+                        score,
                     )
                 ):
                     continue
+
+                trial_reason = "search_candidate_probe"
+
+            elif score < self.project.search.result_threshold:
+                if (
+                    not self._coverage.released_domains
+                    or not self._ranked_bootstrap_candidate_eligible(
+                        ranked_hit,
+                        score,
+                    )
+                ):
+                    continue
+
                 trial_reason = "search_candidate_trial"
 
             record, discovery = registry.observe_search_result(
@@ -2417,65 +2690,133 @@ class ResearchCrawler:
                 title=hit.title,
                 snippet=hit.snippet,
                 raw_score=score,
-                activation_budget_available=self._source_slot_available(
-                    registry, domain,
+                activation_budget_available=(
+                    normal_slot or overflow_probe
                 ),
                 activation_reason=trial_reason,
             )
 
             if discovery.action not in {"activated", "known"}:
                 continue
+
+            if overflow_probe:
+                self._coverage.overflow_probe_domains.add(domain)
+
             if domain in backfilled_domains:
                 frontier.add(
-                    normalized, priority=75 + score, depth=0,
-                    source_type="search_backfill",
+                    normalized,
+                    priority=(
+                        65 + score
+                        if overflow_probe
+                        else 75 + score
+                    ),
+                    depth=0,
+                    source_type=(
+                        "search_candidate_probe"
+                        if overflow_probe
+                        else "search_backfill"
+                    ),
                 )
                 continue
+
             activated += 1
             backfilled_domains.add(domain)
+
             if discovery.action == "activated":
                 result.search_domains_activated += 1
+
+            origin = (
+                "search_candidate_probe"
+                if overflow_probe
+                else "search_backfill"
+            )
+
             self._emit_progress(
                 "source_activated",
                 domain=record.domain,
-                origin="search_backfill",
+                origin=origin,
             )
+
             result.adaptive_decisions.append(
                 AdaptiveDecision(
-                    stage="search_domain_backfill",
+                    stage=(
+                        "search_candidate_probe"
+                        if overflow_probe
+                        else "search_domain_backfill"
+                    ),
                     decision="activated",
                     target=normalized,
                     signals={
                         "domain": record.domain,
                         "reason": reason,
                         "score": score,
-                        "activated_domains": registry.active_count,
+                        "overflow_probe": overflow_probe,
+                        "activated_domains":
+                            registry.active_count,
                         "occupied_source_slots": len(
                             self._coverage.occupied_domains(
                                 registry.run_active_domains,
                             )
                         ),
+                        "probe_domains_used": len(
+                            self._coverage
+                            .overflow_probe_domains
+                        ),
+                        "max_probe_domains":
+                            self.project.crawl
+                            .max_probe_domains,
+                        "probe_pages_used": len(
+                            self._coverage
+                            .overflow_probe_attempted_urls
+                        ),
+                        "max_probe_pages_total":
+                            self.project.crawl
+                            .max_probe_pages_total,
                         **self._coverage.snapshot(),
-                        "max_domains": self.project.crawl.max_domains,
+                        "max_domains":
+                            self.project.crawl.max_domains,
                         "query": query.query,
                     },
                 )
             )
-            print(
-                f"      🧭 Search backfill aktivizēts: "
-                f"{record.domain} "
-                f"(score={record.relevance_score:.2f}, "
-                f"reason={reason})"
-                f" local={ranked_hit.audit_label}"
-            )
+
+            if overflow_probe:
+                print(
+                    f"      🔬 Search candidate probe: "
+                    f"{record.domain} "
+                    f"(score={record.relevance_score:.2f}, "
+                    f"reason={reason})"
+                    f" local={ranked_hit.audit_label}"
+                )
+            else:
+                print(
+                    f"      🧭 Search backfill aktivizēts: "
+                    f"{record.domain} "
+                    f"(score={record.relevance_score:.2f}, "
+                    f"reason={reason})"
+                    f" local={ranked_hit.audit_label}"
+                )
+
             frontier.add(
                 normalized,
-                priority=75 + score,
+                priority=(
+                    65 + score
+                    if overflow_probe
+                    else 75 + score
+                ),
                 depth=0,
                 discovery_depth=0,
                 source_url="",
-                source_type="search_backfill",
+                source_type=(
+                    "search_candidate_probe"
+                    if overflow_probe
+                    else "search_backfill"
+                ),
             )
+
+            # One unresolved overflow candidate at a time.
+            if overflow_probe:
+                break
 
         return activated
 

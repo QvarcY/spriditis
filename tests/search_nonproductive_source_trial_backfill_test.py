@@ -171,7 +171,8 @@ assert any(
     for item in result.domain_discoveries
 )
 assert any(
-    item.target_url == later and item.reason == "search_candidate_trial"
+    item.target_url == later
+    and item.reason == "search_candidate_probe"
     and item.action == "activated"
     for item in result.domain_discoveries
 )
@@ -182,9 +183,19 @@ assert {
     and item.signals["reason"] == "nonproductive_source"
 } == {"empty-one.example", "empty-two.example"}
 assert any(
-    item.stage == "search_domain_backfill" and item.target == later
+    item.stage == "search_candidate_probe"
+    and item.target == later
+    and item.signals["overflow_probe"] is True
     for item in result.adaptive_decisions
 )
+
+assert crawler._coverage.overflow_probe_domains == {
+    "useful.example",
+}
+
+assert crawler._coverage.overflow_probe_attempted_urls == {
+    later,
+}
 assert len(crawler._coverage.attempted_urls) <= project.crawl.max_pages_total
 assert len(crawler._coverage.released_domains) == 2
 
