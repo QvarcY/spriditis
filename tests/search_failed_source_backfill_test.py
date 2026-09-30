@@ -89,6 +89,10 @@ project = ResearchProject.model_validate(
             "max_pages_total": 3,
             "max_pages_per_domain": 1,
             "max_domains": 2,
+            # This test isolates ordinary failed-source backfill.
+            # C2 overflow probing is covered separately.
+            "max_probe_domains": 0,
+            "max_probe_pages_total": 0,
             "max_depth": 1,
             "delay_seconds": 0,
             "respect_robots": False,

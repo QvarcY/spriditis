@@ -21,7 +21,10 @@ from spriditis.core.projects import ResearchProject
 from spriditis.core.run import AdaptiveDecision, ResearchRunResult
 from spriditis.extraction.engine import extract_entities
 from spriditis.search.base import SearchProvider, SearchProviderError
-from spriditis.search.query import build_search_queries
+from spriditis.search.query import (
+    build_search_queries,
+    subject_focus_terms,
+)
 from spriditis.search.relevance import LocalRelevance, local_relevance_signals
 from spriditis.resolution.target import apply_target_identity_gate
 
@@ -2413,6 +2416,21 @@ class ResearchCrawler:
 
         haystack = f"{url} {relevance_context}".casefold()
 
+        # For hard-constrained broad research, evidence wording
+        # from another product/model must not grant the scarce
+        # provisional continuation page.
+        subject_terms = subject_focus_terms(self.project)
+
+        if (
+            self.project.analysis.required_evidence_terms
+            and subject_terms
+            and not all(
+                term.casefold() in haystack
+                for term in subject_terms
+            )
+        ):
+            return False
+
         has_subject_evidence = False
 
         for term in (
@@ -2508,6 +2526,72 @@ class ResearchCrawler:
                 ))
         if len(self._coverage.attempted_urls) >= self.project.crawl.max_pages_total:
             return bool(pending_domains)
+
+        # Broad Expedition recovery must run before increasingly weak
+        # initial search backfill once currently active sources have
+        # failed to produce enough qualifying evidence.
+        #
+        # Phase D already builds bounded, constraint-preserving recovery
+        # queries. Previously this path was effectively specific-target
+        # only, leaving broad research to exhaust the original candidate
+        # pool until max_page_attempts.
+        if (
+            self.project.crawl.mode == "expedition"
+            and not self._coverage.specific_target
+            and not pending_domains
+            and self._coverage.needs_evidence
+            and self._recovery_queries_issued
+            < self.project.search.max_recovery_queries
+        ):
+            recovery_before = self._recovery_queries_issued
+
+            self._seed_from_search(
+                frontier,
+                registry,
+                result,
+                recovery=True,
+                pages_by_domain=pages_by_domain,
+            )
+
+            recovery_issued = (
+                self._recovery_queries_issued
+                - recovery_before
+            )
+
+            if recovery_issued > 0:
+                result.adaptive_decisions.append(
+                    AdaptiveDecision(
+                        stage="discovery_recovery",
+                        decision="reformulate_queries",
+                        target=self.project.id,
+                        signals={
+                            "reason":
+                                "broad_evidence_deficit",
+                            "recovery_queries_issued":
+                                recovery_issued,
+                            **self._coverage.snapshot(),
+                        },
+                    )
+                )
+
+                recovered_work = any(
+                    item.url not in visited
+                    and item.depth
+                    <= self.project.crawl.max_depth
+                    and pages_by_domain[
+                        host_key(item.url)
+                    ]
+                    < self.project.crawl.max_pages_per_domain
+                    and host_key(item.url)
+                    in registry.records
+                    and registry.records[
+                        host_key(item.url)
+                    ].status == "active"
+                    for item in frontier.pending_items()
+                )
+
+                if recovered_work:
+                    return True
 
         added = self._backfill_search_domain_slots(
             frontier, registry, result, reason="source_exhausted",

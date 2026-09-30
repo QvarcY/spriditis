@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 
 from spriditis.core.entities import MarketEntity
 from spriditis.core.projects import ResearchProject
+from spriditis.search.query import subject_focus_terms
 
 
 @dataclass
@@ -26,6 +27,8 @@ class ResearchCoverage:
     exhausted_domains: set[str] = field(default_factory=set)
     released_domains: set[str] = field(default_factory=set)
     confirmed_entities: int = 0
+    subject_terms: tuple[str, ...] = ()
+    required_evidence_terms: tuple[str, ...] = ()
 
     @classmethod
     def for_project(cls, project: ResearchProject) -> ResearchCoverage:
@@ -39,15 +42,82 @@ class ResearchCoverage:
             ),
             source_goal=project.crawl.max_domains,
             expedition_mode=project.crawl.mode == "expedition",
+            subject_terms=tuple(
+                subject_focus_terms(project)
+            ),
+            required_evidence_terms=tuple(
+                term.strip().casefold()
+                for term in project.analysis.required_evidence_terms
+                if term.strip()
+            ),
         )
 
     @property
     def needs_evidence(self) -> bool:
-        # The supported market/price research modes need priced offerings.
-        return self.specific_target and len(self.priced_domains) < self.source_goal
+        # Specific-target research requires priced, confirmed targets.
+        if self.specific_target:
+            return len(self.priced_domains) < self.source_goal
+
+        # Broad Expedition research also needs recovery while there
+        # are fewer qualifying evidence-bearing sources than the
+        # requested retained-source capacity.
+        #
+        # D3 ensures productive_domains contains only sources whose
+        # entities preserve the subject and declared hard evidence.
+        if self.expedition_mode:
+            return len(self.productive_domains) < self.source_goal
+
+        return False
+
+    def _broad_entity_qualifies(
+        self,
+        entity: MarketEntity,
+    ) -> bool:
+        evidence = " ".join(
+            [
+                entity.title,
+                entity.description,
+                entity.evidence,
+                entity.seller,
+                " ".join(
+                    str(value)
+                    for value in entity.attributes.values()
+                    if value not in (None, "")
+                ),
+            ]
+        ).casefold()
+
+        if (
+            self.subject_terms
+            and not all(
+                term.casefold() in evidence
+                for term in self.subject_terms
+            )
+        ):
+            return False
+
+        if (
+            self.required_evidence_terms
+            and not all(
+                term in evidence
+                for term in self.required_evidence_terms
+            )
+        ):
+            return False
+
+        return True
 
     def observe_entities(self, domain: str, entities: list[MarketEntity]) -> int:
-        if entities:
+        productive_entities = entities
+
+        if self.expedition_mode and not self.specific_target:
+            productive_entities = [
+                entity
+                for entity in entities
+                if self._broad_entity_qualifies(entity)
+            ]
+
+        if productive_entities:
             self.productive_domains.add(domain)
 
             if (
@@ -56,6 +126,7 @@ class ResearchCoverage:
                 and len(self.retained_domains) < self.source_goal
             ):
                 self.retained_domains.add(domain)
+
         confirmed = [
             entity for entity in entities
             if entity.is_relevant

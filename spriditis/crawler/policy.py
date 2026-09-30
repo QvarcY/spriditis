@@ -5,6 +5,7 @@ import re
 from urllib.parse import parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 from spriditis.core.projects import ResearchProject
+from spriditis.search.query import subject_focus_terms
 
 
 BLOCKED_HOST_SUFFIXES = (
@@ -17,6 +18,9 @@ BLOCKED_HOST_SUFFIXES = (
     "x.com",
     "linkedin.com",
     "pinterest.com",
+    "wa.me",
+    "whatsapp.com",
+    "whatsappbusiness.com",
     "google.com",
     "google.lv",
     "doubleclick.net",
@@ -184,13 +188,27 @@ def text_relevance_score(
         if target_terms <= tokens:
             score += 20
 
-    # Mandatory evidence should influence discovery priority too.
-    # These terms already decide whether an extracted entity may survive
-    # the final relevance gate, so pages carrying them deserve extra crawl
-    # priority instead of competing as ordinary keywords.
+    # Mandatory evidence may boost a candidate only when the
+    # candidate still carries the broad research subject.
+    #
+    # Otherwise a hard-evidence word such as "technical" could
+    # make a different product/model outrank the requested one.
+    subject_terms = subject_focus_terms(project)
+    subject_matches = (
+        not subject_terms
+        or all(
+            term.casefold() in haystack.casefold()
+            for term in subject_terms
+        )
+    )
+
     for required in project.analysis.required_evidence_terms:
         key = required.strip().lower()
-        if key and key in haystack:
+        if (
+            key
+            and key in haystack
+            and subject_matches
+        ):
             score += 15
 
     path = (urlparse(url).path or "").lower()

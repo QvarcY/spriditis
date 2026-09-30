@@ -131,7 +131,7 @@ provider = FakeSearchProvider(
                 title=(
                     "Maksājumi par tehnisko apskati"
                 ),
-                snippet="Cena EUR",
+                snippet="Opel Zafira",
             ),
         ],
         constraint_query: [

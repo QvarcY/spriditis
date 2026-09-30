@@ -116,6 +116,51 @@ def _keyword_matches_required(
     )
 
 
+
+def subject_focus_terms(
+    project: ResearchProject,
+    *,
+    limit: int = 2,
+) -> list[str]:
+    """
+    Return the compact subject focus used by broad research.
+
+    Instruction/filler wording and declared hard evidence
+    constraints are excluded so downstream crawl decisions
+    can distinguish the requested subject from evidence terms.
+    """
+    if limit <= 0:
+        return []
+
+    keywords = _dedupe_terms(project.keywords)
+
+    meaningful_keywords = _dedupe_terms(
+        [
+            _strip_query_filler(keyword)
+            for keyword in keywords
+        ]
+    )
+
+    required_terms = [
+        _clean(term).casefold()
+        for term in project.analysis.required_evidence_terms
+        if _clean(term)
+    ]
+
+    subject_keywords = [
+        keyword
+        for keyword in meaningful_keywords
+        if not any(
+            _keyword_matches_required(
+                keyword,
+                required,
+            )
+            for required in required_terms
+        )
+    ]
+
+    return subject_keywords[:limit]
+
 def _target_identity_queries(
     project: ResearchProject,
     keywords: list[str],
@@ -463,12 +508,13 @@ def build_search_queries(
             ]
 
     elif recovery:
-        # Broad recovery must not simply retry the original configured
-        # natural-language request.
+        # Broad recovery must use explicit recovery formulations only.
+        # Ordinary generated initial-discovery candidates must not consume
+        # the bounded recovery-query budget.
         candidates = [
             query
             for query in candidates
-            if query.reason != "configured"
+            if query.reason.startswith("recovery_")
         ]
     excluded = {_clean(query).casefold() for query in (exclude_queries or set())}
     candidates = [query for query in candidates if query.query.casefold() not in excluded]
