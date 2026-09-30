@@ -248,7 +248,7 @@ crawler.session = FakeSession({
 })
 result = crawler.crawl()
 
-assert result.stop_reason == "budget_exhausted"
+assert result.stop_reason == "search_candidates_exhausted"
 assert result.visited_pages == 2
 assert any(
     item.target_domain == "two.example"
@@ -264,6 +264,6 @@ assert crawler.session.calls == [
 print("ADAPTIVE STOPPING TEST OK")
 print(
     "STOP_REASON=saturation_reached | diminishing_returns | "
-    "max_pages | max_domains | budget_exhausted"
+    "max_pages | search_candidates_exhausted | budget_exhausted"
 )
 print("adaptive_windows_default=disabled")

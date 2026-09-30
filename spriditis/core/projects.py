@@ -24,6 +24,10 @@ class CrawlConfig(BaseModel):
     max_pages_total: int = Field(default=60, ge=1, le=100000)
     max_pages_per_domain: int = Field(default=50, ge=1, le=10000)
     max_domains: int = Field(default=1, ge=1, le=10000)
+    # Broad-expedition overflow probing is separate from retained sources.
+    # The global max_pages_total remains the final hard page ceiling.
+    max_probe_domains: int = Field(default=12, ge=0, le=10000)
+    max_probe_pages_total: int = Field(default=24, ge=0, le=100000)
     max_depth: int = Field(default=4, ge=0, le=20)
     delay_seconds: float = Field(default=2.0, ge=0.0, le=60.0)
     respect_robots: bool = True
