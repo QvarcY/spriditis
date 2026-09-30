@@ -9,6 +9,8 @@ _QUERY_STOPWORDS = {
     "atrodi",
     "mekle",
     "meklē",
+    "mekleju",
+    "meklēju",
     "salidzini",
     "salīdzini",
     "piedavajumus",
@@ -23,6 +25,13 @@ _QUERY_STOPWORDS = {
     "veikals",
     "veikali",
     "veikalos",
+    "ludzu",
+    "lūdzu",
+    "ar",
+    "par",
+    "no",
+    "uz",
+    "un",
     "find",
     "compare",
     "offers",
@@ -34,10 +43,16 @@ _QUERY_STOPWORDS = {
     "store",
     "stores",
     "latvia",
-    "un",
+    "please",
+    "with",
+    "for",
+    "of",
+    "to",
     "and",
     "the",
     "in",
+    "a",
+    "an",
 }
 
 
@@ -57,6 +72,48 @@ def _dedupe_terms(values: list[str]) -> list[str]:
             result.append(clean)
 
     return result
+
+
+def _strip_query_filler(value: str) -> str:
+    """Remove instruction/filler tokens while preserving subject wording."""
+    result: list[str] = []
+
+    for token in _clean(value).split():
+        clean_token = token.strip(".,;:!?()[]{}\"'")
+        if not clean_token:
+            continue
+
+        if clean_token.casefold() in _QUERY_STOPWORDS:
+            continue
+
+        result.append(clean_token)
+
+    return " ".join(result)
+
+
+def _keyword_matches_required(
+    keyword: str,
+    required_term: str,
+) -> bool:
+    keyword_key = _clean(keyword).casefold()
+    required_key = _clean(required_term).casefold()
+
+    if not keyword_key or not required_key:
+        return False
+
+    if (
+        keyword_key == required_key
+        or keyword_key.startswith(required_key)
+    ):
+        return True
+
+    if " " in required_key:
+        return required_key in keyword_key
+
+    return any(
+        token == required_key or token.startswith(required_key)
+        for token in keyword_key.split()
+    )
 
 
 def _target_identity_queries(
@@ -198,6 +255,12 @@ def build_search_queries(
         add(query, "configured")
 
     keywords = _dedupe_terms(project.keywords)
+    meaningful_keywords = _dedupe_terms(
+        [
+            _strip_query_filler(keyword)
+            for keyword in keywords
+        ]
+    )
 
     target_queries = _target_identity_queries(project, keywords)
     for query, reason in target_queries:
@@ -209,17 +272,21 @@ def build_search_queries(
         if _clean(term)
     ]
 
+    constraint_keywords: list[str] = []
+    subject_keywords = list(meaningful_keywords)
+
     if required_terms:
-        constraint_keywords: list[str] = []
         constraint_keys: set[str] = set()
 
         for term in required_terms:
             matched = next(
                 (
                     keyword
-                    for keyword in keywords
-                    if keyword.casefold() == term
-                    or keyword.casefold().startswith(term)
+                    for keyword in meaningful_keywords
+                    if _keyword_matches_required(
+                        keyword,
+                        term,
+                    )
                 ),
                 None,
             )
@@ -231,25 +298,26 @@ def build_search_queries(
                 constraint_keys.add(key)
                 constraint_keywords.append(value)
 
-        anchors = [
+        subject_keywords = [
             keyword
-            for keyword in keywords
+            for keyword in meaningful_keywords
             if not any(
-                keyword.casefold() == term
-                or keyword.casefold().startswith(term)
+                _keyword_matches_required(
+                    keyword,
+                    term,
+                )
                 for term in required_terms
             )
         ]
 
         # Keep hard constraints in the first generated discovery query.
-        # Try progressively smaller anchor sets so even a short configured
-        # query gets a distinct constraint-preserving fallback.
+        # Filler/instruction wording is intentionally excluded.
         for anchor_count in (2, 1, 0):
             before = len(candidates)
 
             add(
                 " ".join(
-                    anchors[:anchor_count]
+                    subject_keywords[:anchor_count]
                     + constraint_keywords
                 ),
                 "required_evidence_bundle",
@@ -258,29 +326,149 @@ def build_search_queries(
             if len(candidates) > before:
                 break
 
-    if len(keywords) >= 3:
-        add(" ".join(keywords[:3]), "keyword_bundle")
-    elif keywords:
-        add(" ".join(keywords[:2]), "keyword_bundle")
+    # Broad recovery gets explicit subject-preserving reformulations.
+    #
+    # Hard evidence constraints are never intentionally removed.
+    # Recovery changes search context and term priority while preserving
+    # the user's required evidence.
+    #
+    # Research without explicit hard constraints may still use lighter,
+    # subject-focused recovery variants.
+    if recovery and not target_queries:
+        subject_focus = " ".join(subject_keywords[:2])
 
-    # Pairs are intentionally deterministic; no AI is needed to create the plan.
-    for i in range(len(keywords)):
-        for j in range(i + 1, len(keywords)):
-            add(f"{keywords[i]} {keywords[j]}", "keyword_pair")
+        language = (
+            project.languages[0].casefold()
+            if project.languages
+            else ""
+        )
 
-    for keyword in keywords:
+        locale_terms = [
+            (
+                "Latvija"
+                if language == "lv"
+                else "Latvia"
+            )
+            if country.upper() == "LV"
+            else country
+            for country in project.countries
+            if country.strip()
+        ]
+
+        if subject_focus:
+            if constraint_keywords:
+                constraint_bundle = " ".join(
+                    constraint_keywords
+                )
+
+                # Locale-qualified recovery broadens context without
+                # sacrificing any hard evidence requirement.
+                for locale in locale_terms:
+                    add(
+                        " ".join(
+                            [
+                                subject_focus,
+                                constraint_bundle,
+                                locale,
+                            ]
+                        ),
+                        "recovery_constraints_locale",
+                    )
+
+                # Keep the ordinary compact constraint-preserving form.
+                # It may be removed later by exclude_queries when already
+                # issued during the initial plan.
+                add(
+                    " ".join(
+                        [
+                            subject_focus,
+                            constraint_bundle,
+                        ]
+                    ),
+                    "recovery_constraints",
+                )
+
+                # Constraint-first ordering gives recovery another bounded
+                # formulation while retaining every required constraint.
+                add(
+                    " ".join(
+                        [
+                            constraint_bundle,
+                            subject_focus,
+                        ]
+                    ),
+                    "recovery_constraints_focus",
+                )
+
+            else:
+                # No explicit hard constraints: locale and narrower subject
+                # focus may safely broaden candidate discovery.
+                for locale in locale_terms:
+                    add(
+                        f"{subject_focus} {locale}",
+                        "recovery_subject_locale",
+                    )
+
+                    if len(subject_keywords) > 1:
+                        add(
+                            (
+                                f"{subject_keywords[0]} "
+                                f"{locale}"
+                            ),
+                            "recovery_subject_locale_focus",
+                        )
+
+                add(
+                    subject_focus,
+                    "recovery_subject_focus",
+                )
+
+    if len(meaningful_keywords) >= 3:
+        add(
+            " ".join(meaningful_keywords[:3]),
+            "keyword_bundle",
+        )
+    elif meaningful_keywords:
+        add(
+            " ".join(meaningful_keywords[:2]),
+            "keyword_bundle",
+        )
+
+    # Pairs remain deterministic, but now use only meaningful terms.
+    for i in range(len(meaningful_keywords)):
+        for j in range(i + 1, len(meaningful_keywords)):
+            add(
+                f"{meaningful_keywords[i]} {meaningful_keywords[j]}",
+                "keyword_pair",
+            )
+
+    for keyword in meaningful_keywords:
         add(keyword, "keyword")
 
     if target_queries:
         candidates = [
-            query for query in candidates
-            if query.reason == "configured"
-            or query.reason.startswith("target_identity_")
+            query
+            for query in candidates
+            if (
+                query.reason == "configured"
+                or query.reason.startswith("target_identity_")
+            )
         ]
-    if recovery:
+
+        if recovery:
+            candidates = [
+                query
+                for query in candidates
+                if query.reason.startswith("target_identity_")
+            ]
+
+    elif recovery:
+        # Broad recovery must not simply retry the original configured
+        # natural-language request.
         candidates = [
-            query for query in candidates
-            if query.reason.startswith("target_identity_")
+            query
+            for query in candidates
+            if query.reason != "configured"
         ]
     excluded = {_clean(query).casefold() for query in (exclude_queries or set())}
     candidates = [query for query in candidates if query.query.casefold() not in excluded]
